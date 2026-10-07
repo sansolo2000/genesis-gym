@@ -139,6 +139,7 @@ pre.csv{white-space:pre;overflow-x:auto;background:var(--bg);border:1px solid va
 <script src="version.js"></script>
 <script src="db.js"></script>
 <script src="plataforma.js"></script>
+<script src="respaldo.js"></script>
 <script>
 (function(){
 'use strict';
@@ -276,7 +277,7 @@ function vHoy(){
   const hoy = hoyISO(), dia = diaDe(hoy);
   let h = `<header class="stack"><p class="eyebrow">${esc(DIA_LABEL[dia])} · hora de Chile</p><h1>${esc(fechaLarga(hoy))}</h1>`;
   if (S.rutina) h += `<p class="muted">${esc(S.rutina.rutina.nombre)} · versión ${esc(S.rutina.rutina.version)}</p>`;
-  h += `</header>` + avisoDb() + avisoEjemplo();
+  h += `</header>` + avisoDb() + avisoEjemplo() + (self.GGRespaldo ? GGRespaldo.avisoHoy() : '');
   if (S.dbEstado === 'cargando') return h + `<p class="muted">Cargando datos…</p>`;
   if (!S.rutina) return h + vacioRutina();
   const ses = sesionPorDia(dia);
@@ -431,6 +432,7 @@ function vHistorial(){
     <button class="btn primary" data-csv ${S.sesiones.length ? '' : 'disabled'}>Exportar CSV</button>
     ${S.csv ? (S.csv.error ? `<div class="note err">${esc(S.csv.error)}</div>` : '') + (S.csv.texto ? `<p class="muted">Si la descarga no está disponible aquí, copia el texto:</p><button class="btn" data-copiar-csv>Copiar CSV</button><pre class="csv" id="csv-pre">${esc(S.csv.texto)}</pre>` : '') + (S.csv.ok ? `<div class="note ok">${esc(S.csv.ok)}</div>` : '') : ''}
   </section>`;
+  h += (self.GGRespaldo ? GGRespaldo.tarjeta() : '');
   h += `<div class="row"><span class="estado ${S.errorLectura ? 'err' : ''}">${S.errorLectura ? 'No se pudo actualizar (' + esc(S.errorLectura) + ').' : `${S.sesiones.length} sesión${S.sesiones.length === 1 ? '' : 'es'} en la base${S.sincronizado ? ' · actualizado ' + S.sincronizado.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'}) : ''}`}</span><button class="link" data-recargar>Recargar</button></div>`;
   if (!S.sesiones.length) return h + `<p class="muted">Todavía no hay sesiones registradas. Las sesiones aparecen aquí cuando registras la primera serie.</p>`;
   h += `<ul class="lista card" style="padding-block:4px">` + S.sesiones.map(s => {
@@ -616,6 +618,7 @@ function validarImport(textoArg){
   try { obj = JSON.parse(texto); }
   catch(e){ S.importacion = { texto, resultado: { ok: false, errores: ['El texto no es JSON válido: ' + e.message], avisos: [] } }; render(); return; }
   const resultado = validarRutina(obj);
+  if (resultado.ok && S.rutina && S.rutina.rutina.id !== RUTINA_EJEMPLO && obj.rutina && obj.rutina.id !== S.rutina.rutina.id) resultado.avisos.unshift(`Esta rutina (${obj.rutina.id}) es distinta de la activa (${S.rutina.rutina.id}). ¿Es de otra persona? Cada celular debe tener solo la rutina de su dueño.`);
   if (resultado.ok && S.rutina && S.rutina.rutina.id === obj.rutina.id && S.rutina.rutina.id !== RUTINA_EJEMPLO){
     if (JSON.stringify(S.rutina) === JSON.stringify(obj)) { resultado.ok = false; resultado.errores.push('Esta rutina (misma versión y contenido) ya está activa.'); }
     else if (obj.rutina.version <= S.rutina.rutina.version) { resultado.ok = false; resultado.errores.push(`rutina.version: debe ser mayor que la versión activa (${S.rutina.rutina.version}). Pide a Entrenamiento el archivo con la versión aumentada.`); }

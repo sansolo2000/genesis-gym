@@ -10,6 +10,7 @@ const ARCHIVOS = [
   'validador-rutina.js',
   'db.js',
   'plataforma.js',
+  'respaldo.js',
   'manifest.webmanifest',
   'fuentes/fuentes.css',
   'fuentes/barlow-latin-400-normal.woff2',

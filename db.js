@@ -88,7 +88,7 @@
     }
     if (local && canal) { try { canal.postMessage(ruta); } catch (_) {} }
   }
-  if (canal) canal.onmessage = ev => { try { avisar(ev.data, false); } catch (_) {} };
+  if (canal) canal.onmessage = ev => { if (ev.data === '*') { location.reload(); return; } try { avisar(ev.data, false); } catch (_) {} };
 
   function doc(ruta) {
     partes(ruta);
@@ -134,9 +134,18 @@
     return (regs || []).map(r => ({ ruta: r.ruta, data: clonar(r.data) }));
   }
 
+  /* Reemplaza TODA la base por la lista dada, en una sola transacción: o queda todo, o no cambia nada. */
+  async function reemplazarTodo(docs) {
+    if (!Array.isArray(docs)) throw err('invalid_argument', new Error('se esperaba una lista de documentos'));
+    const regs = docs.map(d => { const { col, id } = partes(d.ruta); return { ruta: d.ruta, col, id, data: clonar(d.data), actualizado_local: new Date().toISOString() }; });
+    await tx('readwrite', st => { st.clear(); for (const r of regs) st.put(r); });
+    if (canal) { try { canal.postMessage('*'); } catch (_) {} }
+  }
+
   self.GGDB = {
     nombre: NOMBRE,
     abrir: async () => { await abrir(); if (!instancia) instancia = { doc, collection }; return instancia; },
-    todos
+    todos,
+    reemplazarTodo
   };
 })();

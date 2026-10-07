@@ -73,6 +73,23 @@
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', montarBarra); else montarBarra();
 
+  /* ---------- selector de archivos en Android ----------
+   * Al abrir el selector, la app pasa a segundo plano; al volver, la pantalla de la 1.0 se redibuja y
+   * reemplaza el <input type=file>. El archivo elegido llega al input viejo, ya fuera de la página, y su
+   * evento "change" no alcanza a los manejadores. Aquí se vuelve a poner ese input en la página un
+   * instante y se repite el evento, para que el archivo se procese igual. */
+  document.addEventListener('click', ev => {
+    const inp = ev.target && ev.target.closest && ev.target.closest('input[type="file"]');
+    if (!inp || !inp.id) return;
+    inp.addEventListener('change', () => {
+      if (inp.isConnected || !inp.files || !inp.files.length) return;
+      inp.style.display = 'none';
+      document.body.appendChild(inp);
+      inp.dispatchEvent(new Event('change', { bubbles: true }));
+      setTimeout(() => inp.remove(), 0);
+    }, { once: true });
+  }, true);
+
   /* ---------- almacenamiento persistente ---------- */
   (async () => {
     try {
@@ -91,9 +108,12 @@
       aviso.hidden = false;
       document.getElementById('gg-actualizar').onclick = () => { if (reg.waiting) reg.waiting.postMessage('ACTUALIZAR'); };
     };
-    let recargando = false;
+    // Recargar SOLO cuando el usuario tocó "Actualizar". En la primera instalación el service worker
+    // también toma el control (controllerchange) y recargar ahí borraría lo que se esté escribiendo.
+    let pidioActualizar = false, recargando = false;
+    document.addEventListener('click', ev => { if (ev.target.closest('#gg-actualizar')) pidioActualizar = true; }, true);
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (recargando) return; recargando = true; location.reload();
+      if (!pidioActualizar || recargando) return; recargando = true; location.reload();
     });
     navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
       if (reg.waiting && navigator.serviceWorker.controller) mostrarAviso(reg);
