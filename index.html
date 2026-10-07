@@ -446,7 +446,7 @@ function vHistorial(){
 function vImportar(){
   let h = `<header class="stack"><p class="eyebrow">Rutina de Entrenamiento</p><h1>Importar rutina</h1>
     <p class="muted">Pega el JSON que entregó Entrenamiento o elige el archivo. Si tiene un solo error, la rutina se rechaza completa y no se corrige nada.</p></header>` + avisoDb();
-  h += `<section class="card"><div class="campo"><label for="archivo">Archivo .json</label><input id="archivo" type="file" accept=".json,application/json" style="font-size:1rem;padding:10px"></div>
+  h += `<section class="card"><div class="campo"><label for="archivo">Archivo .json</label><input id="archivo" type="file" style="font-size:1rem;padding:10px"></div>
     <div class="campo"><label for="json-txt">O pega el contenido</label><textarea id="json-txt" spellcheck="false" style="min-height:160px;font-family:ui-monospace,Consolas,monospace;font-size:.85rem">${esc(S.importacion && S.importacion.texto || '')}</textarea></div>
     <button class="btn primary" data-validar>Validar</button></section>`;
   const im = S.importacion;
@@ -611,6 +611,7 @@ document.addEventListener('change', ev => {
 function validarImport(textoArg){
   const ta = document.getElementById('json-txt');
   const texto = textoArg != null ? textoArg : (ta ? ta.value : '');
+  if (!String(texto).trim()){ S.importacion = { texto: '', resultado: { ok: false, archivo: true, errores: ['No hay nada que validar: el cuadro de texto está vacío. Toca "Seleccionar archivo" y elige el archivo (se valida solo al elegirlo), o pega el contenido completo en el cuadro.'], avisos: [] } }; render(); return; }
   let obj;
   try { obj = JSON.parse(texto); }
   catch(e){ S.importacion = { texto, resultado: { ok: false, errores: ['El texto no es JSON válido: ' + e.message], avisos: [] } }; render(); return; }
