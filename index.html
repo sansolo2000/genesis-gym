@@ -2,22 +2,70 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Génesis Gym 2.0 — prueba</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Génesis Gym</title>
+<meta name="theme-color" content="#1f5fbf">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="iconos/icono-192.png">
+<link rel="apple-touch-icon" href="iconos/apple-touch-icon.png">
 <style>
-body{font-family:system-ui,sans-serif;max-width:560px;margin:40px auto;padding:0 16px;line-height:1.5;background:#edf0f3;color:#14181d}
-@media (prefers-color-scheme:dark){body{background:#0e1216;color:#e7ecf1}}
-code{font-size:.95em}
+:root{
+  --bg:#edf0f3; --surface:#ffffff; --ink:#14181d; --muted:#56616d; --line:#d3d9e0;
+  --accent:#1f5fbf; --accent-ink:#ffffff; --accent-soft:#e2ebf9;
+  --ok:#1b7443; --ok-soft:#e0f2e7; --warn:#7d5200; --warn-soft:#fbf0d6;
+  --r:10px; --tap:48px;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0e1216; --surface:#171c22; --ink:#e7ecf1; --muted:#9ca8b4; --line:#2a323b;
+  --accent:#6a9ee8; --accent-ink:#08111f; --accent-soft:#1a2a40;
+  --ok:#62c98f; --ok-soft:#12301f; --warn:#f0c264; --warn-soft:#33280f; color-scheme:dark}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{background:var(--bg)}
+body{margin:0;color:var(--ink);font:17px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(24px + env(safe-area-inset-bottom,0px))}
+main{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+h1{font-size:1.9rem;line-height:1.1;margin:0}
+p{margin:0}
+.eyebrow{font-size:.78rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:600}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.estado{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.estado li{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.estado li:first-child{border-top:0}
+.estado b{font-weight:600;text-align:right}
+.si{color:var(--ok)} .no{color:var(--warn)}
+.btn{min-height:var(--tap);padding:0 18px;border-radius:var(--r);border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600;cursor:pointer}
+.aviso{background:var(--accent-soft);border-radius:var(--r);padding:12px 14px;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.muted{color:var(--muted);font-size:.92rem}
 </style>
 </head>
 <body>
-<h1>Génesis Gym 2.0</h1>
-<p><strong>Prueba de publicación (paso 0).</strong> Si ves esta página en el celular, GitHub Pages funciona.</p>
-<p>Contexto seguro (HTTPS): <code id="sc">…</code><br>Service worker disponible: <code id="sw">…</code><br>IndexedDB disponible: <code id="idb">…</code></p>
-<script>
-document.getElementById('sc').textContent = window.isSecureContext ? 'sí' : 'no';
-document.getElementById('sw').textContent = ('serviceWorker' in navigator) ? 'sí' : 'no';
-document.getElementById('idb').textContent = ('indexedDB' in window) ? 'sí' : 'no';
-</script>
+<main>
+  <header>
+    <p class="eyebrow">Proyecto Génesis · Fuerza</p>
+    <h1>Génesis Gym 2.0</h1>
+    <p class="muted">Esqueleto de prueba · versión <span id="version">…</span></p>
+  </header>
+
+  <div id="aviso-version" class="aviso" hidden>
+    <span>Hay una versión nueva de la app.</span>
+    <button class="btn" id="btn-actualizar">Actualizar</button>
+  </div>
+
+  <section class="card" aria-labelledby="t-estado">
+    <h2 id="t-estado" class="eyebrow">Estado de la app</h2>
+    <ul class="estado">
+      <li><span>Abierta como app instalada</span><b id="e-instalada">…</b></li>
+      <li><span>Lista para usar sin internet</span><b id="e-offline">…</b></li>
+      <li><span>Almacenamiento protegido</span><b id="e-persist">…</b></li>
+      <li><span>Conexión a internet ahora</span><b id="e-red">…</b></li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <p class="muted">Esta pantalla solo prueba la instalación y el funcionamiento sin conexión. Todavía no guarda entrenamientos: la Génesis Gym oficial sigue siendo la 1.0.</p>
+  </section>
+</main>
+<script src="version.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
