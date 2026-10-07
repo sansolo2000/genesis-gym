@@ -1,0 +1,3 @@
+Construido desde la fuente de Génesis Gym 1.0 (solo lectura):
+app.src.html         md5 460e2c972d6ee633eaac3ec4d0c3461f
+validador-rutina.js  md5 211363f4add0bcf85b5e3e4c13df0e2a
