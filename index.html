@@ -453,7 +453,7 @@ function vImportar(){
   if (im && im.resultado){
     const r = im.resultado;
     if (!r.ok){
-      h += `<section class="card"><div class="note err"><strong>Rutina rechazada.</strong> ${r.errores.length} error${r.errores.length === 1 ? '' : 'es'}. Devuelve esta lista a Entrenamiento.</div><ul class="errores">${r.errores.map(e => `<li>${esc(e)}</li>`).join('')}</ul></section>`;
+      h += `<section class="card"><div class="note err">${r.archivo ? '<strong>No se pudo leer el archivo.</strong> El problema es el archivo, no la rutina.' : `<strong>Rutina rechazada.</strong> ${r.errores.length} error${r.errores.length === 1 ? '' : 'es'}. Devuelve esta lista a Entrenamiento.`}</div><ul class="errores">${r.errores.map(e => `<li>${esc(e)}</li>`).join('')}</ul></section>`;
     } else {
       const ru = im.obj.rutina;
       h += `<section class="card"><div class="note ok"><strong>Rutina válida.</strong></div>
@@ -598,9 +598,12 @@ document.addEventListener('input', ev => {
 
 document.addEventListener('change', ev => {
   if (ev.target.id === 'archivo' && ev.target.files && ev.target.files[0]){
+    const f = ev.target.files[0];
     const fr = new FileReader();
-    fr.onload = () => { S.importacion = { texto: String(fr.result) }; validarImport(String(fr.result)); };
-    fr.readAsText(ev.target.files[0]);
+    const vacio = () => { S.importacion = { texto: '', resultado: { ok: false, archivo: true, errores: [`El archivo "${f.name}" llegó vacío al celular (${f.size} bytes). Suele pasar al elegirlo directo desde WhatsApp o Drive. Guárdalo primero en el celular (Descargas) y elígelo desde Mis archivos, o abre el archivo, copia todo el texto y pégalo en el cuadro.`], avisos: [] } }; render(); };
+    fr.onload = () => { const t = String(fr.result || ''); if (!t.trim()) return vacio(); S.importacion = { texto: t }; validarImport(t); };
+    fr.onerror = vacio;
+    fr.readAsText(f);
   }
 });
 
