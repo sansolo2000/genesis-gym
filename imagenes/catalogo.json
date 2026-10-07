@@ -1,0 +1,311 @@
+{
+ "version": 1,
+ "descripcion": "Imágenes de los ejercicios, copiadas sin modificar desde Génesis Gym 1.0 (v6, 7-oct-2026). Créditos en CREDITOS.md.",
+ "imagenes": {
+  "curl-biceps-polea": {
+   "archivos": [
+    "dist/png/0212-relaxation.png",
+    "dist/png/0212-tension.png"
+   ],
+   "autor": "Everkinetic (Greg Priday)",
+   "cargada": "2026-10-07",
+   "etiquetas": [
+    "Posición inicial",
+    "Posición final"
+   ],
+   "fuente": "Everkinetic — everkinetic/data, ejercicio 0212 \"Standing Biceps Curl with Cable\"",
+   "licencia": "CC BY-SA 4.0",
+   "nota": "",
+   "url_fuente": "https://github.com/everkinetic/data/tree/main/dist/png",
+   "url_licencia": "https://creativecommons.org/licenses/by-sa/4.0/",
+   "validada_entrenamiento": true,
+   "validada_fecha": "2026-10-07",
+   "srcs": [
+    "imagenes/curl-biceps-polea-1.png",
+    "imagenes/curl-biceps-polea-2.png"
+   ]
+  },
+  "curl-femoral-maquina": {
+   "archivos": [
+    "dist/png/0119-relaxation.png",
+    "dist/png/0119-tension.png"
+   ],
+   "autor": "Everkinetic (Greg Priday)",
+   "cargada": "2026-10-07",
+   "etiquetas": [
+    "Posición inicial",
+    "Posición final"
+   ],
+   "fuente": "Everkinetic — everkinetic/data, ejercicio 0119 \"Seated Leg Curl\"",
+   "licencia": "CC BY-SA 4.0",
+   "nota": "Versión sentado, incluida en la ficha.",
+   "url_fuente": "https://github.com/everkinetic/data/tree/main/dist/png",
+   "url_licencia": "https://creativecommons.org/licenses/by-sa/4.0/",
+   "validada_entrenamiento": true,
+   "validada_fecha": "2026-10-07",
+   "srcs": [
+    "imagenes/curl-femoral-maquina-1.png",
+    "imagenes/curl-femoral-maquina-2.png"
+   ]
+  },
+  "dead-bug": {
+   "archivos": [
+    "claude/imagenes/dead-bug.svg"
+   ],
+   "autor": "Entrenamiento (Proyecto Génesis)",
+   "cargada": "2026-10-07",
+   "credito": "Ilustración propia — Entrenamiento, Proyecto Génesis.",
+   "etiquetas": [
+    "Inicio (izquierda) → final (derecha)"
+   ],
+   "fuente": "Ilustración propia — Entrenamiento, Proyecto Génesis",
+   "licencia": "propia",
+   "validada_entrenamiento": true,
+   "validada_fecha": "2026-10-07",
+   "srcs": [
+    "imagenes/dead-bug.svg"
+   ]
+  },
+  "extension-triceps-polea": {
+   "archivos": [
+    "dist/png/0206-relaxation.png",
+    "dist/png/0206-tension.png"
+   ],
+   "autor": "Everkinetic (Greg Priday)",
+   "cargada": "2026-10-07",
+   "etiquetas": [
+    "Posición inicial",
+    "Posición final"
+   ],
+   "fuente": "Everkinetic — everkinetic/data, ejercicio 0206 \"Triceps Pushdown: Cable (Rope)\"",
+   "licencia": "CC BY-SA 4.0",
+   "nota": "En la posición final el tronco se inclina un poco; la ficha lo marca como error.",
+   "url_fuente": "https://github.com/everkinetic/data/tree/main/dist/png",
+   "url_licencia": "https://creativecommons.org/licenses/by-sa/4.0/",
+   "validada_entrenamiento": true,
+   "validada_fecha": "2026-10-07",
+   "srcs": [
+    "imagenes/extension-triceps-polea-1.png",
+    "imagenes/extension-triceps-polea-2.png"
+   ]
+  },
+  "face-pull-polea": {
+   "archivos": [
+    "claude/imagenes/face-pull-polea.svg"
+   ],
+   "autor": "Entrenamiento (Proyecto Génesis)",
+   "cargada": "2026-10-07",
+   "credito": "Ilustración propia — Entrenamiento, Proyecto Génesis.",
+   "etiquetas": [
+    "Inicio (izquierda) → final (derecha)"
+   ],
+   "fuente": "Ilustración propia — Entrenamiento, Proyecto Génesis",
+   "licencia": "propia",
+   "validada_entrenamiento": true,
+   "validada_fecha": "2026-10-07",
+   "srcs": [
+    "imagenes/face-pull-polea.svg"
+   ]
+  },
+  "jalon-agarre-neutro": {
+   "archivos": [
+    "dist/png/0096-relaxation.png",
+    "dist/png/0096-tension.png"
+   ],
+   "autor": "Everkinetic (Greg Priday)",
+   "cargada": "2026-10-07",
+   "etiquetas": [
+    "Posición inicial",
+    "Posición final"
+   ],
+   "fuente": "Everkinetic — everkinetic/data, ejercicio 0096 \"Pull Down: V Bar\"",
+   "licencia": "CC BY-SA 4.0",
+   "nota": "El inicio del dibujo muestra los brazos estirados al máximo; la ficha pide no llegar hasta ahí. Manda el texto de la ficha.",
+   "url_fuente": "https://github.com/everkinetic/data/tree/main/dist/png",
+   "url_licencia": "https://creativecommons.org/licenses/by-sa/4.0/",
+   "validada_entrenamiento": true,
+   "validada_fecha": "2026-10-07",
+   "srcs": [
+    "imagenes/jalon-agarre-neutro-1.png",
+    "imagenes/jalon-agarre-neutro-2.png"
+   ]
+  },
+  "pallof-press": {
+   "archivos": [
+    "claude/imagenes/pallof-press.svg"
+   ],
+   "autor": "Entrenamiento (Proyecto Génesis)",
+   "cargada": "2026-10-07",
+   "credito": "Ilustración propia — Entrenamiento, Proyecto Génesis.",
+   "etiquetas": [
+    "Inicio (izquierda) → final (derecha)"
+   ],
+   "fuente": "Ilustración propia — Entrenamiento, Proyecto Génesis",
+   "licencia": "propia",
+   "validada_entrenamiento": true,
+   "validada_fecha": "2026-10-07",
+   "srcs": [
+    "imagenes/pallof-press.svg"
+   ]
+  },
+  "peso-muerto-rumano-mancuernas": {
+   "archivos": [
+    "claude/imagenes/peso-muerto-rumano-mancuernas.svg"
+   ],
+   "autor": "Entrenamiento (Proyecto Génesis)",
+   "cargada": "2026-10-07",
+   "credito": "Ilustración propia — Entrenamiento, Proyecto Génesis.",
+   "etiquetas": [
+    "Inicio (izquierda) → final (derecha)"
+   ],
+   "fuente": "Ilustración propia — Entrenamiento, Proyecto Génesis",
+   "licencia": "propia",
+   "validada_entrenamiento": true,
+   "validada_fecha": "2026-10-07",
+   "srcs": [
+    "imagenes/peso-muerto-rumano-mancuernas.svg"
+   ]
+  },
+  "prensa-piernas": {
+   "archivos": [
+    "dist/png/0127-relaxation.png",
+    "dist/png/0127-tension.png"
+   ],
+   "autor": "Everkinetic (Greg Priday)",
+   "cargada": "2026-10-07",
+   "etiquetas": [
+    "Posición inicial",
+    "Posición final"
+   ],
+   "fuente": "Everkinetic — everkinetic/data, ejercicio 0127 \"Leg Press\"",
+   "licencia": "CC BY-SA 4.0",
+   "nota": "La máquina de tu gimnasio puede ser otra; la técnica es la misma.",
+   "url_fuente": "https://github.com/everkinetic/data/tree/main/dist/png",
+   "url_licencia": "https://creativecommons.org/licenses/by-sa/4.0/",
+   "validada_entrenamiento": true,
+   "validada_fecha": "2026-10-07",
+   "srcs": [
+    "imagenes/prensa-piernas-1.png",
+    "imagenes/prensa-piernas-2.png"
+   ]
+  },
+  "press-inclinado-maquina": {
+   "archivos": [
+    "claude/imagenes/press-inclinado-maquina.svg"
+   ],
+   "autor": "Entrenamiento (Proyecto Génesis)",
+   "cargada": "2026-10-07",
+   "credito": "Ilustración propia — Entrenamiento, Proyecto Génesis.",
+   "etiquetas": [
+    "Inicio (izquierda) → final (derecha)"
+   ],
+   "fuente": "Ilustración propia — Entrenamiento, Proyecto Génesis",
+   "licencia": "propia",
+   "validada_entrenamiento": true,
+   "validada_fecha": "2026-10-07",
+   "srcs": [
+    "imagenes/press-inclinado-maquina.svg"
+   ]
+  },
+  "press-maquina-agarre-neutro": {
+   "archivos": [
+    "claude/imagenes/press-maquina-agarre-neutro.svg"
+   ],
+   "autor": "Entrenamiento (Proyecto Génesis)",
+   "cargada": "2026-10-07",
+   "credito": "Ilustración propia — Entrenamiento, Proyecto Génesis.",
+   "etiquetas": [
+    "Inicio (izquierda) → final (derecha)"
+   ],
+   "fuente": "Ilustración propia — Entrenamiento, Proyecto Génesis",
+   "licencia": "propia",
+   "validada_entrenamiento": true,
+   "validada_fecha": "2026-10-07",
+   "srcs": [
+    "imagenes/press-maquina-agarre-neutro.svg"
+   ]
+  },
+  "puente-gluteo": {
+   "archivos": [
+    "claude/imagenes/puente-gluteo.svg"
+   ],
+   "autor": "Entrenamiento (Proyecto Génesis)",
+   "cargada": "2026-10-07",
+   "credito": "Ilustración propia — Entrenamiento, Proyecto Génesis.",
+   "etiquetas": [
+    "Inicio (izquierda) → final (derecha)"
+   ],
+   "fuente": "Ilustración propia — Entrenamiento, Proyecto Génesis",
+   "licencia": "propia",
+   "validada_entrenamiento": true,
+   "validada_fecha": "2026-10-07",
+   "srcs": [
+    "imagenes/puente-gluteo.svg"
+   ]
+  },
+  "remo-mancuerna-una-mano": {
+   "archivos": [
+    "claude/imagenes/remo-mancuerna-una-mano.svg"
+   ],
+   "autor": "Entrenamiento (Proyecto Génesis)",
+   "cargada": "2026-10-07",
+   "credito": "Ilustración propia — Entrenamiento, Proyecto Génesis.",
+   "etiquetas": [
+    "Inicio (izquierda) → final (derecha)"
+   ],
+   "fuente": "Ilustración propia — Entrenamiento, Proyecto Génesis",
+   "licencia": "propia",
+   "validada_entrenamiento": true,
+   "validada_fecha": "2026-10-07",
+   "srcs": [
+    "imagenes/remo-mancuerna-una-mano.svg"
+   ]
+  },
+  "remo-maquina-agarre-neutro": {
+   "archivos": [
+    "dist/png/0025-relaxation.png",
+    "dist/png/0025-tension.png"
+   ],
+   "autor": "Everkinetic (Greg Priday)",
+   "cargada": "2026-10-07",
+   "etiquetas": [
+    "Posición inicial",
+    "Posición final"
+   ],
+   "fuente": "Everkinetic — everkinetic/data, ejercicio 0025 \"Seated Cable Rows\"",
+   "licencia": "CC BY-SA 4.0",
+   "nota": "El dibujo es en polea y no en máquina, pero el patrón es el mismo.",
+   "url_fuente": "https://github.com/everkinetic/data/tree/main/dist/png",
+   "url_licencia": "https://creativecommons.org/licenses/by-sa/4.0/",
+   "validada_entrenamiento": true,
+   "validada_fecha": "2026-10-07",
+   "srcs": [
+    "imagenes/remo-maquina-agarre-neutro-1.png",
+    "imagenes/remo-maquina-agarre-neutro-2.png"
+   ]
+  },
+  "zancada-caminando": {
+   "archivos": [
+    "dist/png/0121-relaxation.png",
+    "dist/png/0121-tension.png"
+   ],
+   "autor": "Everkinetic (Greg Priday)",
+   "cargada": "2026-10-07",
+   "etiquetas": [
+    "Posición inicial",
+    "Posición final"
+   ],
+   "fuente": "Everkinetic — everkinetic/data, ejercicio 0121 \"Lunges: Dumbbell (Walking)\"",
+   "licencia": "CC BY-SA 4.0",
+   "nota": "Las mancuernas del dibujo son opcionales según la ficha.",
+   "url_fuente": "https://github.com/everkinetic/data/tree/main/dist/png",
+   "url_licencia": "https://creativecommons.org/licenses/by-sa/4.0/",
+   "validada_entrenamiento": true,
+   "validada_fecha": "2026-10-07",
+   "srcs": [
+    "imagenes/zancada-caminando-1.png",
+    "imagenes/zancada-caminando-2.png"
+   ]
+  }
+ }
+}
