@@ -14,7 +14,9 @@
   const ETQ = { desayuno: 'Desayuno', colacion_am: 'Colación AM', almuerzo: 'Almuerzo', colacion_pm: 'Colación PM', cena: 'Cena' };
   const ESTADOS = { indicado: 'Comí lo indicado', otro: 'Comí otra cosa o parcial', 'no-comi': 'No comí' };
   const M = { cargado: false, cargando: false, programa: null, perfil: null, registros: {}, fotos: {}, dia: null,
-              importacion: null, verImport: false, notas: {}, mensaje: null, error: null };
+              importacion: null, verImport: false, notas: {}, mensaje: null, error: null,
+              cambios: {},          // intercambios: { 'fecha_tipo': { preparacion, conservacion, desde: 'fecha_tipo' } }
+              eligiendo: null };    // comida para la que se está eligiendo con cuál intercambiar
 
   const e = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const dosD = n => String(n).padStart(2, '0');
@@ -93,6 +95,8 @@
       const p = await d.doc('alimentacion/programa_activo').get();
       M.programa = p.exists ? p.data().programa : null;
       M.perfil = M.programa ? M.programa.perfiles[0] : null;
+      const ic = await d.doc('alimentacion/intercambios').get();
+      M.cambios = ic.exists && M.programa && ic.data().programa_id === M.programa.programa.id ? (ic.data().cambios || {}) : {};
       const regs = await d.collection('comidas').get();
       M.registros = {}; regs.docs.forEach(x => { M.registros[x.id] = x.data(); });
       const fotos = await d.collection('fotos').get();
@@ -144,7 +148,33 @@
   /* ---------- envío a Alimentación ---------- */
   const pendientes = () => Object.values(M.registros).filter(r => r.estado && (!r.enviado || r.enviado.version !== r.version)).sort((a, b) => (a.fecha + a.tipo).localeCompare(b.fecha + b.tipo));
   function diaDe(f) { return ((M.programa && M.programa.dias) || []).find(d => d.fecha === f); }
-  function comidaDe(f, t) { const d = diaDe(f); return d && (d.comidas || []).find(c => c.tipo === t); }
+  function comidaPlan(f, t) { const d = diaDe(f); return d && (d.comidas || []).find(c => c.tipo === t); }
+  /* La comida que toca en ese lugar, con los intercambios aplicados: la hora es la del lugar; el plato (y dónde está guardado) viene del otro. */
+  function comidaDe(f, t) {
+    const c = comidaPlan(f, t), x = M.cambios[clave(f, t)];
+    if (!c || !x) return c;
+    return Object.assign({}, c, { preparacion: x.preparacion, conservacion: x.conservacion, intercambio: x });
+  }
+  const etiquetaLugar = k => { const [f, t] = k.split('_'); return `${ETQ[t] || t} del ${fechaLarga(f)}`; };
+  const kcalDe = c => (((M.programa.preparaciones[c.preparacion] || {}).aporte_estimado || {})[M.perfil.id] || {}).kcal || 0;
+  async function guardarCambios() {
+    await (await db()).doc('alimentacion/intercambios').set({ programa_id: M.programa.programa.id, cambios: M.cambios, actualizado: new Date().toISOString() });
+  }
+  async function intercambiar(kA, kB) {
+    const [fA, tA] = kA.split('_'), [fB, tB] = kB.split('_');
+    const a = comidaDe(fA, tA), b = comidaDe(fB, tB);
+    if (!a || !b || kA === kB) return;
+    const nuevo = (k, c, desde) => { const [f, t] = k.split('_'), plan = comidaPlan(f, t); return plan.preparacion === c.preparacion && (plan.conservacion || null) === (c.conservacion || null) ? null : { preparacion: c.preparacion, conservacion: c.conservacion || null, desde }; };
+    const xA = nuevo(kA, b, kB), xB = nuevo(kB, a, kA);
+    if (xA) M.cambios[kA] = xA; else delete M.cambios[kA];
+    if (xB) M.cambios[kB] = xB; else delete M.cambios[kB];
+    M.eligiendo = null;
+    M.mensaje = { tipo: 'ok', texto: `Intercambiadas: ${etiquetaLugar(kA)} ↔ ${etiquetaLugar(kB)}.` };
+    try { await guardarCambios(); } catch (er) { M.mensaje = { tipo: 'err', texto: 'No se pudo guardar el intercambio: ' + (er && er.message || er) }; }
+    // Si alguna ya estaba marcada, su registro cambia de plato: queda por enviar de nuevo.
+    for (const [f, t] of [[fA, tA], [fB, tB]]) { const r = M.registros[clave(f, t)]; if (r && r.estado) await guardarRegistro(f, t, {}); }
+    repintar();
+  }
   function nombreBase(r) { const base = `comida-${M.perfil.id}-${r.fecha}-${r.tipo}`; return r.enviado ? `${base}-v${r.version}` : base; }
   function registroJSON(r, nombreFoto) {
     const c = comidaDe(r.fecha, r.tipo), pr = c && M.programa.preparaciones[c.preparacion], pid = M.perfil.id;
@@ -154,6 +184,7 @@
       programa: { id: M.programa.programa.id, nombre: M.programa.programa.nombre },
       fecha: r.fecha, tipo: r.tipo, hora_programada: c ? c.hora : null,
       indicado: c && pr ? { preparacion: c.preparacion, nombre: pr.nombre, porciones: (pr.porciones || {})[pid] || [], aporte_estimado: (pr.aporte_estimado || {})[pid] || null } : null,
+      intercambio: c && c.intercambio ? { con: { fecha: c.intercambio.desde.split('_')[0], tipo: c.intercambio.desde.split('_')[1] }, preparacion_planificada: (comidaPlan(r.fecha, r.tipo) || {}).preparacion || null } : null,
       estado: r.estado, nota: r.nota || '', foto: nombreFoto || null,
       registrado_en: r.actualizado, version: r.version, app: 'genesis-gym-2 ' + (self.GG_VERSION || '')
     };
@@ -201,6 +232,7 @@
       const d = await db();
       await d.doc('alimentacion/programa_activo').set({ programa: im.obj, importado_en: new Date().toISOString() });
       await d.doc(`programas_alimentacion/${im.obj.programa.id}`).set({ programa: im.obj, importado_en: new Date().toISOString() });
+      if (!M.programa || M.programa.programa.id !== im.obj.programa.id) M.cambios = {};
       M.programa = im.obj; M.perfil = im.obj.perfiles[0]; M.dia = elegirDia(); M.importacion = null; M.verImport = false;
       M.mensaje = { tipo: 'ok', texto: `Programa activado: ${im.obj.programa.nombre}.` };
     } catch (er) { M.mensaje = { tipo: 'err', texto: 'No se pudo guardar el programa: ' + (er && er.message || er) }; }
@@ -229,7 +261,8 @@
     return h + `${M.programa ? '<button class="btn" data-com-cerrar-import>Cerrar</button>' : ''}</section>`;
   }
 
-  function vComida(f, c) {
+  function vComida(f, c0) {
+    const c = comidaDe(f, c0.tipo) || c0;
     const pid = M.perfil.id, pr = M.programa.preparaciones[c.preparacion] || {}, k = clave(f, c.tipo), r = M.registros[k] || {};
     const porc = (pr.porciones || {})[pid] || [], ap = (pr.aporte_estimado || {})[pid];
     const foto = M.fotos[k];
@@ -240,7 +273,9 @@
       <h2 style="margin:0">${e(pr.nombre || c.preparacion)}</h2>
       ${porc.length ? `<ul class="pasos" style="margin:0">${porc.map(x => `<li>${e(x.alimento)}: ${e(x.gramos)} g${x.medida ? ` (${e(x.medida)})` : ''}</li>`).join('')}</ul>` : '<p class="muted">Sin porción para este perfil.</p>'}
       <p class="muted" style="margin:0">${ap ? `≈ ${e(ap.kcal)} kcal · ${e(ap.proteina_g)} g proteína` : ''}${c.conservacion ? ` · desde el ${e(c.conservacion)}` : ''}${pr.notas ? ` · ${e(pr.notas)}` : ''}</p>
+      ${c.intercambio ? `<div class="note info">Intercambiada con: <strong>${e(etiquetaLugar(c.intercambio.desde))}</strong>. En el plan original aquí iba ${e((M.programa.preparaciones[(comidaPlan(f, c.tipo) || {}).preparacion] || {}).nombre || '')}.${(M.cambios[c.intercambio.desde] || {}).desde === k ? `<br><button class="btn" data-com-deshacer="${e(k)}" style="margin-top:6px">Deshacer intercambio</button>` : ''}</div>` : ''}
       <div class="stack" style="gap:6px">${botones}</div>
+      ${M.eligiendo === k ? vElegir(k) : `<button class="btn" data-com-intercambiar="${e(k)}">Intercambiar con otra comida…</button>`}
       ${r.estado === 'otro' ? `<div class="stack" style="gap:6px">
         <label class="btn" for="com-foto-${e(c.tipo)}" style="text-align:center">${foto ? 'Cambiar foto' : 'Tomar o elegir foto de lo que comiste'}</label>
         <input id="com-foto-${e(c.tipo)}" data-com-foto="${e(c.tipo)}" type="file" accept="image/*" capture="environment" style="position:absolute;width:1px;height:1px;opacity:0">
@@ -249,6 +284,20 @@
         <textarea id="com-nota-${e(c.tipo)}" data-com-nota="${e(c.tipo)}" rows="2" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;background:var(--bg)">${e(M.notas[k] != null ? M.notas[k] : (r.nota || ''))}</textarea>
       </div>` : ''}
     </section>`;
+  }
+
+  function vElegir(k) {
+    // Primero este día, después los siguientes y al final los anteriores (lo más probable es intercambiar hacia adelante).
+    const orden = d => d.fecha === M.dia ? '0' : (d.fecha > M.dia ? '1' : '2') + d.fecha;
+    const dias = (M.programa.dias || []).slice().sort((x, y) => orden(x).localeCompare(orden(y)));
+    let h = `<div class="stack" style="gap:6px;border:1px solid var(--line);border-radius:10px;padding:10px"><p style="margin:0"><strong>¿Con qué comida la intercambias?</strong></p>
+      <p class="muted" style="margin:0">Ambas quedan cambiadas: aquí comerás lo de la otra, y allá lo de esta. La hora de cada comida no cambia.</p>`;
+    for (const d of dias) {
+      const op = TIPOS.map(t => comidaDe(d.fecha, t)).filter(Boolean).filter(c => clave(d.fecha, c.tipo) !== k);
+      if (!op.length) continue;
+      h += `<p class="eyebrow" style="margin:8px 0 0">${e(fechaLarga(d.fecha))}${d.fecha === M.dia ? ' · este día' : d.fecha < M.dia ? ' · día anterior' : ''}</p>` + op.map(c => `<button class="btn" data-com-con="${e(k)}|${e(clave(d.fecha, c.tipo))}" style="text-align:left;justify-content:flex-start">${e(ETQ[c.tipo])} · ${e((M.programa.preparaciones[c.preparacion] || {}).nombre || c.preparacion)}</button>`).join('');
+    }
+    return h + `<button class="btn" data-com-cancelar-intercambio>Cancelar</button></div>`;
   }
 
   function vista() {
@@ -265,12 +314,13 @@
         <button class="btn" data-com-dia="1" ${f >= p.hasta ? 'disabled' : ''} aria-label="Día siguiente">›</button></div>`;
     if ((M.programa.restricciones || []).length) h += `<div class="note warn"><strong>Restricciones:</strong> ${M.programa.restricciones.map(e).join(' · ')}</div>`;
     if (d) {
-      const comidas = TIPOS.map(t => (d.comidas || []).find(c => c.tipo === t)).filter(Boolean);
+      const comidas = TIPOS.map(t => comidaDe(f, t)).filter(Boolean);
       const regs = comidas.map(c => M.registros[clave(f, c.tipo)] || {});
-      const kcalInd = comidas.reduce((a, c, i) => a + (regs[i].estado === 'indicado' ? ((((M.programa.preparaciones[c.preparacion] || {}).aporte_estimado || {})[pid] || {}).kcal || 0) : 0), 0);
+      const kcalInd = comidas.reduce((a, c, i) => a + (regs[i].estado === 'indicado' ? kcalDe(c) : 0), 0);
+      const conCambios = comidas.some(c => c.intercambio);
       const marcadas = regs.filter(r => r.estado).length, otras = regs.filter(r => r.estado === 'otro').length;
-      const tot = (d.total_estimado_kcal || {})[pid];
-      h += `<section class="card"><p style="margin:0"><strong>${marcadas} de ${comidas.length}</strong> comidas marcadas · plan del día ≈ ${e(tot != null ? tot : '—')} kcal (meta ${e(M.perfil.meta_kcal || '—')})</p>
+      const tot = conCambios ? comidas.reduce((a, c) => a + kcalDe(c), 0) : (d.total_estimado_kcal || {})[pid];
+      h += `<section class="card"><p style="margin:0"><strong>${marcadas} de ${comidas.length}</strong> comidas marcadas · plan del día ≈ ${e(tot != null ? tot : '—')} kcal${conCambios ? ' con intercambios' : ''} (meta ${e(M.perfil.meta_kcal || '—')})</p>
         <p class="muted" style="margin:4px 0 0">Lo indicado que comiste suma ≈ ${kcalInd} kcal${otras ? ` · ${otras} comida${otras === 1 ? '' : 's'} por revisar en Alimentación` : ''}. Son estimaciones del programa.</p></section>`;
       h += comidas.map(c => vComida(f, c)).join('');
       if ((d.tareas || []).length) h += `<section class="card stack"><h2>Tareas del día</h2><ul class="pasos" style="margin:0">${d.tareas.map(t => `<li><strong>${e(t.hora)}</strong> · ${e(t.texto)}</li>`).join('')}</ul></section>`;
@@ -294,7 +344,11 @@
       guardarRegistro(M.dia, tipo, { estado: est });
       return true;
     }
-    if (t.hasAttribute('data-com-dia')) { M.dia = sumarDias(M.dia, Number(t.getAttribute('data-com-dia'))); M.mensaje = null; repintar(); window.scrollTo(0, 0); return true; }
+    if (t.hasAttribute('data-com-intercambiar')) { M.eligiendo = t.getAttribute('data-com-intercambiar'); M.mensaje = null; repintar(); return true; }
+    if (t.hasAttribute('data-com-cancelar-intercambio')) { M.eligiendo = null; repintar(); return true; }
+    if (t.hasAttribute('data-com-con')) { const [a, b] = t.getAttribute('data-com-con').split('|'); intercambiar(a, b); return true; }
+    if (t.hasAttribute('data-com-deshacer')) { const k = t.getAttribute('data-com-deshacer'), x = M.cambios[k]; if (x) intercambiar(k, x.desde); return true; }
+    if (t.hasAttribute('data-com-dia')) { M.dia = sumarDias(M.dia, Number(t.getAttribute('data-com-dia'))); M.mensaje = null; M.eligiendo = null; repintar(); window.scrollTo(0, 0); return true; }
     if (t.hasAttribute('data-com-enviar')) { enviar(); return true; }
     if (t.hasAttribute('data-com-activar')) { activar(); return true; }
     if (t.hasAttribute('data-com-ver-import')) { M.verImport = true; M.importacion = null; M.mensaje = null; repintar(); return true; }
