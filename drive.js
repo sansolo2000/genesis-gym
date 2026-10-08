@@ -53,9 +53,14 @@
   function elegir(tok) {
     return new Promise(ok => {
       const P = google.picker;
-      const vista = new P.DocsView(P.ViewId.DOCS).setIncludeFolders(true).setMode(P.DocsViewMode.LIST);
-      new P.PickerBuilder()
-        .addView(vista).setOAuthToken(tok).setDeveloperKey(C.apiKey).setAppId(String(C.appId))
+      // Primero la carpeta de rutinas (si está configurada); después "Mi unidad" completa, por si el archivo está en otra parte
+      // o la persona no tiene acceso a esa carpeta (por ejemplo, en el celular de la esposa).
+      const vistas = [];
+      if (C.carpetaRutinas) vistas.push(new P.DocsView(P.ViewId.DOCS).setParent(String(C.carpetaRutinas)).setMode(P.DocsViewMode.LIST));
+      vistas.push(new P.DocsView(P.ViewId.DOCS).setIncludeFolders(true).setMode(P.DocsViewMode.LIST));
+      const b = new P.PickerBuilder();
+      vistas.forEach(v => b.addView(v));
+      b.setOAuthToken(tok).setDeveloperKey(C.apiKey).setAppId(String(C.appId))
         .setLocale('es').setTitle('Elige la rutina (.json)')
         .setCallback(d => {
           const a = d[P.Response.ACTION];
