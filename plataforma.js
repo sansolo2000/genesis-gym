@@ -70,7 +70,24 @@
     pie.id = 'gg-pie';
     pie.textContent = 'Génesis Gym 2.0 · versión ' + self.GG_VERSION + ' · datos guardados solo en este celular';
     main.parentNode.insertBefore(pie, main.nextSibling);
+    contarImagenes();
   }
+
+  /* Pie: cuántas imágenes de ejercicios quedaron guardadas para usar sin internet. */
+  async function contarImagenes() {
+    try {
+      if (!self.caches) return;
+      const cat = await (await fetch('imagenes/catalogo.json')).json();
+      const srcs = new Set(Object.values(cat.imagenes || {}).flatMap(m => m.srcs || []));
+      const cache = await caches.open('genesis-gym-2-imagenes-v' + cat.version);
+      const base = new URL('./', location.href).pathname;
+      const ya = new Set((await cache.keys()).map(k => new URL(k.url).pathname.slice(base.length)));
+      const n = [...srcs].filter(s => ya.has(s)).length;
+      const pie = document.getElementById('gg-pie');
+      if (pie) pie.textContent = 'Génesis Gym 2.0 · versión ' + self.GG_VERSION + ' · datos guardados solo en este celular · imágenes sin internet: ' + n + ' de ' + srcs.size;
+    } catch (_) {}
+  }
+  if (navigator.serviceWorker) navigator.serviceWorker.addEventListener('controllerchange', () => setTimeout(contarImagenes, 500));
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', montarBarra); else montarBarra();
 
   /* ---------- selector de archivos en Android ----------

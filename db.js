@@ -142,10 +142,25 @@
     if (canal) { try { canal.postMessage('*'); } catch (_) {} }
   }
 
+  /* Escribe varios documentos en una sola transacción (todos o ninguno) y avisa una sola vez por colección. */
+  async function ponerVarios(docs) {
+    if (!Array.isArray(docs)) throw err('invalid_argument', new Error('se esperaba una lista de documentos'));
+    if (!docs.length) return;
+    const regs = docs.map(d => { const { col, id } = partes(d.ruta); return { ruta: d.ruta, col, id, data: clonar(d.data), actualizado_local: new Date().toISOString() }; });
+    await tx('readwrite', st => { for (const r of regs) st.put(r); });
+    const rutas = new Set(regs.map(r => r.ruta)), cols = new Set(regs.map(r => r.col));
+    for (const s of subs) {
+      if (s.tipo === 'doc' && rutas.has(s.ruta)) leerDoc(s.ruta).then(s.fn, s.err);
+      if (s.tipo === 'col' && cols.has(s.ruta)) leerCol(s.ruta).then(s.fn, s.err);
+    }
+    if (canal) for (const r of rutas) { try { canal.postMessage(r); } catch (_) {} }
+  }
+
   self.GGDB = {
     nombre: NOMBRE,
     abrir: async () => { await abrir(); if (!instancia) instancia = { doc, collection }; return instancia; },
     todos,
-    reemplazarTodo
+    reemplazarTodo,
+    ponerVarios
   };
 })();
