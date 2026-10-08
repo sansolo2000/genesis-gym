@@ -7,5 +7,6 @@ self.GG_GOOGLE = {
   clientId: '854756460668-c0rtpp90dhhh611kfem3hktf0i38bljp.apps.googleusercontent.com',  // ID de cliente OAuth 2.0 (tipo "Aplicación web"), termina en .apps.googleusercontent.com
   apiKey: 'AIzaSyBbDl2y28vqfS9OnyOo2F5sAL0Thsh5OZ4',    // Clave de API restringida a la Google Picker API
   appId: '854756460668',     // Número del proyecto de Google Cloud (solo dígitos)
-  carpetaRutinas: '1U6dOaWpjtAuMBKyzDtHkJzyUrBXSiCFa'  // Carpeta "Genesis Gym/rutinas" del Drive de Héctor: la ventana de Drive abre ahí
+  carpetaRutinas: '1U6dOaWpjtAuMBKyzDtHkJzyUrBXSiCFa',  // Carpeta "Genesis Gym/rutinas" del Drive de Héctor: la ventana de Drive abre ahí
+  carpetaProgramas: '1cgwRpo11JWiAAV67wvpASuyX-7VdOvmb'  // Carpeta "Genesis Gym/programas-alimentacion"
 };

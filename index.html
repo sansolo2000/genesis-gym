@@ -67,7 +67,7 @@ button{cursor:pointer}
 .alarma strong{color:var(--alarm)}
 .alarma svg{flex:none;margin-top:2px;color:var(--alarm)}
 /* barra inferior */
-nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));display:grid;grid-template-columns:repeat(4,1fr);gap:4px;z-index:5}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));display:grid;grid-template-columns:repeat(5,1fr);gap:2px;z-index:5}
 nav.tabs button{border:0;background:none;min-height:52px;border-radius:var(--r);font-weight:600;font-size:.9rem;color:var(--muted);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
 nav.tabs button[aria-current="page"]{color:var(--accent);background:var(--accent-soft)}
 nav.tabs svg{width:22px;height:22px}
@@ -131,6 +131,7 @@ pre.csv{white-space:pre;overflow-x:auto;background:var(--bg);border:1px solid va
 <nav class="tabs" aria-label="Vistas">
   <button data-vista="hoy" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10h2v4H3zM19 10h2v4h-2zM6 7h2v10H6zM16 7h2v10h-2zM8 12h8"/></svg>Hoy</button>
   <button data-vista="rutina"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 4h14v16H5zM9 9h6M9 13h6M9 17h3"/></svg>Rutina</button>
+  <button data-vista="comidas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M17 3c-2 2-3 5-3 8h3v10"/></svg>Comidas</button>
   <button data-vista="historial"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="8"/></svg>Historial</button>
   <button data-vista="importar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Importar</button>
 </nav>
@@ -143,6 +144,7 @@ pre.csv{white-space:pre;overflow-x:auto;background:var(--bg);border:1px solid va
 <script src="imagenes.js"></script>
 <script src="google-config.js"></script>
 <script src="drive.js"></script>
+<script src="alimentacion.js"></script>
 <script>
 (function(){
 'use strict';
@@ -477,7 +479,7 @@ function vImportar(){
 
 function render(){
   const v = S.vista;
-  app.innerHTML = v === 'sesion' ? vSesion() : v === 'rutina' ? vRutina() : v === 'historial' ? vHistorial() : v === 'importar' ? vImportar() : vHoy();
+  app.innerHTML = v === 'comidas' ? (self.GGComidas ? GGComidas.vista() : '') : v === 'sesion' ? vSesion() : v === 'rutina' ? vRutina() : v === 'historial' ? vHistorial() : v === 'importar' ? vImportar() : vHoy();
   document.querySelectorAll('nav.tabs button').forEach(b => {
     const activo = b.dataset.vista === v || (v === 'sesion' && b.dataset.vista === 'hoy');
     if (activo) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
@@ -515,6 +517,7 @@ fichaEl.addEventListener('click', ev => { if (ev.target.closest('[data-cerrar-fi
 document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && !fichaEl.hidden) cerrarFicha(); });
 
 /* ---------- acciones ---------- */
+self.GGRepintarComidas = () => { if (S.vista === 'comidas') render(); };
 function ir(v){
   if (S.vista === 'sesion' && v !== 'sesion'){ clearTimeout(tGuardar); if (S.guardado === 'Guardando…') guardarBorrador(); soltarWake(); S.borrador = null; }
   S.vista = v; S.confirmarBorrado = false; S.errorCierre = ''; S.cambioFecha = null; render(); window.scrollTo(0,0);
@@ -542,6 +545,7 @@ function parseNum(txt, entero){
 
 document.addEventListener('click', ev => {
   const t = ev.target.closest('button'); if (!t) return;
+  if (self.GGComidas && !t.dataset.vista && GGComidas.click(t)) return;
   if (t.dataset.vista) return ir(t.dataset.vista);
   if (t.dataset.ir) return ir(t.dataset.ir);
   if (t.dataset.abrir){ const [f, id] = t.dataset.abrir.split('|'); return abrirSesion(f, id); }

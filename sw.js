@@ -18,6 +18,7 @@ const ARCHIVOS = [
   'imagenes.js',
   'google-config.js',
   'drive.js',
+  'alimentacion.js',
   'imagenes/catalogo.json',
   'imagenes/CREDITOS.md',
   'manifest.webmanifest',
