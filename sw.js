@@ -16,6 +16,8 @@ const ARCHIVOS = [
   'plataforma.js',
   'respaldo.js',
   'imagenes.js',
+  'google-config.js',
+  'drive.js',
   'imagenes/catalogo.json',
   'imagenes/CREDITOS.md',
   'manifest.webmanifest',

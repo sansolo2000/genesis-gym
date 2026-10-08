@@ -1,2 +1,2 @@
 /* Única fuente del número de versión. La usan la página y el service worker. */
-self.GG_VERSION = '0.5.0';
+self.GG_VERSION = '0.6.0';

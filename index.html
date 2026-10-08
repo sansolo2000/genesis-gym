@@ -141,6 +141,8 @@ pre.csv{white-space:pre;overflow-x:auto;background:var(--bg);border:1px solid va
 <script src="plataforma.js"></script>
 <script src="respaldo.js"></script>
 <script src="imagenes.js"></script>
+<script src="google-config.js"></script>
+<script src="drive.js"></script>
 <script>
 (function(){
 'use strict';
@@ -450,6 +452,7 @@ function vImportar(){
   let h = `<header class="stack"><p class="eyebrow">Rutina de Entrenamiento</p><h1>Importar rutina</h1>
     <p class="muted">Pega el JSON que entregó Entrenamiento o elige el archivo. Si tiene un solo error, la rutina se rechaza completa y no se corrige nada.</p></header>` + avisoDb();
   h += `<section class="card"><div class="campo"><label for="archivo">Archivo .json</label><input id="archivo" type="file" style="font-size:1rem;padding:10px"></div>
+    ${self.GGDrive ? GGDrive.boton() : ''}
     <div class="campo"><label for="json-txt">O pega el contenido</label><textarea id="json-txt" spellcheck="false" style="min-height:160px;font-family:ui-monospace,Consolas,monospace;font-size:.85rem">${esc(S.importacion && S.importacion.texto || '')}</textarea></div>
     <button class="btn primary" data-validar>Validar</button></section>`;
   const im = S.importacion;
@@ -570,6 +573,7 @@ document.addEventListener('click', ev => {
   if (t.hasAttribute('data-fecha-guardar')) return cambiarFecha();
   if (t.hasAttribute('data-recargar')){ refrescarSesiones(); refrescarRutina(); if (!unsubSes) suscribirSesiones(); return; }
   if (t.hasAttribute('data-validar')) return validarImport();
+  if (t.hasAttribute('data-drive') && self.GGDrive) return GGDrive.importar(texto => { S.importacion = { texto }; validarImport(texto); }, msg => { S.importacion = { texto: '', resultado: { ok: false, archivo: true, errores: [msg], avisos: [] } }; render(); });
   if (t.hasAttribute('data-activar')) return activarRutina();
   if (t.hasAttribute('data-csv')) return exportarCSV();
   if (t.hasAttribute('data-copiar-csv')){
