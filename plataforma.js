@@ -79,7 +79,7 @@
       if (!self.caches) return;
       const cat = await (await fetch('imagenes/catalogo.json')).json();
       const srcs = new Set(Object.values(cat.imagenes || {}).flatMap(m => m.srcs || []));
-      const cache = await caches.open('genesis-gym-2-imagenes-v' + cat.version);
+      const cache = await caches.open('genesis-gym-2-imagenes-v' + (cat.version_imagenes || cat.version));
       const base = new URL('./', location.href).pathname;
       const ya = new Set((await cache.keys()).map(k => new URL(k.url).pathname.slice(base.length)));
       const n = [...srcs].filter(s => ya.has(s)).length;

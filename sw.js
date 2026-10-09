@@ -2,7 +2,8 @@
  * Estrategia: todo el "cascarón" de la app se guarda al instalar; después se sirve desde la caché
  * (funciona sin internet). Una versión nueva queda "en espera" hasta que el usuario toca "Actualizar".
  * Las imágenes de los ejercicios van en una caché aparte, que depende de la versión del catálogo y no de
- * la versión de la app: al actualizar la app no se vuelven a bajar. Se guardan "lo que se pueda": si una
+ * la versión de la app: al actualizar la app no se vuelven a bajar. Agregar imágenes al catálogo tampoco cambia la caché
+ * (version_imagenes): el celular baja solo las nuevas. Se guardan "lo que se pueda": si una
  * imagen falla, la app se instala igual y esa imagen se guarda la próxima vez que se vea con internet. */
 importScripts('version.js');
 const CACHE = 'genesis-gym-2-v' + self.GG_VERSION;
@@ -40,7 +41,7 @@ async function catalogo() {
   if (!r) return null;
   const cat = await r.json();
   const srcs = [...new Set(Object.values(cat.imagenes || {}).flatMap(m => m.srcs || []))];
-  return { nombre: PREFIJO_IMG + cat.version, srcs };
+  return { nombre: PREFIJO_IMG + (cat.version_imagenes || cat.version), srcs };
 }
 
 /* Baja las imágenes que falten, de a varias a la vez. Nunca falla: devuelve cuántas quedaron guardadas. */
