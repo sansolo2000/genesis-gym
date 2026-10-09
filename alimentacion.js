@@ -115,6 +115,8 @@
     return h;
   }
   const clave = (f, t) => `${f}_${t}`;
+  // La clave es "AAAA-MM-DD_tipo"; el tipo puede llevar guion bajo (colacion_am), así que se corta solo en el primero.
+  const partir = k => [k.slice(0, 10), k.slice(11)];
   async function guardarRegistro(f, t, cambios) {
     const k = clave(f, t), previo = M.registros[k] || { fecha: f, tipo: t, version: 0 };
     const r = Object.assign({}, previo, cambios, { version: (previo.version || 0) + 1, actualizado: new Date().toISOString() });
@@ -155,16 +157,16 @@
     if (!c || !x) return c;
     return Object.assign({}, c, { preparacion: x.preparacion, conservacion: x.conservacion, intercambio: x });
   }
-  const etiquetaLugar = k => { const [f, t] = k.split('_'); return `${ETQ[t] || t} del ${fechaLarga(f)}`; };
+  const etiquetaLugar = k => { const [f, t] = partir(k); return `${ETQ[t] || t} del ${fechaLarga(f)}`; };
   const kcalDe = c => (((M.programa.preparaciones[c.preparacion] || {}).aporte_estimado || {})[M.perfil.id] || {}).kcal || 0;
   async function guardarCambios() {
     await (await db()).doc('alimentacion/intercambios').set({ programa_id: M.programa.programa.id, cambios: M.cambios, actualizado: new Date().toISOString() });
   }
   async function intercambiar(kA, kB) {
-    const [fA, tA] = kA.split('_'), [fB, tB] = kB.split('_');
+    const [fA, tA] = partir(kA), [fB, tB] = partir(kB);
     const a = comidaDe(fA, tA), b = comidaDe(fB, tB);
     if (!a || !b || kA === kB) return;
-    const nuevo = (k, c, desde) => { const [f, t] = k.split('_'), plan = comidaPlan(f, t); return plan.preparacion === c.preparacion && (plan.conservacion || null) === (c.conservacion || null) ? null : { preparacion: c.preparacion, conservacion: c.conservacion || null, desde }; };
+    const nuevo = (k, c, desde) => { const [f, t] = partir(k), plan = comidaPlan(f, t); return plan.preparacion === c.preparacion && (plan.conservacion || null) === (c.conservacion || null) ? null : { preparacion: c.preparacion, conservacion: c.conservacion || null, desde }; };
     const xA = nuevo(kA, b, kB), xB = nuevo(kB, a, kA);
     if (xA) M.cambios[kA] = xA; else delete M.cambios[kA];
     if (xB) M.cambios[kB] = xB; else delete M.cambios[kB];
@@ -184,7 +186,7 @@
       programa: { id: M.programa.programa.id, nombre: M.programa.programa.nombre },
       fecha: r.fecha, tipo: r.tipo, hora_programada: c ? c.hora : null,
       indicado: c && pr ? { preparacion: c.preparacion, nombre: pr.nombre, porciones: (pr.porciones || {})[pid] || [], aporte_estimado: (pr.aporte_estimado || {})[pid] || null } : null,
-      intercambio: c && c.intercambio ? { con: { fecha: c.intercambio.desde.split('_')[0], tipo: c.intercambio.desde.split('_')[1] }, preparacion_planificada: (comidaPlan(r.fecha, r.tipo) || {}).preparacion || null } : null,
+      intercambio: c && c.intercambio ? { con: { fecha: partir(c.intercambio.desde)[0], tipo: partir(c.intercambio.desde)[1] }, preparacion_planificada: (comidaPlan(r.fecha, r.tipo) || {}).preparacion || null } : null,
       estado: r.estado, nota: r.nota || '', foto: nombreFoto || null,
       registrado_en: r.actualizado, version: r.version, app: 'genesis-gym-2 ' + (self.GG_VERSION || '')
     };
