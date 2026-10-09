@@ -279,8 +279,8 @@
       <div class="stack" style="gap:6px">${botones}</div>
       ${M.eligiendo === k ? vElegir(k) : `<button class="btn" data-com-intercambiar="${e(k)}">Intercambiar con otra comida…</button>`}
       ${r.estado === 'otro' ? `<div class="stack" style="gap:6px">
-        <label class="btn" for="com-foto-${e(c.tipo)}" style="text-align:center">${foto ? 'Cambiar foto' : 'Tomar o elegir foto de lo que comiste'}</label>
-        <input id="com-foto-${e(c.tipo)}" data-com-foto="${e(c.tipo)}" type="file" accept="image/*" capture="environment" style="position:absolute;width:1px;height:1px;opacity:0">
+        <button class="btn" data-com-elegir-foto="${e(c.tipo)}">${foto ? 'Cambiar foto' : 'Tomar o elegir foto de lo que comiste'}</button>
+        <input id="com-foto-${e(c.tipo)}" data-com-foto="${e(c.tipo)}" type="file" accept="image/*" hidden>
         ${foto ? `<img src="${foto}" alt="Foto de ${e(ETQ[c.tipo])}" style="border-radius:10px;max-height:260px;object-fit:cover">` : '<div class="note warn">Falta la foto: Alimentación la necesita para estimar lo que comiste.</div>'}
         <label for="com-nota-${e(c.tipo)}" class="muted">Nota (opcional): qué y cuánto comiste</label>
         <textarea id="com-nota-${e(c.tipo)}" data-com-nota="${e(c.tipo)}" rows="2" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;background:var(--bg)">${e(M.notas[k] != null ? M.notas[k] : (r.nota || ''))}</textarea>
@@ -346,6 +346,9 @@
       guardarRegistro(M.dia, tipo, { estado: est });
       return true;
     }
+    /* Foto (0.7.4): un botón abre el selector del celular. Sin "capture", Android ofrece cámara o galería; con "capture"
+     * abría solo la cámara y, sin permiso de cámara para la app, el toque no hacía nada (lo vio Héctor en el S25). */
+    if (t.hasAttribute('data-com-elegir-foto')) { const i = document.getElementById('com-foto-' + t.getAttribute('data-com-elegir-foto')); if (i) { i.value = ''; i.click(); } return true; }
     if (t.hasAttribute('data-com-intercambiar')) { M.eligiendo = t.getAttribute('data-com-intercambiar'); M.mensaje = null; repintar(); return true; }
     if (t.hasAttribute('data-com-cancelar-intercambio')) { M.eligiendo = null; repintar(); return true; }
     if (t.hasAttribute('data-com-con')) { const [a, b] = t.getAttribute('data-com-con').split('|'); intercambiar(a, b); return true; }
