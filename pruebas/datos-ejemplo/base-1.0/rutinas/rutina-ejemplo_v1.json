@@ -1,0 +1,103 @@
+{
+ "cargada_por": "Pruebas automáticas",
+ "importada_en": "2026-10-05T08:00:00-03:00",
+ "rutina": {
+  "ejercicios": [
+   {
+    "descripcion": "Ejercicio de ejemplo.",
+    "equipo": "máquina",
+    "errores_comunes": [
+     "Error de ejemplo."
+    ],
+    "id": "curl-biceps-polea",
+    "musculos_principales": [
+     "ejemplo"
+    ],
+    "musculos_secundarios": [],
+    "nombre": "Curl de bíceps en polea",
+    "pasos": [
+     "Paso uno.",
+     "Paso dos."
+    ]
+   },
+   {
+    "descripcion": "Ejercicio de ejemplo.",
+    "equipo": "máquina",
+    "errores_comunes": [
+     "Error de ejemplo."
+    ],
+    "id": "ejercicio-fuera",
+    "musculos_principales": [
+     "ejemplo"
+    ],
+    "musculos_secundarios": [],
+    "nombre": "Ejercicio fuera del catálogo",
+    "pasos": [
+     "Paso uno.",
+     "Paso dos."
+    ]
+   }
+  ],
+  "formato": "genesis-rutina",
+  "rutina": {
+   "autor": "Pruebas automáticas",
+   "id": "rutina-ejemplo",
+   "nombre": "Rutina de ejemplo (ficticia)",
+   "notas": "Datos inventados.",
+   "version": 1,
+   "vigente_desde": "2026-10-05"
+  },
+  "sesiones": [
+   {
+    "dia_semana": "lunes",
+    "duracion_estimada_min": 30,
+    "ejercicios": [
+     {
+      "descanso_seg": 60,
+      "ejercicio_id": "curl-biceps-polea",
+      "orden": 1,
+      "series": [
+       {
+        "carga_indicacion": "Carga de ejemplo.",
+        "carga_kg": null,
+        "n": 1,
+        "reps_max": 12,
+        "reps_min": 10,
+        "rpe_objetivo": 6,
+        "tipo": "efectiva"
+       },
+       {
+        "carga_indicacion": "Carga de ejemplo.",
+        "carga_kg": null,
+        "n": 2,
+        "reps_max": 12,
+        "reps_min": 10,
+        "rpe_objetivo": 6,
+        "tipo": "efectiva"
+       }
+      ]
+     },
+     {
+      "descanso_seg": 60,
+      "ejercicio_id": "ejercicio-fuera",
+      "orden": 2,
+      "series": [
+       {
+        "carga_indicacion": "Carga de ejemplo.",
+        "carga_kg": null,
+        "n": 1,
+        "reps_max": 10,
+        "reps_min": 8,
+        "rpe_objetivo": 6,
+        "tipo": "efectiva"
+       }
+      ]
+     }
+    ],
+    "id": "sesion-lunes",
+    "nombre": "A"
+   }
+  ],
+  "version_formato": "1.0"
+ }
+}
