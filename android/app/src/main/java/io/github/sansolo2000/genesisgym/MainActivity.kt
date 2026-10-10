@@ -12,6 +12,21 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.PermissionController
+import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.ExerciseSessionRecord
+import androidx.health.connect.client.records.Record
+import androidx.health.connect.client.records.RestingHeartRateRecord
+import androidx.health.connect.client.records.SleepSessionRecord
+import androidx.health.connect.client.records.WeightRecord
+import androidx.health.connect.client.request.ReadRecordsRequest
+import androidx.health.connect.client.time.TimeRangeFilter
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.temporal.ChronoUnit
+import kotlin.reflect.KClass
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -50,6 +65,19 @@ class MainActivity : ComponentActivity() {
     private val pedirNotificaciones =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { refresco++ }
 
+    // E2: tipos de Health Connect que se prueban (solo lectura). Mismo orden que Salud.TIPOS.
+    private val tiposSalud: List<KClass<out Record>> = listOf(
+        WeightRecord::class, SleepSessionRecord::class, ExerciseSessionRecord::class, RestingHeartRateRecord::class
+    )
+    private val permisosSalud: Set<String> = tiposSalud.map { HealthPermission.getReadPermission(it) }.toSet()
+    private var permisosConcedidos by mutableStateOf<Set<String>>(emptySet())
+
+    private val pedirSalud =
+        registerForActivityResult(PermissionController.createRequestPermissionResultContract()) { concedidos ->
+            permisosConcedidos = concedidos
+            refresco++
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val prefs = getSharedPreferences("e0", Context.MODE_PRIVATE)
@@ -60,7 +88,14 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    Pantalla(aperturas, refresco)
+                    var pestana by remember { mutableIntStateOf(1) }
+                    Column(modifier = Modifier.safeDrawingPadding()) {
+                        Row(modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (pestana == 0) Button(onClick = {}) { Text("Avisos (E1)") } else OutlinedButton(onClick = { pestana = 0 }) { Text("Avisos (E1)") }
+                            if (pestana == 1) Button(onClick = {}) { Text("Health Connect (E2)") } else OutlinedButton(onClick = { pestana = 1 }) { Text("Health Connect (E2)") }
+                        }
+                        if (pestana == 0) Pantalla(aperturas, refresco) else PantallaSalud(refresco)
+                    }
                 }
             }
         }
@@ -87,7 +122,7 @@ class MainActivity : ComponentActivity() {
         val avisos = Alarmas.lista(this)
 
         Column(
-            modifier = Modifier.safeDrawingPadding().padding(20.dp).verticalScroll(rememberScrollState()),
+            modifier = Modifier.padding(20.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text("Prueba de avisos", style = MaterialTheme.typography.headlineMedium)
@@ -143,6 +178,80 @@ class MainActivity : ComponentActivity() {
             HorizontalDivider()
             Text(Saludo.version(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, BuildConfig.COMMIT), style = MaterialTheme.typography.bodySmall)
             Text(Saludo.aperturas(aperturas), style = MaterialTheme.typography.bodySmall)
+        }
+    }
+
+    @Composable
+    private fun PantallaSalud(@Suppress("UNUSED_PARAMETER") tick: Int) {
+        val estado = HealthConnectClient.getSdkStatus(this)
+        val alcance = rememberCoroutineScope()
+        var resultado by remember { mutableStateOf<List<String>>(emptyList()) }
+        var mensaje by remember { mutableStateOf("") }
+
+        Column(
+            modifier = Modifier.padding(20.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text("Prueba de Health Connect", style = MaterialTheme.typography.headlineMedium)
+            Text("Etapa E2. Solo cuenta cuántos registros hay en los últimos 30 días y de qué app vienen. No muestra ni guarda valores, y nada sale del celular.")
+
+            HorizontalDivider()
+            Text("1. Health Connect", style = MaterialTheme.typography.titleMedium)
+            Text("Estado: " + when (estado) {
+                HealthConnectClient.SDK_AVAILABLE -> "disponible"
+                HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> "requiere actualizar Health Connect"
+                else -> "no disponible en este celular"
+            })
+            if (estado != HealthConnectClient.SDK_AVAILABLE) return@Column
+
+            val cliente = HealthConnectClient.getOrCreate(this@MainActivity)
+            androidx.compose.runtime.LaunchedEffect(tick) {
+                permisosConcedidos = try { cliente.permissionController.getGrantedPermissions() } catch (e: Exception) { emptySet() }
+            }
+
+            HorizontalDivider()
+            Text("2. Permisos de lectura", style = MaterialTheme.typography.titleMedium)
+            Salud.TIPOS.forEachIndexed { i, nombre ->
+                val ok = HealthPermission.getReadPermission(tiposSalud[i]) in permisosConcedidos
+                Text("$nombre: " + if (ok) "permitido" else "sin permiso")
+            }
+            Button(onClick = { pedirSalud.launch(permisosSalud) }) { Text("Pedir permisos de lectura") }
+            Text("En la ventana de Health Connect puedes marcar solo los que quieras.", style = MaterialTheme.typography.bodySmall)
+
+            HorizontalDivider()
+            Text("3. Contar registros (30 días)", style = MaterialTheme.typography.titleMedium)
+            Button(onClick = {
+                mensaje = "Contando…"
+                alcance.launch {
+                    val fin = Instant.now()
+                    val filtro = TimeRangeFilter.between(fin.minus(30, ChronoUnit.DAYS), fin)
+                    resultado = Salud.TIPOS.indices.map { i ->
+                        val tipo = tiposSalud[i]
+                        val linea = if (HealthPermission.getReadPermission(tipo) !in permisosConcedidos) "sin permiso"
+                        else try {
+                            val origenes = mutableListOf<String>()
+                            var pagina: String? = null
+                            do {
+                                @Suppress("UNCHECKED_CAST")
+                                val clase = tipo as KClass<Record>
+                                val r = cliente.readRecords(ReadRecordsRequest(recordType = clase, timeRangeFilter = filtro, pageToken = pagina))
+                                r.records.forEach { origenes.add(it.metadata.dataOrigin.packageName) }
+                                pagina = r.pageToken
+                            } while (pagina != null)
+                            Salud.resumen(origenes)
+                        } catch (e: Exception) {
+                            "error al leer (" + e.javaClass.simpleName + ")"
+                        }
+                        "${Salud.TIPOS[i]}: $linea"
+                    }
+                    mensaje = ""
+                }
+            }) { Text("Contar") }
+            if (mensaje.isNotEmpty()) Text(mensaje)
+            for (l in resultado) Text(l)
+
+            HorizontalDivider()
+            Text(Saludo.version(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, BuildConfig.COMMIT), style = MaterialTheme.typography.bodySmall)
         }
     }
 }
