@@ -7,9 +7,10 @@ Plan y decisiones: `claude/PROPUESTA-APP-NATIVA.md` en el proyecto Génesis (apr
 - **Nunca** entran a este repositorio rutinas, programas, registros, respaldos ni datos de salud.
 - La llave de firma vive **solo** en los secretos de GitHub (`GG_KEYSTORE_BASE64`, `GG_KEYSTORE_PASSWORD`, `GG_KEY_ALIAS`, `GG_KEY_PASSWORD`).
 
-## Etapa actual: E0
-Una pantalla con la versión y un contador de aperturas. Sirve para probar que el APK firmado se instala
-en el S25 y que una versión nueva se instala encima sin perder datos.
+## Etapa actual: E1 (prueba de avisos)
+E0 cerrada el 9-oct-2026: el APK firmado se instala en el S25 y se actualiza encima sin perder datos.
+E1 programa 3 avisos de prueba con AlarmManager y anota a qué hora llegó cada uno, con o sin el permiso
+de alarmas exactas, y los vuelve a programar al reiniciar el celular (`Alarmas.kt`, `AlarmaReceiver.kt`, `ArranqueReceiver.kt`).
 
 ## Cómo se compila
 En la nube, con `.github/workflows/android.yml`, cada vez que cambia esta carpeta. En un PC con Android SDK:

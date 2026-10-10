@@ -45,7 +45,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4   # también valida que gradle-wrapper.jar sea el oficial
 
       - name: Pruebas automáticas
-        run: ./gradlew --no-daemon testDebugUnitTest
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon testDebugUnitTest 2>&1 | tee -a gradle.log
 
       - name: ¿Hay llave de firma?
         id: llave
@@ -59,7 +61,9 @@ jobs:
 
       - name: Compilar (sin firma, solo para comprobar)
         if: steps.llave.outputs.hay == 'no'
-        run: ./gradlew --no-daemon assembleDebug
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon assembleDebug 2>&1 | tee -a gradle.log
 
       - name: Compilar APK firmado
         if: steps.llave.outputs.hay == 'si'
@@ -71,7 +75,8 @@ jobs:
         run: |
           export GG_KEYSTORE_PATH="$RUNNER_TEMP/llave.jks"
           echo "$B64" | base64 -d > "$GG_KEYSTORE_PATH"
-          ./gradlew --no-daemon assembleRelease
+          set -o pipefail
+          ./gradlew --no-daemon assembleRelease 2>&1 | tee -a gradle.log
           rm -f "$GG_KEYSTORE_PATH"
           V=$(grep '^versionName=' version.properties | cut -d= -f2)
           mkdir -p salida
@@ -80,6 +85,16 @@ jobs:
           APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner"
           "$APKSIGNER" verify --print-certs "salida/genesis-gym-n-$V.apk" | grep -i 'SHA-256' | head -1
           echo "VERSION=$V" >> "$GITHUB_ENV"
+
+      # Si algo falla, los errores de Gradle se publican como anotaciones del check (Desarrollador 3 no puede leer
+      # los registros completos desde su sesión). gradle.log no contiene secretos: las llaves van por variables de entorno.
+      - name: Errores como anotaciones
+        if: failure()
+        run: |
+          [ -f gradle.log ] || exit 0
+          grep -E '^e: |error:|FAILED|What went wrong|Caused by|> ' gradle.log | grep -v 'Task :' | head -40 | while IFS= read -r l; do
+            echo "::error::$(printf '%s' "$l" | cut -c1-900)"
+          done
 
       - name: Guardar APK de la ejecución
         if: steps.llave.outputs.hay == 'si'
