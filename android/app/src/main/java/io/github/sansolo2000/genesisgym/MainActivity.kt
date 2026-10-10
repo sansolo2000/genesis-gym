@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -29,8 +30,10 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
+                    // Android 15+ dibuja la app de borde a borde: safeDrawingPadding deja libre la barra de estado
+                    // (hora, batería) y la de navegación. En la 0.0.1 el título quedaba debajo de la barra de estado.
                     Column(
-                        modifier = Modifier.padding(24.dp),
+                        modifier = Modifier.safeDrawingPadding().padding(24.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(Saludo.titulo(), style = MaterialTheme.typography.headlineMedium)
