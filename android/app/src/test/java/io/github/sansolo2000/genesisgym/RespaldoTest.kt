@@ -13,7 +13,7 @@ class RespaldoTest {
     private fun recurso(n: String) = javaClass.classLoader!!.getResource(n)!!.readText()
 
     @Test fun lee_un_respaldo_creado_por_la_2_0() {
-        val r = Respaldo.leer(recurso("respaldo-ejemplo-1.0.json"))
+        val r = Respaldo.leer(recurso("prueba-copia-ejemplo-1.0.json"))
         assertTrue(r.toString(), r is Respaldo.Resultado.Ok)
         val l = (r as Respaldo.Resultado.Ok).leido
         assertEquals(6, l.docs.size)
@@ -22,13 +22,13 @@ class RespaldoTest {
     }
 
     @Test fun huella_identica_con_textos_y_numeros_dificiles() {
-        val r = Respaldo.leer(recurso("respaldo-rarezas.json"))
+        val r = Respaldo.leer(recurso("prueba-copia-rarezas.json"))
         assertTrue(r.toString(), r is Respaldo.Resultado.Ok)
     }
 
     @Test fun cada_documento_se_serializa_igual_que_javascript() {
-        val esperado = Json.parseToJsonElement(recurso("respaldo-rarezas-serializado.json")).jsonArray
-        val docs = (Respaldo.leer(recurso("respaldo-rarezas.json")) as Respaldo.Resultado.Ok).leido.docs
+        val esperado = Json.parseToJsonElement(recurso("prueba-copia-rarezas-serializado.json")).jsonArray
+        val docs = (Respaldo.leer(recurso("prueba-copia-rarezas.json")) as Respaldo.Resultado.Ok).leido.docs
         for ((i, e) in esperado.withIndex()) {
             e as JsonObject
             assertEquals(e["ruta"]!!.jsonPrimitive.content, docs[i].ruta)
@@ -37,7 +37,7 @@ class RespaldoTest {
     }
 
     @Test fun ida_y_vuelta_crear_y_leer() {
-        val docs = (Respaldo.leer(recurso("respaldo-rarezas.json")) as Respaldo.Resultado.Ok).leido.docs
+        val docs = (Respaldo.leer(recurso("prueba-copia-rarezas.json")) as Respaldo.Resultado.Ok).leido.docs
         val texto = Respaldo.crear(docs.reversed(), "Persona de prueba", "0.4.0", "2026-10-10T05:00:00.000Z")
         val r = Respaldo.leer(texto)
         assertTrue(r is Respaldo.Resultado.Ok)
@@ -45,7 +45,7 @@ class RespaldoTest {
     }
 
     @Test fun archivo_modificado_se_rechaza() {
-        val t = recurso("respaldo-ejemplo-1.0.json").replaceFirst("\"rpe_sesion\": 5", "\"rpe_sesion\": 6")
+        val t = recurso("prueba-copia-ejemplo-1.0.json").replaceFirst("\"rpe_sesion\": 5", "\"rpe_sesion\": 6")
         assertEquals(Respaldo.Resultado.Error("La huella del respaldo no coincide: el archivo está incompleto o fue modificado. No se restauró nada."), Respaldo.leer(t))
     }
 

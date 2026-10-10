@@ -1,0 +1,18 @@
+[
+ {
+  "ruta": "comidas/2026-10-12_desayuno",
+  "json": "{\"estado\":\"otro\",\"nota\":\"Barra /slash/ y <html> & \\\"x\\\"\"}"
+ },
+ {
+  "ruta": "config/perfil",
+  "json": "{\"nombre\":\"Persona de prueba\",\"creado\":\"2026-10-10T04:00:00.000Z\"}"
+ },
+ {
+  "ruta": "config/respaldo",
+  "json": "{\"ultimo\":\"2026-10-10T04:00:00.000Z\",\"documentos\":3}"
+ },
+ {
+  "ruta": "sesiones/2026-10-12_sesion-lunes",
+  "json": "{\"fecha\":\"2026-10-12\",\"nota\":\"Comillas \\\"dobles\\\", barra \\\\ y salto\\nde línea\\ty tab\",\"emoji\":\"💪 ñandú Ü\",\"control\":\"a\\u0001b\\u001fc\",\"vacio\":\"\",\"nulo\":null,\"numeros\":[0,0,1,20,22.5,0.1,0.2,2.25,17.5,100,1e+21,1e-7,0.000001,123456789012,3.14159,-4.5],\"verdad\":true,\"falso\":false,\"anidado\":{\"z\":1,\"a\":[{\"b\":null}]}}"
+ }
+]

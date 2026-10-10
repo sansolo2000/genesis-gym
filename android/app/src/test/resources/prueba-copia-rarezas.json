@@ -1,0 +1,78 @@
+{
+ "formato": "genesis-respaldo",
+ "version": 1,
+ "app": "genesis-gym-2",
+ "version_app": "prueba",
+ "exportado_en": "2026-10-10T04:00:00.000Z",
+ "perfil": "Persona de prueba",
+ "conteos": {
+  "config": 2,
+  "rutinas": 0,
+  "sesiones": 1,
+  "imagenes": 0,
+  "comidas": 1
+ },
+ "huella_sha256": "c2f56288f4862f2fe04ef66eede6c9551aac57ae5f4b5c85909166e41c38e3da",
+ "documentos": [
+  {
+   "ruta": "comidas/2026-10-12_desayuno",
+   "data": {
+    "estado": "otro",
+    "nota": "Barra /slash/ y <html> & \"x\""
+   }
+  },
+  {
+   "ruta": "config/perfil",
+   "data": {
+    "nombre": "Persona de prueba",
+    "creado": "2026-10-10T04:00:00.000Z"
+   }
+  },
+  {
+   "ruta": "config/respaldo",
+   "data": {
+    "ultimo": "2026-10-10T04:00:00.000Z",
+    "documentos": 3
+   }
+  },
+  {
+   "ruta": "sesiones/2026-10-12_sesion-lunes",
+   "data": {
+    "fecha": "2026-10-12",
+    "nota": "Comillas \"dobles\", barra \\ y salto\nde línea\ty tab",
+    "emoji": "💪 ñandú Ü",
+    "control": "a\u0001b\u001fc",
+    "vacio": "",
+    "nulo": null,
+    "numeros": [
+     0,
+     0,
+     1,
+     20,
+     22.5,
+     0.1,
+     0.2,
+     2.25,
+     17.5,
+     100,
+     1e+21,
+     1e-7,
+     0.000001,
+     123456789012,
+     3.14159,
+     -4.5
+    ],
+    "verdad": true,
+    "falso": false,
+    "anidado": {
+     "z": 1,
+     "a": [
+      {
+       "b": null
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

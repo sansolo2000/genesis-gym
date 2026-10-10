@@ -1,0 +1,417 @@
+{
+ "formato": "genesis-respaldo",
+ "version": 1,
+ "app": "migracion-desde-genesis-gym-1.0",
+ "version_app": null,
+ "exportado_en": "2026-10-10T04:09:09.812Z",
+ "perfil": null,
+ "conteos": {
+  "config": 1,
+  "rutinas": 1,
+  "sesiones": 2,
+  "imagenes": 2
+ },
+ "huella_sha256": "aef6bf0b62c27f146271bac8be9d824071fd11de9e09f97d1952e7ebdf2c3344",
+ "documentos": [
+  {
+   "ruta": "config/rutina_activa",
+   "data": {
+    "cargada_por": "Pruebas automáticas",
+    "importada_en": "2026-10-05T08:00:00-03:00",
+    "rutina": {
+     "ejercicios": [
+      {
+       "descripcion": "Ejercicio de ejemplo.",
+       "equipo": "máquina",
+       "errores_comunes": [
+        "Error de ejemplo."
+       ],
+       "id": "curl-biceps-polea",
+       "musculos_principales": [
+        "ejemplo"
+       ],
+       "musculos_secundarios": [],
+       "nombre": "Curl de bíceps en polea",
+       "pasos": [
+        "Paso uno.",
+        "Paso dos."
+       ]
+      },
+      {
+       "descripcion": "Ejercicio de ejemplo.",
+       "equipo": "máquina",
+       "errores_comunes": [
+        "Error de ejemplo."
+       ],
+       "id": "ejercicio-fuera",
+       "musculos_principales": [
+        "ejemplo"
+       ],
+       "musculos_secundarios": [],
+       "nombre": "Ejercicio fuera del catálogo",
+       "pasos": [
+        "Paso uno.",
+        "Paso dos."
+       ]
+      }
+     ],
+     "formato": "genesis-rutina",
+     "rutina": {
+      "autor": "Pruebas automáticas",
+      "id": "rutina-ejemplo",
+      "nombre": "Rutina de ejemplo (ficticia)",
+      "notas": "Datos inventados.",
+      "version": 1,
+      "vigente_desde": "2026-10-05"
+     },
+     "sesiones": [
+      {
+       "dia_semana": "lunes",
+       "duracion_estimada_min": 30,
+       "ejercicios": [
+        {
+         "descanso_seg": 60,
+         "ejercicio_id": "curl-biceps-polea",
+         "orden": 1,
+         "series": [
+          {
+           "carga_indicacion": "Carga de ejemplo.",
+           "carga_kg": null,
+           "n": 1,
+           "reps_max": 12,
+           "reps_min": 10,
+           "rpe_objetivo": 6,
+           "tipo": "efectiva"
+          },
+          {
+           "carga_indicacion": "Carga de ejemplo.",
+           "carga_kg": null,
+           "n": 2,
+           "reps_max": 12,
+           "reps_min": 10,
+           "rpe_objetivo": 6,
+           "tipo": "efectiva"
+          }
+         ]
+        },
+        {
+         "descanso_seg": 60,
+         "ejercicio_id": "ejercicio-fuera",
+         "orden": 2,
+         "series": [
+          {
+           "carga_indicacion": "Carga de ejemplo.",
+           "carga_kg": null,
+           "n": 1,
+           "reps_max": 10,
+           "reps_min": 8,
+           "rpe_objetivo": 6,
+           "tipo": "efectiva"
+          }
+         ]
+        }
+       ],
+       "id": "sesion-lunes",
+       "nombre": "A"
+      }
+     ],
+     "version_formato": "1.0"
+    }
+   }
+  },
+  {
+   "ruta": "imagenes/curl-biceps-polea",
+   "data": {
+    "autor": "Pruebas automáticas",
+    "cargada": "2026-10-05",
+    "etiquetas": [
+     "Ejemplo"
+    ],
+    "fuente": "Imagen de ejemplo",
+    "licencia": "propia",
+    "nota": "",
+    "srcs": [
+     "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMCAxMCI+PHJlY3Qgd2lkdGg9IjEwIiBoZWlnaHQ9IjEwIi8+PC9zdmc+"
+    ],
+    "validada_entrenamiento": false
+   }
+  },
+  {
+   "ruta": "imagenes/ejercicio-fuera",
+   "data": {
+    "autor": "Pruebas automáticas",
+    "cargada": "2026-10-05",
+    "etiquetas": [
+     "Ejemplo"
+    ],
+    "fuente": "Imagen de ejemplo",
+    "licencia": "propia",
+    "nota": "",
+    "srcs": [
+     "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMCAxMCI+PHJlY3Qgd2lkdGg9IjEwIiBoZWlnaHQ9IjEwIi8+PC9zdmc+"
+    ],
+    "validada_entrenamiento": false
+   }
+  },
+  {
+   "ruta": "rutinas/rutina-ejemplo_v1",
+   "data": {
+    "cargada_por": "Pruebas automáticas",
+    "importada_en": "2026-10-05T08:00:00-03:00",
+    "rutina": {
+     "ejercicios": [
+      {
+       "descripcion": "Ejercicio de ejemplo.",
+       "equipo": "máquina",
+       "errores_comunes": [
+        "Error de ejemplo."
+       ],
+       "id": "curl-biceps-polea",
+       "musculos_principales": [
+        "ejemplo"
+       ],
+       "musculos_secundarios": [],
+       "nombre": "Curl de bíceps en polea",
+       "pasos": [
+        "Paso uno.",
+        "Paso dos."
+       ]
+      },
+      {
+       "descripcion": "Ejercicio de ejemplo.",
+       "equipo": "máquina",
+       "errores_comunes": [
+        "Error de ejemplo."
+       ],
+       "id": "ejercicio-fuera",
+       "musculos_principales": [
+        "ejemplo"
+       ],
+       "musculos_secundarios": [],
+       "nombre": "Ejercicio fuera del catálogo",
+       "pasos": [
+        "Paso uno.",
+        "Paso dos."
+       ]
+      }
+     ],
+     "formato": "genesis-rutina",
+     "rutina": {
+      "autor": "Pruebas automáticas",
+      "id": "rutina-ejemplo",
+      "nombre": "Rutina de ejemplo (ficticia)",
+      "notas": "Datos inventados.",
+      "version": 1,
+      "vigente_desde": "2026-10-05"
+     },
+     "sesiones": [
+      {
+       "dia_semana": "lunes",
+       "duracion_estimada_min": 30,
+       "ejercicios": [
+        {
+         "descanso_seg": 60,
+         "ejercicio_id": "curl-biceps-polea",
+         "orden": 1,
+         "series": [
+          {
+           "carga_indicacion": "Carga de ejemplo.",
+           "carga_kg": null,
+           "n": 1,
+           "reps_max": 12,
+           "reps_min": 10,
+           "rpe_objetivo": 6,
+           "tipo": "efectiva"
+          },
+          {
+           "carga_indicacion": "Carga de ejemplo.",
+           "carga_kg": null,
+           "n": 2,
+           "reps_max": 12,
+           "reps_min": 10,
+           "rpe_objetivo": 6,
+           "tipo": "efectiva"
+          }
+         ]
+        },
+        {
+         "descanso_seg": 60,
+         "ejercicio_id": "ejercicio-fuera",
+         "orden": 2,
+         "series": [
+          {
+           "carga_indicacion": "Carga de ejemplo.",
+           "carga_kg": null,
+           "n": 1,
+           "reps_max": 10,
+           "reps_min": 8,
+           "rpe_objetivo": 6,
+           "tipo": "efectiva"
+          }
+         ]
+        }
+       ],
+       "id": "sesion-lunes",
+       "nombre": "A"
+      }
+     ],
+     "version_formato": "1.0"
+    }
+   }
+  },
+  {
+   "ruta": "sesiones/2026-10-05_sesion-lunes",
+   "data": {
+    "actualizado": "2026-10-05T12:00:00.000Z",
+    "creado": "2026-10-05T11:00:00.000Z",
+    "dia_semana": "lunes",
+    "duracion_estimada_min": 30,
+    "duracion_min": 32,
+    "ejercicios": [
+     {
+      "descanso_seg": 60,
+      "ejercicio_id": "curl-biceps-polea",
+      "nombre": "Curl de bíceps en polea",
+      "notas": "",
+      "orden": 1,
+      "series": [
+       {
+        "carga_indicacion": "Carga de ejemplo.",
+        "carga_prescrita_kg": null,
+        "carga_real_kg": 10,
+        "modo": "rango",
+        "n": 1,
+        "prescrito_reps": "10–12",
+        "prescrito_seg": null,
+        "reps_reales": 11,
+        "rpe_objetivo": 6,
+        "seg_reales": null,
+        "tipo": "efectiva"
+       },
+       {
+        "carga_indicacion": "Carga de ejemplo.",
+        "carga_prescrita_kg": null,
+        "carga_real_kg": 10,
+        "modo": "rango",
+        "n": 2,
+        "prescrito_reps": "10–12",
+        "prescrito_seg": null,
+        "reps_reales": 11,
+        "rpe_objetivo": 6,
+        "seg_reales": null,
+        "tipo": "efectiva"
+       }
+      ]
+     },
+     {
+      "descanso_seg": 60,
+      "ejercicio_id": "ejercicio-fuera",
+      "nombre": "Ejercicio fuera del catálogo",
+      "notas": "",
+      "orden": 2,
+      "series": [
+       {
+        "carga_indicacion": "Carga de ejemplo.",
+        "carga_prescrita_kg": null,
+        "carga_real_kg": 20,
+        "modo": "rango",
+        "n": 1,
+        "prescrito_reps": "10–12",
+        "prescrito_seg": null,
+        "reps_reales": 11,
+        "rpe_objetivo": 6,
+        "seg_reales": null,
+        "tipo": "efectiva"
+       }
+      ]
+     }
+    ],
+    "estado": "cerrada",
+    "fecha": "2026-10-05",
+    "nota": "Sesión de ejemplo.",
+    "rpe_sesion": 5,
+    "rutina_id": "rutina-ejemplo",
+    "rutina_version": 1,
+    "sesion_id": "sesion-lunes",
+    "sesion_nombre": "A"
+   }
+  },
+  {
+   "ruta": "sesiones/2026-10-12_sesion-lunes",
+   "data": {
+    "actualizado": "2026-10-12T12:00:00.000Z",
+    "creado": "2026-10-12T11:00:00.000Z",
+    "dia_semana": "lunes",
+    "duracion_estimada_min": 30,
+    "duracion_min": 32,
+    "ejercicios": [
+     {
+      "descanso_seg": 60,
+      "ejercicio_id": "curl-biceps-polea",
+      "nombre": "Curl de bíceps en polea",
+      "notas": "",
+      "orden": 1,
+      "series": [
+       {
+        "carga_indicacion": "Carga de ejemplo.",
+        "carga_prescrita_kg": null,
+        "carga_real_kg": 12.5,
+        "modo": "rango",
+        "n": 1,
+        "prescrito_reps": "10–12",
+        "prescrito_seg": null,
+        "reps_reales": 11,
+        "rpe_objetivo": 6,
+        "seg_reales": null,
+        "tipo": "efectiva"
+       },
+       {
+        "carga_indicacion": "Carga de ejemplo.",
+        "carga_prescrita_kg": null,
+        "carga_real_kg": 12.5,
+        "modo": "rango",
+        "n": 2,
+        "prescrito_reps": "10–12",
+        "prescrito_seg": null,
+        "reps_reales": 11,
+        "rpe_objetivo": 6,
+        "seg_reales": null,
+        "tipo": "efectiva"
+       }
+      ]
+     },
+     {
+      "descanso_seg": 60,
+      "ejercicio_id": "ejercicio-fuera",
+      "nombre": "Ejercicio fuera del catálogo",
+      "notas": "",
+      "orden": 2,
+      "series": [
+       {
+        "carga_indicacion": "Carga de ejemplo.",
+        "carga_prescrita_kg": null,
+        "carga_real_kg": 22.5,
+        "modo": "rango",
+        "n": 1,
+        "prescrito_reps": "10–12",
+        "prescrito_seg": null,
+        "reps_reales": 11,
+        "rpe_objetivo": 6,
+        "seg_reales": null,
+        "tipo": "efectiva"
+       }
+      ]
+     }
+    ],
+    "estado": "cerrada",
+    "fecha": "2026-10-12",
+    "nota": "Sesión de ejemplo.",
+    "rpe_sesion": 6,
+    "rutina_id": "rutina-ejemplo",
+    "rutina_version": 1,
+    "sesion_id": "sesion-lunes",
+    "sesion_nombre": "A"
+   }
+  }
+ ]
+}
