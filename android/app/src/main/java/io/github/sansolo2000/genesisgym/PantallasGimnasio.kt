@@ -29,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -49,7 +50,7 @@ import kotlinx.serialization.json.put
  * Etapa E4 — pantallas del gimnasio (Hoy, Sesión, Rutina, Historial, Importar), equivalentes a las de la 1.0/2.0.
  * Los datos son los mismos documentos de la 2.0, guardados en BaseLocal.
  */
-class Gym(private val base: BaseLocal, private val alCambiar: () -> Unit) {
+class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: () -> Unit) {
     var vista by mutableStateOf("hoy")
     var borrador by mutableStateOf<JsonObject?>(null)
     var guardado by mutableStateOf("")
@@ -69,6 +70,7 @@ class Gym(private val base: BaseLocal, private val alCambiar: () -> Unit) {
     var restaurar by mutableStateOf<Respaldo.Leido?>(null)
     var restaurarConfirmar by mutableStateOf(false)
     var tick by mutableIntStateOf(0)
+    var editarPerfil by mutableStateOf(false)
 
     fun refrescar() { tick++; alCambiar() }
 
@@ -81,7 +83,7 @@ class Gym(private val base: BaseLocal, private val alCambiar: () -> Unit) {
 
     fun guardarPerfil(nombre: String) {
         val n = nombre.trim(); if (n.isEmpty()) return
-        base.put("config/perfil", buildJsonObject { put("nombre", n); put("creado", Gimnasio.ahoraIso()) }); refrescar()
+        base.put("config/perfil", buildJsonObject { put("nombre", n); put("creado", Gimnasio.ahoraIso()) }); editarPerfil = false; refrescar()
     }
 
     fun abrirSesion(fecha: String, sesionId: String) {
@@ -232,13 +234,21 @@ private fun Hoy(g: Gym) {
     rutina?.obj("rutina")?.let { Gris("${it.txt("nombre")} · versión ${JsJson.numero(it["version"].toString())}") }
 
     val perfil = g.perfil()
-    if (perfil == null) Tarjeta {
-        var nombre by remember { mutableStateOf("") }
+    if (perfil != null && !g.editarPerfil) Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        Gris("Este celular es de: $perfil")
+        TextButton(onClick = { g.editarPerfil = true }) { Text("Cambiar") }
+    }
+    if (perfil == null || g.editarPerfil) Tarjeta {
+        var nombre by remember { mutableStateOf(perfil ?: "") }
         Sub("¿De quién es este celular?")
         Gris("Cada celular guarda los datos de una sola persona. El nombre aparece en los respaldos.")
         OutlinedTextField(value = nombre, onValueChange = { nombre = it.take(40) }, label = { Text("Nombre") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Button(onClick = { g.guardarPerfil(nombre) }) { Text("Guardar") }
-    } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { g.guardarPerfil(nombre) }) { Text("Guardar") }
+            if (perfil != null) OutlinedButton(onClick = { g.editarPerfil = false }) { Text("Cancelar") }
+        }
+    }
+    if (perfil != null) {
         val ultimo = g.ultimoRespaldo()
         val dias = ultimo?.let { runCatching { java.time.Duration.between(java.time.Instant.parse(it), java.time.Instant.now()).toDays() }.getOrNull() }
         if (ultimo == null) Nota("Aún no tienes respaldo. Tus datos están solo en este celular. Crea uno en Historial → Respaldo.", MaterialTheme.colorScheme.errorContainer)
@@ -418,7 +428,7 @@ private fun Ficha(g: Gym, id: String) {
         title = { Text(e?.txt("nombre") ?: id) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Gris("Las imágenes de los ejercicios llegan en la próxima versión. Sigue siempre los pasos escritos.")
+                FichaImagenes(g, id, e?.txt("nombre") ?: id)
                 e?.txt("equipo")?.let { Text("Equipo: $it") }
                 val m = lista("musculos_principales"); val s = lista("musculos_secundarios")
                 if (m.isNotEmpty()) Text("Músculos: " + m.joinToString(", ") + if (s.isNotEmpty()) " (también: ${s.joinToString(", ")})" else "")
@@ -471,7 +481,7 @@ private fun Historial(g: Gym, a: AccionesGym) {
     Tarjeta {
         Sub("Respaldo de todos tus datos")
         Gris("Tus datos viven solo en este celular. Crea un respaldo cada semana y guárdalo en Drive. Es el mismo formato de la 2.0.")
-        Text(g.ultimoRespaldo()?.let { "Último respaldo: ${it.take(16).replace('T', ' ')} UTC" } ?: "Todavía no hay respaldos." + (g.perfil()?.let { " · perfil: $it" } ?: ""))
+        Text((g.ultimoRespaldo()?.let { "Último respaldo: ${it.take(16).replace('T', ' ')} UTC" } ?: "Todavía no hay respaldos.") + (g.perfil()?.let { " · perfil: $it" } ?: ""))
         Button(onClick = { a.guardarRespaldo() }) { Text("Crear respaldo") }
         HorizontalDivider()
         Sub("Restaurar desde un respaldo")
@@ -532,4 +542,26 @@ private fun Importar(g: Gym, a: AccionesGym) {
             }
         }
     }
+}
+
+@Composable
+private fun FichaImagenes(g: Gym, id: String, nombre: String) {
+    val img = g.imagenes?.meta(id, g.base)
+    val srcs = (img?.get("srcs") as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content } ?: emptyList()
+    if (img == null || srcs.isEmpty()) { Gris("Sin imagen todavía. Solo se agregan imágenes con licencia abierta."); return }
+    val etiquetas = (img["etiquetas"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content } ?: emptyList()
+    srcs.forEachIndexed { k, src ->
+        val bmp = remember(src) { g.imagenes!!.bitmap(src) }
+        if (bmp != null) androidx.compose.foundation.Image(bitmap = bmp.asImageBitmap(), contentDescription = "$nombre: ${etiquetas.getOrNull(k) ?: ""}",
+            modifier = Modifier.fillMaxWidth())
+        else Gris("(no se pudo mostrar la imagen)")
+        etiquetas.getOrNull(k)?.let { Gris(it) }
+    }
+    val nota = img.txt("nota")?.takeIf { it.isNotEmpty() }
+    val validada = (img["validada_entrenamiento"] as? JsonPrimitive)?.content == "true"
+    if (validada) nota?.let { Nota("Nota de Entrenamiento: $it") }
+    else Nota("Imagen referencial, pendiente de validar por Entrenamiento." + (nota?.let { " $it" } ?: "") + " Sigue siempre los pasos escritos.", MaterialTheme.colorScheme.errorContainer)
+    Text(img.txt("credito")?.takeIf { it.isNotEmpty() }
+        ?: "Ilustración: ${img.txt("autor") ?: ""} · ${img.txt("fuente") ?: ""} · licencia ${img.txt("licencia") ?: ""} (${img.txt("url_licencia") ?: ""}). Sin modificaciones.",
+        style = MaterialTheme.typography.bodySmall)
 }

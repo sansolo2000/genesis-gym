@@ -2,6 +2,7 @@
 
 | Versión | Fecha | Cambio |
 |---|---|---|
+| 0.4.1 | 2026-10-10 | Fichas con las imágenes de la 2.0 (sin modificar, con crédito y aviso si no están validadas por Entrenamiento). Hoy muestra de quién es el celular y permite cambiarlo; Historial muestra el perfil siempre. |
 | 0.4.0 | 2026-10-10 | Publicada con aprobación de Héctor (10:01). Etapa E4 (primera parte): gimnasio. Hoy, sesión con registro por serie, cierre con RPE y duración, cambiar fecha, rutina, fichas (sin imágenes aún), historial, CSV para el Evaluador idéntico al de la 2.0, importar rutina (mismo validador) y respaldo/restauración compatibles con la 2.0 (misma huella). Las pruebas E1–E3 pasan a la pestaña "Pruebas". |
 | 0.3.1 | 2026-10-10 | Publicada con aprobación de Héctor (00:38). Avisos: elegir el sonido (selector de tonos del celular), opción "sonar como alarma", botón "Probar sonido ahora"; el tercer aviso sugerido pasa a las 09:00. Pedido por Héctor. |
 | 0.3.0 | 2026-10-10 | Publicada con aprobación de Héctor (00:21). Etapa E3: prueba de Drive. Leer un archivo con el selector de Android (sin iniciar sesión) y crear un archivo de prueba en una carpeta propia con el permiso drive.file. Pestañas Avisos/Salud/Drive. |

@@ -13,6 +13,15 @@ val versiones = Properties().apply { rootProject.file("version.properties").inpu
 // Si no están, no se puede generar el APK de publicación (no hay plan B con otra llave).
 val llave: String? = System.getenv("GG_KEYSTORE_PATH")
 
+// Imágenes de los ejercicios: se copian SIN MODIFICAR desde la carpeta imagenes/ de la 2.0 (raíz del repositorio)
+// a los assets del APK al compilar. No se duplican en android/. Incluye el catálogo con créditos y validación.
+val imagenesAssets = layout.buildDirectory.dir("generated/imagenes-assets")
+val copiarImagenes by tasks.registering(Sync::class) {
+    from(rootProject.file("../imagenes"))
+    into(imagenesAssets.map { it.dir("imagenes") })
+}
+tasks.configureEach { if (name != "copiarImagenes" && (name.contains("Assets") || name.startsWith("lint") || name == "preBuild")) dependsOn(copiarImagenes) }
+
 android {
     namespace = "io.github.sansolo2000.genesisgym"
     compileSdk = 36
@@ -49,6 +58,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+    sourceSets["main"].assets.srcDir(imagenesAssets)
     buildFeatures {
         compose = true
         buildConfig = true
@@ -64,5 +74,6 @@ dependencies {
     implementation("androidx.health.connect:connect-client:1.1.0")   // E2: Health Connect, solo lectura
     implementation("com.google.android.gms:play-services-auth:21.2.0")   // E3: permiso de Drive (AuthorizationClient)
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")   // E4: leer rutinas y respaldos (JSON)
+    implementation("com.caverock:androidsvg-aar:1.4")   // E4: dibujar las imágenes SVG (Everkinetic y propias)
     testImplementation("junit:junit:4.13.2")
 }

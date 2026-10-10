@@ -105,7 +105,7 @@ class MainActivity : ComponentActivity() {
 
     // E4: gimnasio. La base local tiene los mismos documentos que la 2.0.
     private val base by lazy { BaseLocal(this) }
-    private val gym by lazy { Gym(base) {} }
+    private val gym by lazy { Gym(base, Imagenes(this)) {} }
     private var csvPendiente: String = ""
     private var respaldoPendiente: Pair<String, String>? = null
 
