@@ -1,0 +1,8 @@
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+# Llaves de firma: nunca al repositorio. Viven solo como secretos de GitHub.
+*.jks
+*.keystore
