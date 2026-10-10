@@ -5,6 +5,9 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.RingtoneManager
+import androidx.compose.material3.Switch
+import androidx.compose.ui.Alignment
 import android.net.Uri
 import android.os.Bundle
 import android.os.PowerManager
@@ -69,6 +72,24 @@ import java.time.ZonedDateTime
  */
 class MainActivity : ComponentActivity() {
     private var refresco by mutableIntStateOf(0)
+
+    private val elegirSonido = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        if (res.resultCode == RESULT_OK) {
+            val uri = res.data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java)
+            Alarmas.cambiarSonido(this, uri, Alarmas.comoAlarma(this))
+        }
+        refresco++
+    }
+
+    private fun abrirSelectorSonido() {
+        val i = Intent(RingtoneManager.ACTION_RINGTONE_PICKER)
+            .putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALL)
+            .putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Sonido de los avisos")
+            .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+            .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+            .putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Alarmas.sonido(this))
+        elegirSonido.launch(i)
+    }
 
     private val pedirNotificaciones =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { refresco++ }
@@ -195,7 +216,7 @@ class MainActivity : ComponentActivity() {
     private fun Pantalla(aperturas: Int, @Suppress("UNUSED_PARAMETER") tick: Int) {
         val zona = ZoneId.systemDefault()
         val ahora = ZonedDateTime.now(zona)
-        val horas = remember { mutableStateListOf(Avisos.sugerida(ahora, 2), Avisos.sugerida(ahora, 10), "07:00") }
+        val horas = remember { mutableStateListOf(Avisos.sugerida(ahora, 2), Avisos.sugerida(ahora, 10), "09:00") }
         var mensaje by remember { mutableStateOf("") }
         val avisos = Alarmas.lista(this)
 
@@ -220,6 +241,21 @@ class MainActivity : ComponentActivity() {
             OutlinedButton(onClick = { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }) {
                 Text("Abrir ajuste de batería")
             }
+
+            HorizontalDivider()
+            Text("Sonido", style = MaterialTheme.typography.titleMedium)
+            Text("Suena: " + Alarmas.nombreSonido(this@MainActivity))
+            OutlinedButton(onClick = { abrirSelectorSonido() }) { Text("Elegir sonido") }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Switch(
+                    checked = Alarmas.comoAlarma(this@MainActivity),
+                    onCheckedChange = { Alarmas.cambiarSonido(this@MainActivity, Alarmas.sonido(this@MainActivity), it); refresco++ }
+                )
+                Text("Sonar como alarma (suena aunque el celular esté en silencio)")
+            }
+            OutlinedButton(onClick = {
+                AlarmaReceiver.mostrar(this@MainActivity, "Génesis Gym N · prueba de sonido", "Así va a sonar cada aviso.", 199)
+            }) { Text("Probar sonido ahora") }
 
             HorizontalDivider()
             Text("2. Programar 3 avisos (hora HH:MM)", style = MaterialTheme.typography.titleMedium)

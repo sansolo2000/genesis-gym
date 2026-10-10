@@ -16,17 +16,24 @@ class AlarmaReceiver : BroadcastReceiver() {
         val a = Alarmas.lista(c).firstOrNull { it.id == id } ?: return
         val llego = a.copy(llegoMs = System.currentTimeMillis())
         Alarmas.guardar(c, llego)   // se anota aunque no haya permiso de notificaciones
+        mostrar(c, "Génesis Gym N · aviso de prueba ${a.id}", Avisos.estado(llego, ZoneId.systemDefault()), 100 + a.id)
+    }
 
-        if (c.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
-        Alarmas.crearCanal(c)
-        val texto = Avisos.estado(llego, ZoneId.systemDefault())
-        val n = Notification.Builder(c, Alarmas.CANAL)
-            .setSmallIcon(android.R.drawable.ic_popup_reminder)
-            .setContentTitle("Génesis Gym N · aviso de prueba ${a.id}")
-            .setContentText(texto)
-            .setStyle(Notification.BigTextStyle().bigText(texto))
-            .setAutoCancel(true)
-            .build()
-        c.getSystemService(NotificationManager::class.java).notify(100 + a.id, n)
+    companion object {
+        /** Muestra una notificación en el canal actual (con el sonido elegido). La usa también "Probar sonido ahora". */
+        fun mostrar(c: Context, titulo: String, texto: String, idNotificacion: Int) {
+
+            if (c.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+            Alarmas.crearCanal(c)
+            val n = Notification.Builder(c, Alarmas.canal(c))
+                .setSmallIcon(android.R.drawable.ic_popup_reminder)
+                .setContentTitle(titulo)
+                .setContentText(texto)
+                .setStyle(Notification.BigTextStyle().bigText(texto))
+                .setCategory(if (Alarmas.comoAlarma(c)) Notification.CATEGORY_ALARM else Notification.CATEGORY_REMINDER)
+                .setAutoCancel(true)
+                .build()
+            c.getSystemService(NotificationManager::class.java).notify(idNotificacion, n)
+        }
     }
 }
