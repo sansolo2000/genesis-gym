@@ -63,20 +63,23 @@ class GimnasioTest {
 
     @Test fun importar_reglas_de_la_2_0() {
         val texto = Json.parseToJsonElement(recurso("prueba-borrador.json")).jsonObject["rutina"]!!.jsonPrimitive.content
-        val obj = Json.parseToJsonElement(texto).jsonObject
-        val activa = Gimnasio.documentosActivacion(obj, "t")[0].data
-        val igual = Gimnasio.revisarImportacion(texto, activa)
+        val ejemplo = Json.parseToJsonElement(texto).jsonObject
+        val activaEjemplo = Gimnasio.documentosActivacion(ejemplo, "t")[0].data
+        // Rutina de ejemplo activa: se puede reimportar sin subir la versión (igual que la 2.0)
+        assertTrue(Gimnasio.revisarImportacion(texto.replace("\"nombre\":\"Ejemplo\"", "\"nombre\":\"Otro\""), activaEjemplo).resultado.ok)
+        // Rutina real activa
+        val tReal = texto.replace("\"id\":\"ejemplo-formato\"", "\"id\":\"fuerza-genesis\"")
+        val real = Json.parseToJsonElement(tReal).jsonObject
+        val activaReal = Gimnasio.documentosActivacion(real, "t")[0].data
+        val igual = Gimnasio.revisarImportacion(tReal, activaReal)
         assertTrue(igual.yaActiva); assertFalse(igual.resultado.ok)
-        val misma = Gimnasio.revisarImportacion(texto.replace("\"nombre\":\"Ejemplo\"", "\"nombre\":\"Otro\""), activa)
-        // id = ejemplo-formato (rutina de ejemplo): no se exige subir la versión
-        assertTrue(misma.resultado.ok)
-        val real = activa.con("rutina", obj.con("rutina", obj["rutina"]!!.jsonObject.con("id", JsonPrimitive("fuerza-genesis"))))
-        val otra = Gimnasio.revisarImportacion(texto, real)
-        assertTrue(otra.resultado.avisos[0].startsWith("Esta rutina (ejemplo-formato) es distinta de la activa (fuerza-genesis)."))
-        val t2 = texto.replace("\"id\":\"ejemplo-formato\"", "\"id\":\"fuerza-genesis\"").replace("\"nombre\":\"Ejemplo\"", "\"nombre\":\"Otro\"")
-        val vieja = Gimnasio.revisarImportacion(t2, real)
+        val vieja = Gimnasio.revisarImportacion(tReal.replace("\"nombre\":\"Ejemplo\"", "\"nombre\":\"Otro\""), activaReal)
         assertEquals(listOf("rutina.version: debe ser mayor que la versión activa (1). Pide a Entrenamiento el archivo con la versión aumentada."), vieja.resultado.errores)
-        assertEquals("rutinas/ejemplo-formato_v1", Gimnasio.documentosActivacion(obj, "t")[1].ruta)
+        val nueva = Gimnasio.revisarImportacion(tReal.replace("\"version\":1,", "\"version\":2,"), activaReal)
+        assertTrue(nueva.resultado.ok)
+        val otra = Gimnasio.revisarImportacion(texto, activaReal)
+        assertTrue(otra.resultado.avisos[0].startsWith("Esta rutina (ejemplo-formato) es distinta de la activa (fuerza-genesis)."))
+        assertEquals("rutinas/fuerza-genesis_v1", Gimnasio.documentosActivacion(real, "t")[1].ruta)
     }
 
     @Test fun cambiar_fecha() {

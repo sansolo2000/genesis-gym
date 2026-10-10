@@ -13,7 +13,9 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.horizontalScroll
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import android.provider.OpenableColumns
@@ -101,6 +103,39 @@ class MainActivity : ComponentActivity() {
     private val permisosSalud: Set<String> = tiposSalud.map { HealthPermission.getReadPermission(it) }.toSet()
     private var permisosConcedidos by mutableStateOf<Set<String>>(emptySet())
 
+    // E4: gimnasio. La base local tiene los mismos documentos que la 2.0.
+    private val base by lazy { BaseLocal(this) }
+    private val gym by lazy { Gym(base) {} }
+    private var csvPendiente: String = ""
+    private var respaldoPendiente: Pair<String, String>? = null
+
+    private fun leerTexto(uri: Uri): String = contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) } ?: ""
+    private fun escribirTexto(uri: Uri, texto: String) { contentResolver.openOutputStream(uri, "wt")?.use { it.write(texto.toByteArray(Charsets.UTF_8)) } }
+    private fun nombreDe(uri: Uri): String = contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+        if (c.moveToFirst()) c.getString(0) else null } ?: "archivo"
+
+    private val elegirRutinaArchivo = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) try { gym.validarImport(leerTexto(uri).removePrefix("\uFEFF")) } catch (e: Exception) { gym.importMensaje = "No se pudo leer el archivo." }
+    }
+    private val guardarCsvArchivo = registerForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri == null) { gym.csvMensaje = "Exportación cancelada."; return@registerForActivityResult }
+        gym.csvMensaje = try { escribirTexto(uri, csvPendiente); "CSV guardado: ${nombreDe(uri)}. Súbelo al chat Evaluador." } catch (e: Exception) { "No se pudo guardar el CSV." }
+    }
+    private val guardarRespaldoArchivo = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        val p = respaldoPendiente
+        if (uri == null || p == null) { gym.respaldoMensaje = "Respaldo cancelado: no se guardó ningún archivo."; return@registerForActivityResult }
+        try { escribirTexto(uri, p.second); gym.respaldoGuardado(nombreDe(uri)) } catch (e: Exception) { gym.respaldoMensaje = "No se pudo crear el respaldo. Vuelve a intentarlo." }
+    }
+    private val elegirRespaldoArchivo = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) try { gym.leerRespaldo(leerTexto(uri).removePrefix("\uFEFF")) } catch (e: Exception) { gym.respaldoMensaje = "No se pudo leer el archivo." }
+    }
+    private val accionesGym = object : AccionesGym {
+        override fun elegirRutina() = elegirRutinaArchivo.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*"))
+        override fun guardarCsv() { csvPendiente = gym.textoCsv(); guardarCsvArchivo.launch("genesis-fuerza-${Gimnasio.hoyIso()}.csv") }
+        override fun guardarRespaldo() { val p = gym.textoRespaldo(); respaldoPendiente = p; guardarRespaldoArchivo.launch(p.first) }
+        override fun elegirRespaldo() = elegirRespaldoArchivo.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*"))
+    }
+
     // E3: Drive. El token queda solo en memoria; los textos de resultado no incluyen el contenido de los archivos.
     private var driveLectura by mutableStateOf("")
     private var driveEscritura by mutableStateOf("")
@@ -182,17 +217,27 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    var pestana by remember { mutableIntStateOf(2) }
+                    var pestana by remember { mutableIntStateOf(0) }
+                    BackHandler(enabled = gym.vista == "sesion") { gym.ir("hoy") }
                     Column(modifier = Modifier.safeDrawingPadding()) {
-                        Row(modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf("Avisos", "Salud", "Drive").forEachIndexed { i, t ->
-                                if (pestana == i) Button(onClick = {}) { Text(t) } else OutlinedButton(onClick = { pestana = i }) { Text(t) }
+                        Row(modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf("hoy" to "Hoy", "rutina" to "Rutina", "historial" to "Historial", "importar" to "Importar", "pruebas" to "Pruebas").forEach { (v, t) ->
+                                val activa = gym.vista == v || (v == "hoy" && gym.vista == "sesion")
+                                if (activa) Button(onClick = { gym.ir(v) }) { Text(t) } else OutlinedButton(onClick = { gym.ir(v) }) { Text(t) }
                             }
                         }
-                        when (pestana) {
-                            0 -> Pantalla(aperturas, refresco)
-                            1 -> PantallaSalud(refresco)
-                            else -> PantallaDrive()
+                        if (gym.vista != "pruebas") PantallaGimnasio(gym, accionesGym)
+                        else {
+                            Row(modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                listOf("Avisos", "Salud", "Drive").forEachIndexed { i, t ->
+                                    if (pestana == i) Button(onClick = {}) { Text(t) } else OutlinedButton(onClick = { pestana = i }) { Text(t) }
+                                }
+                            }
+                            when (pestana) {
+                                0 -> Pantalla(aperturas, refresco)
+                                1 -> PantallaSalud(refresco)
+                                else -> PantallaDrive()
+                            }
                         }
                     }
                 }

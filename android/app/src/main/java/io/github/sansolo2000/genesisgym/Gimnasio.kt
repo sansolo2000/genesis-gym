@@ -28,6 +28,12 @@ object Gimnasio {
     fun JsonObject.arr(k: String): List<JsonObject> = (this[k] as? JsonArray)?.mapNotNull { it as? JsonObject } ?: emptyList()
     fun JsonObject.esNulo(k: String): Boolean = this[k] == null || this[k] is JsonNull
 
+    val ZONA: java.time.ZoneId = java.time.ZoneId.of("America/Santiago")
+    fun hoyIso(): String = LocalDate.now(ZONA).toString()
+    /** Instante como toISOString() de JavaScript: siempre con milisegundos y en UTC. */
+    fun ahoraIso(): String = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
+        .withZone(java.time.ZoneOffset.UTC).format(java.time.Instant.now())
+
     fun diaDe(fecha: String): String = DIAS[LocalDate.parse(fecha).dayOfWeek.value % 7]
     fun docIdSesion(fecha: String, sesionId: String) = "${fecha}_$sesionId"
 

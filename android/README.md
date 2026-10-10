@@ -7,7 +7,12 @@ Plan y decisiones: `claude/PROPUESTA-APP-NATIVA.md` en el proyecto Génesis (apr
 - **Nunca** entran a este repositorio rutinas, programas, registros, respaldos ni datos de salud.
 - La llave de firma vive **solo** en los secretos de GitHub (`GG_KEYSTORE_BASE64`, `GG_KEYSTORE_PASSWORD`, `GG_KEY_ALIAS`, `GG_KEY_PASSWORD`).
 
-## Etapa actual: E1 (prueba de avisos)
+## Etapa actual: E4 (gimnasio)
+E1–E3 cerradas (avisos, Health Connect y Drive probados en el S25). E4 lleva el gimnasio de la 2.0 a Kotlin con los MISMOS documentos
+(`BaseLocal.kt`), el mismo validador (`ValidadorRutina.kt`), el mismo CSV (`Gimnasio.kt`) y el mismo respaldo con la misma huella
+(`Respaldo.kt`, `JsJson.kt`). Las pruebas comparan contra resultados del código JavaScript de la 1.0/2.0.
+
+## Etapa E1 (prueba de avisos)
 E0 cerrada el 9-oct-2026: el APK firmado se instala en el S25 y se actualiza encima sin perder datos.
 E1 programa 3 avisos de prueba con AlarmManager y anota a qué hora llegó cada uno, con o sin el permiso
 de alarmas exactas, y los vuelve a programar al reiniciar el celular (`Alarmas.kt`, `AlarmaReceiver.kt`, `ArranqueReceiver.kt`).
