@@ -277,7 +277,7 @@ fun PantallaGimnasio(g: Gym, acciones: AccionesGym) {
     Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Nota(PRUEBA, MaterialTheme.colorScheme.tertiaryContainer)
         when (g.vista) {
-            "sesion" -> Sesion(g)
+            "sesion" -> Hoy(g)   // sin registro abierto
             "rutina" -> RutinaV(g)
             "historial" -> Historial(g, acciones)
             "importar" -> Importar(g, acciones)
