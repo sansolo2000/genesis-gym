@@ -93,6 +93,7 @@ private val OSCURO = darkColorScheme(
 private val NOMBRE_BLOQUE = mapOf("cal" to "CALENTAMIENTO", "fuerza" to "FUERZA", "elong" to "ELONGACIÓN")
 private val COLOR_BLOQUE = mapOf("cal" to VERDE, "fuerza" to AMBAR, "elong" to AZUL)
 
+private fun valorDe(texto: String, entero: Boolean): Double? = (Gimnasio.parseNum(texto, entero) as? Gimnasio.Num.Valor)?.v
 private fun mmss(seg: Int): String = "${seg / 60}:${(seg % 60).toString().padStart(2, '0')}"
 private fun prescrito(se: JsonObject): String =
     if (se.txt("modo") == "tiempo") (se.num("prescrito_seg")?.toInt() ?: 0).let { if (it >= 60) "${mmss(it)} min" else "$it s" }
@@ -278,9 +279,16 @@ private fun FilaSerie(g: Gym, b: JsonObject, i: Int, k: Int, ejId: String, se: J
             }
             if (modo == "tiempo") {
                 Text(if (hecha) "${se.num("seg_reales")?.toInt() ?: 0} s ✓" else prescrito(se), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            } else key(b.txt("fecha"), b.txt("sesion_id"), i, k, se["carga_real_kg"].toString(), se[repKey].toString()) {
+            } else key(b.txt("fecha"), b.txt("sesion_id"), i, k) {
+                // 0.6.1: la clave ya no incluye el valor guardado. Antes, cada número escrito cambiaba la clave,
+                // el campo se volvía a crear y perdía el foco (se cerraba el teclado). Lo vio Héctor el 10-oct.
+                val cargaGuardada = se["carga_real_kg"]?.takeIf { it !is JsonNull }?.let { (it as? JsonPrimitive)?.content?.toDoubleOrNull() }
+                val repsGuardadas = se[repKey]?.takeIf { it !is JsonNull }?.let { (it as? JsonPrimitive)?.content?.toDoubleOrNull() }
                 var carga by remember { mutableStateOf(Gimnasio.kg(se["carga_real_kg"])) }
                 var reps by remember { mutableStateOf(se[repKey]?.takeIf { it !is JsonNull }?.toString() ?: "") }
+                // Si el valor cambia desde fuera (✓ copia lo indicado), el campo lo muestra; mientras escribes, no se toca.
+                LaunchedEffect(cargaGuardada) { if (valorDe(carga, false) != cargaGuardada) carga = Gimnasio.kg(se["carga_real_kg"]) }
+                LaunchedEffect(repsGuardadas) { if (valorDe(reps, true) != repsGuardadas) reps = se[repKey]?.takeIf { it !is JsonNull }?.toString() ?: "" }
                 OutlinedTextField(value = carga, onValueChange = { v -> carga = v; anotar(g, i, k, "carga_real_kg", v, false) },
                     label = { Text("kg") }, placeholder = { Text(if (se.esNulo("carga_prescrita_kg")) "—" else Gimnasio.kg(se["carga_prescrita_kg"])) },
                     singleLine = true, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))

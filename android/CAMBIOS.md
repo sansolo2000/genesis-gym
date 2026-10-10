@@ -2,6 +2,7 @@
 
 | Versión | Fecha | Cambio |
 |---|---|---|
+| 0.6.1 | 2026-10-10 | Sin publicar (espera aprobación de Héctor). Corrige que el teclado se cerrara al escribir cada número de carga o repeticiones en la hoja del ejercicio (lo vio Héctor). |
 | 0.6.0 | 2026-10-10 | Publicada con aprobación de Héctor (19:50). Sesión rediseñada según el mockup aprobado por Héctor: mapa de la sesión (calentamiento, fuerza y elongación), una hoja por ejercicio con pestañas Registrar / Cómo se hace, ✓ por serie que copia lo indicado e inicia el descanso, cuenta regresiva con +30 s y aviso al terminar aunque la pantalla esté apagada, y cierre (RPE, duración, nota, cambiar fecha, eliminar). Tema oscuro solo en la sesión. El formato del registro y el CSV no cambian. |
 | 0.5.0 | 2026-10-10 | Publicada con aprobación de Héctor (13:09). Etapa E5: pestaña Comidas igual a la 2.0 (importar programa con el mismo validador, marcar, foto de cámara o galería, nota, intercambios, tareas y "Enviar a Alimentación" con los mismos registro-comida, comprobado con pruebas contra la 2.0). Pestaña Avisos: comidas (a la hora o N min antes), tareas de cocina, entrenamiento (hora configurable, días de la rutina) y reporte del día (hora configurable); sonido, modo alarma y volumen propio. |
 | 0.4.1 | 2026-10-10 | Publicada con aprobación de Héctor (12:20). Fichas con las imágenes de la 2.0 (sin modificar, con crédito y aviso si no están validadas por Entrenamiento). Hoy muestra de quién es el celular y permite cambiarlo; Historial muestra el perfil siempre. |
