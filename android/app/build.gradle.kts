@@ -63,5 +63,6 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.health.connect:connect-client:1.1.0")   // E2: Health Connect, solo lectura
     implementation("com.google.android.gms:play-services-auth:21.2.0")   // E3: permiso de Drive (AuthorizationClient)
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")   // E4: leer rutinas y respaldos (JSON)
     testImplementation("junit:junit:4.13.2")
 }
