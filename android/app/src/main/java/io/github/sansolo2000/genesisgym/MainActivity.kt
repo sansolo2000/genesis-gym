@@ -11,7 +11,15 @@ import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import android.provider.OpenableColumns
+import androidx.lifecycle.lifecycleScope
+import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.Scope
+import java.time.format.DateTimeFormatter
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
@@ -72,6 +80,71 @@ class MainActivity : ComponentActivity() {
     private val permisosSalud: Set<String> = tiposSalud.map { HealthPermission.getReadPermission(it) }.toSet()
     private var permisosConcedidos by mutableStateOf<Set<String>>(emptySet())
 
+    // E3: Drive. El token queda solo en memoria; los textos de resultado no incluyen el contenido de los archivos.
+    private var driveLectura by mutableStateOf("")
+    private var driveEscritura by mutableStateOf("")
+
+    private val abrirArchivo = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) { driveLectura = "No elegiste ningún archivo."; return@registerForActivityResult }
+        driveLectura = try {
+            var nombre = "(sin nombre)"; var tamano = -1L
+            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { c ->
+                if (c.moveToFirst()) { nombre = c.getString(0) ?: nombre; if (!c.isNull(1)) tamano = c.getLong(1) }
+            }
+            val texto = contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) } ?: ""
+            val formato = DriveTexto.formatoDe(texto) ?: "no es un archivo de Génesis"
+            "Leído: $nombre · ${if (tamano >= 0) "$tamano bytes" else "${texto.length} caracteres"} · formato: $formato"
+        } catch (e: Exception) {
+            "No se pudo leer el archivo (" + e.javaClass.simpleName + ")"
+        }
+    }
+
+    private val autorizar = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
+        try {
+            val r = Identity.getAuthorizationClient(this).getAuthorizationResultFromIntent(res.data)
+            escribirPrueba(r.accessToken)
+        } catch (e: Exception) {
+            driveEscritura = "Google no autorizó el acceso: " + describir(e)
+        }
+    }
+
+    private fun describir(e: Exception): String = when {
+        e is ApiException && e.statusCode == 10 -> "código 10 (en Google Cloud falta el cliente OAuth de tipo Android, o el paquete o la huella SHA-1 no coinciden)"
+        e is ApiException && e.statusCode == 16 -> "código 16 (cancelaste la ventana de Google)"
+        e is ApiException -> "código ${e.statusCode}"
+        e is DriveApi.ErrorDrive && e.codigo == 403 -> "Drive respondió 403 (¿está activada la Google Drive API en el proyecto?)"
+        e is DriveApi.ErrorDrive -> e.message ?: "error de Drive"
+        else -> e.javaClass.simpleName + (e.message?.let { ": " + it.take(120) } ?: "")
+    }
+
+    private fun conectarYEscribir() {
+        driveEscritura = "Conectando con Google…"
+        val pedido = AuthorizationRequest.builder().setRequestedScopes(listOf(Scope(DriveTexto.ALCANCE))).build()
+        Identity.getAuthorizationClient(this).authorize(pedido)
+            .addOnSuccessListener { r ->
+                val pi = r.pendingIntent
+                if (r.hasResolution() && pi != null) autorizar.launch(IntentSenderRequest.Builder(pi.intentSender).build())
+                else escribirPrueba(r.accessToken)
+            }
+            .addOnFailureListener { e -> driveEscritura = "Google no autorizó el acceso: " + describir(e) }
+    }
+
+    private fun escribirPrueba(token: String?) {
+        if (token == null) { driveEscritura = "Google no entregó un permiso de acceso."; return }
+        driveEscritura = "Creando el archivo de prueba…"
+        lifecycleScope.launch {
+            driveEscritura = try {
+                val carpeta = DriveApi.carpetaPropia(token, DriveTexto.CARPETA_PRUEBA)
+                val sello = ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+                val nombre = DriveApi.subirTexto(token, carpeta, "prueba-e3-$sello.txt",
+                    "Archivo de prueba de Génesis Gym N (etapa E3). No contiene datos personales. Se puede borrar.")
+                "Listo: creé \"$nombre\" en la carpeta \"${DriveTexto.CARPETA_PRUEBA}\" de tu Drive."
+            } catch (e: Exception) {
+                "No se pudo escribir en Drive: " + describir(e)
+            }
+        }
+    }
+
     private val pedirSalud =
         registerForActivityResult(PermissionController.createRequestPermissionResultContract()) { concedidos ->
             permisosConcedidos = concedidos
@@ -88,13 +161,18 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    var pestana by remember { mutableIntStateOf(1) }
+                    var pestana by remember { mutableIntStateOf(2) }
                     Column(modifier = Modifier.safeDrawingPadding()) {
                         Row(modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (pestana == 0) Button(onClick = {}) { Text("Avisos (E1)") } else OutlinedButton(onClick = { pestana = 0 }) { Text("Avisos (E1)") }
-                            if (pestana == 1) Button(onClick = {}) { Text("Health Connect (E2)") } else OutlinedButton(onClick = { pestana = 1 }) { Text("Health Connect (E2)") }
+                            listOf("Avisos", "Salud", "Drive").forEachIndexed { i, t ->
+                                if (pestana == i) Button(onClick = {}) { Text(t) } else OutlinedButton(onClick = { pestana = i }) { Text(t) }
+                            }
                         }
-                        if (pestana == 0) Pantalla(aperturas, refresco) else PantallaSalud(refresco)
+                        when (pestana) {
+                            0 -> Pantalla(aperturas, refresco)
+                            1 -> PantallaSalud(refresco)
+                            else -> PantallaDrive()
+                        }
                     }
                 }
             }
@@ -249,6 +327,32 @@ class MainActivity : ComponentActivity() {
             }) { Text("Contar") }
             if (mensaje.isNotEmpty()) Text(mensaje)
             for (l in resultado) Text(l)
+
+            HorizontalDivider()
+            Text(Saludo.version(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, BuildConfig.COMMIT), style = MaterialTheme.typography.bodySmall)
+        }
+    }
+
+    @Composable
+    private fun PantallaDrive() {
+        Column(
+            modifier = Modifier.padding(20.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text("Prueba de Drive", style = MaterialTheme.typography.headlineMedium)
+            Text("Etapa E3. No muestra el contenido de tus archivos: solo el nombre, el tamaño y el formato.")
+
+            HorizontalDivider()
+            Text("1. Leer un archivo (sin iniciar sesión)", style = MaterialTheme.typography.titleMedium)
+            Text("Se abre el selector de Android. Toca el menú y elige Drive → Genesis Gym → rutinas, por ejemplo.")
+            Button(onClick = { abrirArchivo.launch(arrayOf("*/*")) }) { Text("Elegir archivo") }
+            if (driveLectura.isNotEmpty()) Text(driveLectura)
+
+            HorizontalDivider()
+            Text("2. Escribir en tu Drive (con Google)", style = MaterialTheme.typography.titleMedium)
+            Text("Pide el permiso mínimo (drive.file): la app solo ve lo que ella misma crea. Crea un archivo de texto de prueba, sin datos personales, en la carpeta \"${DriveTexto.CARPETA_PRUEBA}\". Nunca sobrescribe.")
+            Button(onClick = { conectarYEscribir() }) { Text("Conectar y crear archivo de prueba") }
+            if (driveEscritura.isNotEmpty()) Text(driveEscritura)
 
             HorizontalDivider()
             Text(Saludo.version(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, BuildConfig.COMMIT), style = MaterialTheme.typography.bodySmall)

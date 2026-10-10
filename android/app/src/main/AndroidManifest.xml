@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- E3: Drive (solo hacia googleapis.com). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- E1: avisos. Ninguno de estos permisos da acceso a datos personales. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Alarmas a la hora exacta: Android 14+ lo deja APAGADO; Héctor lo activa a mano si quiere. -->
