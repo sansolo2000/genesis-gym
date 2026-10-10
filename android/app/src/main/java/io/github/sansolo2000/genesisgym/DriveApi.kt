@@ -58,4 +58,22 @@ object DriveApi {
         c.outputStream.use { it.write(cuerpo) }
         leer(c).getString("name")
     }
+
+    /** Sube un archivo NUEVO (texto o foto) a la carpeta, como la 2.0: metadatos con el tipo y el contenido tal cual. Devuelve su id. */
+    suspend fun subirArchivo(token: String, carpeta: String, nombre: String, mime: String, contenido: ByteArray): String = withContext(Dispatchers.IO) {
+        val limite = "genesis" + System.currentTimeMillis()
+        val meta = "{\"name\":\"${DriveTexto.json(nombre)}\",\"parents\":[\"${DriveTexto.json(carpeta)}\"],\"mimeType\":\"${DriveTexto.json(mime)}\"}"
+        val cuerpo = java.io.ByteArrayOutputStream().apply {
+            write(("--$limite\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n$meta\r\n--$limite\r\nContent-Type: $mime\r\n\r\n").toByteArray(Charsets.UTF_8))
+            write(contenido)
+            write("\r\n--$limite--\r\n".toByteArray(Charsets.UTF_8))
+        }.toByteArray()
+        val c = abrir(SUBIDA, token, "POST").apply {
+            doOutput = true
+            setRequestProperty("Content-Type", "multipart/related; boundary=$limite")
+            setFixedLengthStreamingMode(cuerpo.size)
+        }
+        c.outputStream.use { it.write(cuerpo) }
+        leer(c).getString("id")
+    }
 }

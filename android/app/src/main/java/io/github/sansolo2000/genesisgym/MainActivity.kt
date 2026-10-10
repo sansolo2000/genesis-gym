@@ -136,6 +136,84 @@ class MainActivity : ComponentActivity() {
         override fun elegirRespaldo() = elegirRespaldoArchivo.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*"))
     }
 
+    // E5: Comidas. Mismos documentos que la 2.0; cada cambio vuelve a calcular los avisos.
+    private val com by lazy { Com(base) { runCatching { Programador.reprogramar(this) } } }
+    private var fotoTipo: String = ""
+    private var fotoCamara: Uri? = null
+
+    private val elegirProgramaArchivo = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) try { com.validar(leerTexto(uri)) } catch (e: Exception) {
+            com.importacion = null to Comidas.Resultado(false, listOf("No se pudo leer el archivo."), emptyList())
+        }
+    }
+    private val elegirFotoGaleria = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) guardarFoto(uri) }
+    private val tomarFotoCamara = registerForActivityResult(ActivityResultContracts.TakePicture()) { ok -> val u = fotoCamara; if (ok && u != null) guardarFoto(u) }
+
+    /** Como la 2.0: la foto se reduce a 1280 px por lado y se guarda en JPEG al 75 %, para no llenar el celular ni el Drive. */
+    private fun guardarFoto(uri: Uri) {
+        val tipo = fotoTipo
+        lifecycleScope.launch {
+            val dataUrl = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val bmp = android.graphics.ImageDecoder.decodeBitmap(android.graphics.ImageDecoder.createSource(contentResolver, uri)) { dec, info, _ ->
+                        val w = info.size.width; val h = info.size.height
+                        val k = minOf(1.0, 1280.0 / maxOf(w, h))
+                        dec.setTargetSize(Math.round(w * k).toInt().coerceAtLeast(1), Math.round(h * k).toInt().coerceAtLeast(1))
+                        dec.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+                    }
+                    val out = java.io.ByteArrayOutputStream()
+                    bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 75, out)
+                    "data:image/jpeg;base64," + android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
+                }.getOrNull()
+            }
+            if (fotoCamara != null && uri == fotoCamara) runCatching { java.io.File(cacheDir, "fotos/camara.jpg").delete() }
+            if (dataUrl == null) com.mensaje = "err" to "No se pudo guardar la foto: no se pudo leer la imagen."
+            else com.ponerFoto(tipo, dataUrl)
+        }
+    }
+
+    private val accionesComidas = object : AccionesComidas {
+        override fun elegirPrograma() = elegirProgramaArchivo.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*"))
+        override fun elegirFoto(tipo: String) { fotoTipo = tipo; elegirFotoGaleria.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+        override fun tomarFoto(tipo: String) {
+            fotoTipo = tipo
+            val f = java.io.File(cacheDir, "fotos").apply { mkdirs() }.resolve("camara.jpg")
+            val u = androidx.core.content.FileProvider.getUriForFile(this@MainActivity, "$packageName.archivos", f)
+            fotoCamara = u
+            try { tomarFotoCamara.launch(u) } catch (e: Exception) { com.mensaje = "err" to "No se encontró una app de cámara. Usa \"Elegir de la galería\"." }
+        }
+        override fun enviar() {
+            com.enviando = "Conectando con Google…"
+            pedirToken({ token ->
+                if (token == null) { com.enviando = ""; com.mensaje = "err" to "Google no entregó un permiso de acceso."; return@pedirToken }
+                lifecycleScope.launch { com.subir(token, "genesis-gym-n ${BuildConfig.VERSION_NAME}") }
+            }, { m -> com.enviando = ""; com.mensaje = "err" to "No se pudo enviar a Drive: $m" })
+        }
+    }
+
+    private var eleccionSonido by mutableIntStateOf(0)
+    private var uriSonido by mutableStateOf<Uri?>(null)
+    private val elegirSonidoAviso = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        if (res.resultCode == RESULT_OK) { uriSonido = res.data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java); eleccionSonido++ }
+    }
+    private val accionesAvisos = object : AccionesAvisos {
+        override fun permitirNotificaciones() = pedirNotificaciones.launch(Manifest.permission.POST_NOTIFICATIONS)
+        override fun abrirAlarmasExactas() = startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
+        override fun abrirBateria() = startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+        override fun abrirSonidoCelular() = startActivity(Intent(Settings.ACTION_SOUND_SETTINGS))
+        override fun tieneNotificaciones() = this@MainActivity.tieneNotificaciones()
+        override fun sinRestriccionBateria() = this@MainActivity.sinRestriccionBateria()
+        override fun elegirSonido(actual: Uri?, alarma: Boolean) {
+            elegirSonidoAviso.launch(Intent(RingtoneManager.ACTION_RINGTONE_PICKER)
+                .putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALL)
+                .putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Sonido de los avisos")
+                .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                .putExtra(RingtoneManager.EXTRA_RINGTONE_DEFAULT_URI, Programador.uriSonido(Programador.Sonido(null, alarma, 0)))
+                .putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, actual))
+        }
+    }
+
     // E3: Drive. El token queda solo en memoria; los textos de resultado no incluyen el contenido de los archivos.
     private var driveLectura by mutableStateOf("")
     private var driveEscritura by mutableStateOf("")
@@ -155,13 +233,28 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // Permiso de Drive (drive.file): quien lo pide deja aquí qué hacer con el token o con el error.
+    private var trasToken: ((String?) -> Unit)? = null
+    private var trasError: ((String) -> Unit)? = null
     private val autorizar = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
         try {
             val r = Identity.getAuthorizationClient(this).getAuthorizationResultFromIntent(res.data)
-            escribirPrueba(r.accessToken)
+            trasToken?.invoke(r.accessToken)
         } catch (e: Exception) {
-            driveEscritura = "Google no autorizó el acceso: " + describir(e)
+            trasError?.invoke("Google no autorizó el acceso: " + describir(e))
         }
+    }
+
+    private fun pedirToken(listo: (String?) -> Unit, error: (String) -> Unit) {
+        trasToken = listo; trasError = error
+        val pedido = AuthorizationRequest.builder().setRequestedScopes(listOf(Scope(DriveTexto.ALCANCE))).build()
+        Identity.getAuthorizationClient(this).authorize(pedido)
+            .addOnSuccessListener { r ->
+                val pi = r.pendingIntent
+                if (r.hasResolution() && pi != null) autorizar.launch(IntentSenderRequest.Builder(pi.intentSender).build())
+                else listo(r.accessToken)
+            }
+            .addOnFailureListener { e -> error("Google no autorizó el acceso: " + describir(e)) }
     }
 
     private fun describir(e: Exception): String = when {
@@ -175,14 +268,7 @@ class MainActivity : ComponentActivity() {
 
     private fun conectarYEscribir() {
         driveEscritura = "Conectando con Google…"
-        val pedido = AuthorizationRequest.builder().setRequestedScopes(listOf(Scope(DriveTexto.ALCANCE))).build()
-        Identity.getAuthorizationClient(this).authorize(pedido)
-            .addOnSuccessListener { r ->
-                val pi = r.pendingIntent
-                if (r.hasResolution() && pi != null) autorizar.launch(IntentSenderRequest.Builder(pi.intentSender).build())
-                else escribirPrueba(r.accessToken)
-            }
-            .addOnFailureListener { e -> driveEscritura = "Google no autorizó el acceso: " + describir(e) }
+        pedirToken({ escribirPrueba(it) }, { driveEscritura = it })
     }
 
     private fun escribirPrueba(token: String?) {
@@ -213,6 +299,9 @@ class MainActivity : ComponentActivity() {
         val aperturas = prefs.getInt("aperturas", 0) + if (savedInstanceState == null) 1 else 0
         if (savedInstanceState == null) prefs.edit().putInt("aperturas", aperturas).apply()
         Alarmas.crearCanal(this)
+        Programador.crearCanal(this)
+        runCatching { Programador.reprogramar(this) }
+        intent?.getStringExtra(Programador.EXTRA_VISTA)?.let { abrirVista(it) }
 
         setContent {
             MaterialTheme {
@@ -221,12 +310,15 @@ class MainActivity : ComponentActivity() {
                     BackHandler(enabled = gym.vista == "sesion") { gym.ir("hoy") }
                     Column(modifier = Modifier.safeDrawingPadding()) {
                         Row(modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf("hoy" to "Hoy", "rutina" to "Rutina", "historial" to "Historial", "importar" to "Importar", "pruebas" to "Pruebas").forEach { (v, t) ->
+                            listOf("hoy" to "Hoy", "comidas" to "Comidas", "rutina" to "Rutina", "historial" to "Historial", "importar" to "Importar", "avisos" to "Avisos", "pruebas" to "Pruebas").forEach { (v, t) ->
                                 val activa = gym.vista == v || (v == "hoy" && gym.vista == "sesion")
-                                if (activa) Button(onClick = { gym.ir(v) }) { Text(t) } else OutlinedButton(onClick = { gym.ir(v) }) { Text(t) }
+                                val ir = { if (v == "comidas" && gym.vista != "comidas") com.cargar(); gym.ir(v) }
+                                if (activa) Button(onClick = ir) { Text(t) } else OutlinedButton(onClick = ir) { Text(t) }
                             }
                         }
-                        if (gym.vista != "pruebas") PantallaGimnasio(gym, accionesGym)
+                        if (gym.vista == "comidas") PantallaComidas(com, accionesComidas)
+                        else if (gym.vista == "avisos") PantallaAvisos(this@MainActivity, accionesAvisos, refresco, eleccionSonido, uriSonido)
+                        else if (gym.vista != "pruebas") PantallaGimnasio(gym, accionesGym)
                         else {
                             Row(modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 listOf("Avisos", "Salud", "Drive").forEachIndexed { i, t ->
@@ -243,6 +335,18 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun abrirVista(v: String) { if (v == "comidas") com.cargar(); gym.ir(v) }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        intent.getStringExtra(Programador.EXTRA_VISTA)?.let { abrirVista(it) }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        runCatching { Programador.reprogramar(this) }   // al salir, los avisos quedan al día con lo marcado
     }
 
     override fun onResume() {

@@ -33,6 +33,10 @@ class BaseLocal(context: Context) : SQLiteOpenHelper(context.applicationContext,
     fun borrar(ruta: String) { writableDatabase.delete("docs", "ruta = ?", arrayOf(ruta)) }
 
     fun coleccion(col: String): List<Respaldo.Doc> = leer("SELECT ruta, data FROM docs WHERE col = ?", arrayOf(col))
+    /** Solo las rutas de una colección (para no cargar las fotos completas en memoria). */
+    fun rutas(col: String): List<String> = readableDatabase.rawQuery("SELECT ruta FROM docs WHERE col = ?", arrayOf(col)).use { c ->
+        val l = mutableListOf<String>(); while (c.moveToNext()) l.add(c.getString(0)); l
+    }
     fun todos(): List<Respaldo.Doc> = leer("SELECT ruta, data FROM docs", null)
 
     private fun leer(sql: String, args: Array<String>?): List<Respaldo.Doc> = readableDatabase.rawQuery(sql, args).use { c ->

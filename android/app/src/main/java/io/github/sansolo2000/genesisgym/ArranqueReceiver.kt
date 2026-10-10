@@ -10,7 +10,10 @@ class ArranqueReceiver : BroadcastReceiver() {
         when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_MY_PACKAGE_REPLACED,
-            "android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" -> Alarmas.reprogramarPendientes(c)
+            "android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" -> {
+                Alarmas.reprogramarPendientes(c)
+                runCatching { Programador.reprogramar(c) }
+            }
         }
     }
 }
