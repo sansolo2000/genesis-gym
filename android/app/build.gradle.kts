@@ -15,7 +15,7 @@ val llave: String? = System.getenv("GG_KEYSTORE_PATH")
 
 android {
     namespace = "io.github.sansolo2000.genesisgym"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "io.github.sansolo2000.genesisgym"
