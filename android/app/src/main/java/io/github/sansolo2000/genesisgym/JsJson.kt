@@ -16,6 +16,25 @@ import java.security.MessageDigest
 object JsJson {
     fun stringify(e: JsonElement): String = StringBuilder().also { escribir(e, it) }.toString()
 
+    /** Como `JSON.stringify(e, null, 2)`: la forma en que la 2.0 escribe los registro-comida que suben a Drive. */
+    fun indentado(e: JsonElement): String = StringBuilder().also { sangrar(e, it, "") }.toString()
+
+    private fun sangrar(e: JsonElement, sb: StringBuilder, pre: String) {
+        val dentro = "$pre  "
+        when {
+            e is JsonObject && e.isNotEmpty() -> {
+                sb.append("{\n"); var primero = true
+                for ((k, v) in e) { if (!primero) sb.append(",\n"); primero = false; sb.append(dentro); texto(k, sb); sb.append(": "); sangrar(v, sb, dentro) }
+                sb.append('\n').append(pre).append('}')
+            }
+            e is JsonArray && e.isNotEmpty() -> {
+                sb.append("[\n"); e.forEachIndexed { i, v -> if (i > 0) sb.append(",\n"); sb.append(dentro); sangrar(v, sb, dentro) }
+                sb.append('\n').append(pre).append(']')
+            }
+            else -> escribir(e, sb)
+        }
+    }
+
     private fun escribir(e: JsonElement, sb: StringBuilder) {
         when (e) {
             is JsonNull -> sb.append("null")
