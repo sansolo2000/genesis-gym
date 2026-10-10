@@ -11,7 +11,9 @@
   'use strict';
   const FORMATO = 'genesis-respaldo';
   const VERSION = 1;
-  const COLECCIONES = ['config', 'rutinas', 'sesiones', 'imagenes'];
+  // 0.7.5: también las colecciones de Comidas. Antes, un respaldo hecho después de usar Comidas se creaba bien
+  // pero no se podía restaurar ("colección desconocida"). El formato del archivo no cambia (sigue en v1).
+  const COLECCIONES = ['config', 'rutinas', 'sesiones', 'imagenes', 'alimentacion', 'programas_alimentacion', 'comidas', 'fotos'];
   const DIAS_AVISO = 7;
   const TZ = 'America/Santiago';
 
@@ -171,11 +173,11 @@
     if (r && r.error) h += `<div class="note err">${esc(r.error)}</div>`;
     if (r && r.doc) {
       const s = r.resumen, c = s.conteos, a = r.actuales;
-      const hayDatos = (a.sesiones || 0) > 0 || (a.rutinas || 0) > 0;
+      const hayDatos = (a.sesiones || 0) > 0 || (a.rutinas || 0) > 0 || (a.comidas || 0) > 0;
       const bloqueado = hayDatos && !R.respaldadoAhora;
       h += `<div class="note info"><strong>Respaldo válido</strong> (huella verificada).<br>
         ${s.perfil ? `Perfil: ${esc(s.perfil)} · ` : ''}creado el ${esc(fechaHora(s.exportado_en))}${s.app ? ` · origen: ${esc(s.app)}` : ''}<br>
-        Sesiones: <strong>${c.sesiones}</strong>${s.rango ? ` (del ${esc(fechaCorta(s.rango.desde))} al ${esc(fechaCorta(s.rango.hasta))})` : ''} · rutinas: ${c.rutinas} · imágenes: ${c.imagenes} · configuración: ${c.config}</div>
+        Sesiones: <strong>${c.sesiones}</strong>${s.rango ? ` (del ${esc(fechaCorta(s.rango.desde))} al ${esc(fechaCorta(s.rango.hasta))})` : ''} · rutinas: ${c.rutinas} · imágenes: ${c.imagenes} · configuración: ${c.config}${c.comidas || c.fotos ? ` · comidas: ${c.comidas || 0} · fotos de comidas: ${c.fotos || 0}` : ''}</div>
         <p>Hoy este celular tiene <strong>${a.sesiones || 0}</strong> ${(a.sesiones || 0) === 1 ? 'sesión' : 'sesiones'} y <strong>${a.rutinas || 0}</strong> ${(a.rutinas || 0) === 1 ? 'rutina' : 'rutinas'}. Se reemplazarán por los datos del respaldo.</p>`;
       if (bloqueado) h += `<div class="note warn">Antes de reemplazar, crea un respaldo de lo que hay ahora (botón "Crear respaldo" de arriba). Así no pierdes nada si te equivocas de archivo.</div>`;
       else if (!r.confirmar) h += `<button class="btn danger" data-gg-restaurar ${r.trabajando ? 'disabled' : ''}>Reemplazar todo con este respaldo</button>`;

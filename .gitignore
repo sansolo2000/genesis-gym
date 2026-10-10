@@ -3,6 +3,3 @@
 migracion-*.json
 rutina*.json
 *.csv
-
-# Datos de ejemplo inventados de las pruebas (sin datos personales)
-!pruebas/datos-ejemplo/**

@@ -199,6 +199,27 @@ function png(w, h) {
   // K. Las comidas entran en el respaldo
   const docs = await p.evaluate(async () => (await GGDB.todos()).map(d => d.ruta));
   ok(docs.some(r => r.startsWith('comidas/')) && docs.some(r => r.startsWith('fotos/')) && docs.includes('alimentacion/programa_activo'), 'comidas, fotos y programa están en la base local (y por eso en el respaldo)');
+  // L. El respaldo con comidas se puede restaurar en otro celular (0.7.5: antes se rechazaba por "colección desconocida")
+  await p.click('nav [data-vista="historial"]'); await p.waitForSelector('[data-gg-respaldar]');
+  const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 8000 }).catch(() => null), p.click('[data-gg-respaldar]')]);
+  const fResp = path.join(tmp, 'respaldo.json'); if (dl) await dl.saveAs(fResp);
+  const resp = dl ? JSON.parse(fs.readFileSync(fResp, 'utf8')) : { documentos: [] };
+  ok(['comidas/', 'fotos/', 'alimentacion/', 'programas_alimentacion/'].every(c => resp.documentos.some(d => d.ruta.startsWith(c))), 'el respaldo trae comidas, fotos, intercambios y el programa');
+  const ctx2 = await E.nuevoContexto(); const q = await ctx2.newPage(); q.on('pageerror', e => errores.push(e.message));
+  await q.goto(E.url); await q.waitForSelector('nav.tabs');
+  await q.click('nav [data-vista="historial"]'); await q.waitForSelector('#gg-archivo-respaldo');
+  if (dl) await q.setInputFiles('#gg-archivo-respaldo', fResp);
+  await q.waitForSelector('[data-gg-restaurar]', { timeout: 8000 }).catch(() => {});
+  const prevR = await q.textContent('#gg-respaldo');
+  ok(prevR.includes('Respaldo válido') && !prevR.includes('desconocida') && /comidas: \d+/.test(prevR), 'restaurar: el respaldo con comidas es válido y la vista previa cuenta las comidas');
+  if (await q.isVisible('[data-gg-restaurar]')) { await q.click('[data-gg-restaurar]'); await q.waitForSelector('[data-gg-restaurar-si]'); await Promise.all([q.waitForEvent('load'), q.click('[data-gg-restaurar-si]')]); await q.waitForSelector('nav.tabs'); }
+  const enQ = new Map((await q.evaluate(() => GGDB.todos())).map(d => [d.ruta, JSON.stringify(d.data)]));
+  ok(resp.documentos.length > 0 && resp.documentos.filter(d => !d.ruta.startsWith('imagenes/')).every(d => enQ.get(d.ruta) === JSON.stringify(d.data)), 'restaurar: comidas, fotos y programa quedan idénticos en el otro celular');
+  await q.click('nav [data-vista="comidas"]'); await q.waitForSelector('#com-almuerzo', { timeout: 8000 }).catch(() => {});
+  await q.evaluate(d => { GGComidas._estado.dia = d; GGComidas._estado.eligiendo = null; self.GGRepintarComidas(); }, D);  // el día con la foto
+  await q.waitForSelector('#com-almuerzo img', { timeout: 5000 }).catch(() => {});
+  ok(await q.isVisible('#com-almuerzo img'), 'restaurar: la foto de la comida se ve en el otro celular');
+  await ctx2.close();
 
   ok(E.externas.length === 0, 'ningún otro pedido a internet' + (E.externas.length ? ': ' + [...new Set(E.externas)].join(', ') : ''));
   ok(errores.length === 0, 'sin errores de JavaScript' + (errores.length ? ': ' + errores.join(' | ') : ''));
