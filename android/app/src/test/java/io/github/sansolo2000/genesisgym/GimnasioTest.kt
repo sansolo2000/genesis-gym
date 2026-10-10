@@ -96,4 +96,18 @@ class GimnasioTest {
         assertEquals("lun, 12 oct", Gimnasio.fechaCorta("2026-10-12"))
         assertEquals("Lunes, 12 de octubre", Gimnasio.fechaLarga("2026-10-12"))
     }
+
+    @Test fun bloques_y_pendientes_de_la_sesion() {
+        fun ej(vararg series: String) = Json.parseToJsonElement("""{"series":[${series.joinToString(",")}]}""").jsonObject
+        val cal = """{"tipo":"calentamiento","modo":"tiempo","carga_real_kg":null,"reps_reales":null,"seg_reales":null}"""
+        val ef = """{"tipo":"efectiva","modo":"rango","carga_real_kg":null,"reps_reales":null,"seg_reales":null}"""
+        val efHecha = """{"tipo":"efectiva","modo":"rango","carga_real_kg":20,"reps_reales":12,"seg_reales":null}"""
+        val estir = """{"tipo":"efectiva","modo":"tiempo","carga_real_kg":null,"reps_reales":null,"seg_reales":null}"""
+        assertEquals("cal", Gimnasio.bloqueDe(ej(cal)))
+        assertEquals("fuerza", Gimnasio.bloqueDe(ej(cal.replace("tiempo", "reps"), ef)))
+        assertEquals("elong", Gimnasio.bloqueDe(ej(estir, estir)))
+        val b = Json.parseToJsonElement("""{"ejercicios":[{"series":[$efHecha]},{"series":[$efHecha,$ef]}]}""").jsonObject
+        assertEquals(1, Gimnasio.primerPendiente(b))
+        assertTrue(Gimnasio.ejercicioListo(b.arr("ejercicios")[0]))
+    }
 }

@@ -152,6 +152,24 @@ object Programador {
         return PendingIntent.getBroadcast(c, BASE_CODIGO + i, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 
+    // ---------- 0.6.0: fin del descanso en la sesión ----------
+    private const val CODIGO_DESCANSO = 1999
+
+    private fun pendienteDescanso(c: Context, texto: String?): PendingIntent {
+        val intent = Intent(c, RecordatorioReceiver::class.java)
+        if (texto != null) intent.putExtra(EXTRA_TITULO, "Descanso terminado").putExtra(EXTRA_TEXTO, texto).putExtra(EXTRA_VISTA, "sesion")
+        return PendingIntent.getBroadcast(c, CODIGO_DESCANSO, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    }
+
+    /** Programa el aviso de fin de descanso (suena con la configuración de Avisos, aunque la pantalla esté apagada). */
+    fun programarDescanso(c: Context, finMs: Long, texto: String) {
+        val am = c.getSystemService(AlarmManager::class.java)
+        if (am.canScheduleExactAlarms()) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, finMs, pendienteDescanso(c, texto))
+        else am.setWindow(AlarmManager.RTC_WAKEUP, finMs, 60_000L, pendienteDescanso(c, texto))
+    }
+
+    fun cancelarDescanso(c: Context) { c.getSystemService(AlarmManager::class.java).cancel(pendienteDescanso(c, null)) }
+
     /** Borra los avisos anteriores y programa los de los próximos 7 días. Devuelve cuántos quedaron. */
     fun reprogramar(c: Context): Int {
         val am = c.getSystemService(AlarmManager::class.java)

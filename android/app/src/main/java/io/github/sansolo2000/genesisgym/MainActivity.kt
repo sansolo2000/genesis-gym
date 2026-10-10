@@ -300,6 +300,7 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) prefs.edit().putInt("aperturas", aperturas).apply()
         Alarmas.crearCanal(this)
         Programador.crearCanal(this)
+        gym.alDescanso = { fin, texto -> runCatching { if (fin == null) Programador.cancelarDescanso(this) else Programador.programarDescanso(this, fin, texto) } }
         runCatching { Programador.reprogramar(this) }
         intent?.getStringExtra(Programador.EXTRA_VISTA)?.let { abrirVista(it) }
 
@@ -307,9 +308,16 @@ class MainActivity : ComponentActivity() {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     var pestana by remember { mutableIntStateOf(0) }
-                    BackHandler(enabled = gym.vista == "sesion") { gym.ir("hoy") }
+                    BackHandler(enabled = gym.vista == "sesion") {
+                        when {
+                            gym.ficha != null -> gym.ficha = null
+                            gym.sesVista == "descanso" -> { gym.cancelarDescanso(); gym.sesVista = "mapa" }
+                            gym.sesVista != "mapa" -> gym.sesVista = "mapa"
+                            else -> gym.ir("hoy")
+                        }
+                    }
                     Column(modifier = Modifier.safeDrawingPadding()) {
-                        Row(modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (gym.vista != "sesion") Row(modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             listOf("hoy" to "Hoy", "comidas" to "Comidas", "rutina" to "Rutina", "historial" to "Historial", "importar" to "Importar", "avisos" to "Avisos", "pruebas" to "Pruebas").forEach { (v, t) ->
                                 val activa = gym.vista == v || (v == "hoy" && gym.vista == "sesion")
                                 val ir = { if (v == "comidas" && gym.vista != "comidas") com.cargar(); gym.ir(v) }
@@ -337,7 +345,10 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun abrirVista(v: String) { if (v == "comidas") com.cargar(); gym.ir(v) }
+    private fun abrirVista(v: String) {
+        if (v == "comidas") com.cargar()
+        if (v == "sesion" && gym.borrador == null) gym.ir("hoy") else gym.ir(v)
+    }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)

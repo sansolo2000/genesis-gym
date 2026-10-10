@@ -103,6 +103,22 @@ object Gimnasio {
         return r
     }
 
+    /**
+     * 0.6.0: bloque de un ejercicio de la sesión, deducido de sus series (la rutina no trae bloques):
+     * todas de calentamiento → "cal"; todas por tiempo → "elong" (elongación); el resto → "fuerza".
+     */
+    fun bloqueDe(ej: JsonObject): String {
+        val se = ej.arr("series")
+        return when {
+            se.isNotEmpty() && se.all { it.txt("tipo") == "calentamiento" } -> "cal"
+            se.isNotEmpty() && se.all { it.txt("modo") == "tiempo" } -> "elong"
+            else -> "fuerza"
+        }
+    }
+    fun ejercicioListo(ej: JsonObject) = ej.arr("series").all { registrada(it) }
+    /** Primer ejercicio con alguna serie sin anotar; -1 si todo está anotado. */
+    fun primerPendiente(b: JsonObject): Int = b.arr("ejercicios").indexOfFirst { !ejercicioListo(it) }
+
     fun registrada(se: JsonObject) = !se.esNulo("carga_real_kg") || !se.esNulo("reps_reales") || !se.esNulo("seg_reales")
     fun seriesRegistradas(s: JsonObject) = s.arr("ejercicios").sumOf { e -> e.arr("series").count { registrada(it) } }
     fun seriesTotales(s: JsonObject) = s.arr("ejercicios").sumOf { it.arr("series").size }

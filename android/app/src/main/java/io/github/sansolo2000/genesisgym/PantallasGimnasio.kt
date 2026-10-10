@@ -72,6 +72,17 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
     var tick by mutableIntStateOf(0)
     var editarPerfil by mutableStateOf(false)
 
+    // 0.6.0: sesión por mapa → hoja por ejercicio → descanso → cierre
+    var sesVista by mutableStateOf("mapa")
+    var idxEj by mutableIntStateOf(0)
+    var verFicha by mutableStateOf(false)
+    var descansoFin by mutableStateOf<Long?>(null)
+    var descansoTotal by mutableIntStateOf(0)
+    var descansoDe by mutableStateOf<Pair<Int, Int>?>(null)
+    var aviso by mutableStateOf("")
+    /** La actividad programa (fin en ms, texto) o cancela (null) el aviso de fin de descanso. */
+    var alDescanso: (Long?, String) -> Unit = { _, _ -> }
+
     fun refrescar() { tick++; alCambiar() }
 
     // ---------- datos ----------
@@ -96,6 +107,8 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
         inicioApertura = if (existente == null) System.currentTimeMillis() else null
         guardado = if (existente != null) "Guardado ✓" else "Sin guardar: se guarda al anotar la primera serie"
         guardadoError = false; errorCierre = ""; confirmarBorrado = false; editarFecha = false; errorFecha = ""
+        sesVista = "mapa"; verFicha = false; aviso = ""; cancelarDescanso()
+        idxEj = Gimnasio.primerPendiente(borrador!!).coerceAtLeast(0)
         vista = "sesion"
     }
 
@@ -109,7 +122,65 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
         refrescar()
     }
 
-    fun ir(v: String) { if (vista == "sesion" && v != "sesion") borrador = null; vista = v; confirmarBorrado = false; errorCierre = ""; editarFecha = false }
+    fun ir(v: String) { if (vista == "sesion" && v != "sesion") { borrador = null; cancelarDescanso() }; vista = v; confirmarBorrado = false; errorCierre = ""; editarFecha = false }
+
+    // ---------- 0.6.0: hoja y descanso ----------
+    fun abrirEjercicio(i: Int) { idxEj = i; verFicha = false; sesVista = "hoja" }
+
+    /** ✓ de una serie: si no tiene valores, copia lo indicado (como "= Indicado"); después parte el descanso. */
+    fun marcarSerie(i: Int, k: Int) {
+        val b = borrador ?: return
+        val se = b.arr("ejercicios")[i].arr("series")[k]
+        if (!Gimnasio.registrada(se)) {
+            val copia = Gimnasio.copiarIndicado(b, i, k)
+            if (!Gimnasio.registrada(copia.arr("ejercicios")[i].arr("series")[k])) {
+                aviso = "Escribe las repeticiones (y la carga) de la serie ${k + 1} antes de marcarla."; return
+            }
+            guardar(copia)
+        }
+        aviso = ""
+        iniciarDescanso(i, k)
+    }
+
+    fun siguienteDe(i: Int, k: Int): Pair<Int, Int>? {
+        val ejs = borrador?.arr("ejercicios") ?: return null
+        if (k + 1 < ejs[i].arr("series").size) return i to k + 1
+        return if (i + 1 < ejs.size) i + 1 to 0 else null
+    }
+
+    fun iniciarDescanso(i: Int, k: Int) {
+        val ej = borrador?.arr("ejercicios")?.getOrNull(i) ?: return
+        val seg = ej.num("descanso_seg")?.toInt() ?: 0
+        if (seg <= 0) { if (k == ej.arr("series").size - 1) aviso = "Ejercicio listo. Toca \"Siguiente\" cuando quieras."; return }
+        descansoTotal = seg; descansoDe = i to k
+        descansoFin = System.currentTimeMillis() + seg * 1000L
+        sesVista = "descanso"
+        alDescanso(descansoFin, textoSiguiente())
+    }
+
+    fun textoSiguiente(): String {
+        val (i, k) = descansoDe ?: return ""
+        val ejs = borrador?.arr("ejercicios") ?: return ""
+        val sig = siguienteDe(i, k) ?: return "Pasa al cierre de la sesión."
+        val se = ejs[sig.first].arr("series")[sig.second]
+        return if (sig.first == i) "Serie ${sig.second + 1}: ${Gimnasio.prescritoTexto(se)}" else "Siguiente: ${ejs[sig.first].txt("nombre")}"
+    }
+
+    fun masTreinta() { val f = descansoFin ?: return; descansoFin = f + 30_000; descansoTotal += 30; alDescanso(descansoFin, textoSiguiente()) }
+
+    fun cancelarDescanso() { if (descansoFin != null) alDescanso(null, ""); descansoFin = null }
+
+    /** Fin del descanso (por tiempo o tocando "Terminar"): vuelve a la hoja, en el ejercicio que sigue. */
+    fun terminarDescanso(porTiempo: Boolean) {
+        val de = descansoDe
+        if (!porTiempo) alDescanso(null, "")
+        descansoFin = null
+        val sig = de?.let { siguienteDe(it.first, it.second) }
+        if (de != null && sig == null) { sesVista = "cierre"; return }
+        if (sig != null && sig.first != idxEj) { idxEj = sig.first; verFicha = false }
+        sesVista = "hoja"
+        if (porTiempo) aviso = "Descanso terminado."
+    }
 
     fun cerrarSesion() {
         val b = borrador ?: return
@@ -196,12 +267,13 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
 @Composable private fun Tarjeta(contenido: @Composable () -> Unit) =
     Card(modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { contenido() } }
 
-private const val ALARMA = "Detén el entrenamiento y consulta si tienes náuseas, vómitos, dolor abdominal, cansancio extremo o dolor muscular inusual. Esta app no da consejos médicos."
+internal const val ALARMA = "Detén el entrenamiento y consulta si tienes náuseas, vómitos, dolor abdominal, cansancio extremo o dolor muscular inusual. Esta app no da consejos médicos."
 private const val PRUEBA = "Versión de prueba: tus entrenamientos reales se siguen registrando en Génesis Gym 1.0."
 
 @Composable
 fun PantallaGimnasio(g: Gym, acciones: AccionesGym) {
     @Suppress("UNUSED_VARIABLE") val t = g.tick   // se vuelve a dibujar cuando cambian los datos
+    if (g.vista == "sesion" && g.borrador != null) { SesionNueva(g); g.ficha?.let { Ficha(g, it) }; return }
     Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Nota(PRUEBA, MaterialTheme.colorScheme.tertiaryContainer)
         when (g.vista) {
@@ -298,17 +370,15 @@ private fun FilaSesion(g: Gym, s: JsonObject) {
 
 // ---------- Sesión ----------
 @Composable
-private fun Sesion(g: Gym) {
-    val b = g.borrador ?: run { Hoy(g); return }
-    val vista = LocalView.current
-    DisposableEffect(Unit) { vista.keepScreenOn = true; onDispose { vista.keepScreenOn = false } }   // pantalla encendida
-    val sesiones = g.sesiones()
-
-    TextButton(onClick = { g.ir("hoy") }) { Text("‹ Volver") }
+internal fun CierreSesion(g: Gym) {
+    val b = g.borrador ?: return
+    Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    TextButton(onClick = { g.sesVista = "mapa" }) { Text("‹ Mapa") }
     Gris("${Gimnasio.fechaLarga(b.txt("fecha")!!)} · v${b["rutina_version"]}")
     Titulo(b.txt("sesion_nombre") ?: "")
     Text((if (b.txt("estado") == "cerrada") "Cerrada" else "En curso") + " · " + g.guardado,
         color = if (g.guardadoError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+    Gris("${Gimnasio.seriesRegistradas(b)} de ${Gimnasio.seriesTotales(b)} series anotadas.")
     (b["cambios_fecha"] as? kotlinx.serialization.json.JsonArray)?.let { c ->
         if (c.isNotEmpty()) Gris("Fecha corregida. Antes: " + c.joinToString(", ") { Gimnasio.fechaCorta((it as JsonObject).txt("de") ?: "") } + ".")
     }
@@ -321,25 +391,6 @@ private fun Sesion(g: Gym) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { g.cambiarFecha(f.trim()) }) { Text("Guardar fecha") }
             OutlinedButton(onClick = { g.editarFecha = false }) { Text("Cancelar") }
-        }
-    }
-    Nota(ALARMA, MaterialTheme.colorScheme.errorContainer)
-
-    b.arr("ejercicios").forEachIndexed { i, ej ->
-        Tarjeta {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column(Modifier.weight(1f)) {
-                    Gris("${ej["orden"]}")
-                    Sub(ej.txt("nombre") ?: "")
-                    Gris("Descanso ${ej["descanso_seg"]} s")
-                    ej.txt("notas")?.takeIf { it.isNotEmpty() }?.let { Text(it) }
-                }
-                OutlinedButton(onClick = { g.ficha = ej.txt("ejercicio_id") }) { Text("Ficha") }
-            }
-            ej.arr("series").forEachIndexed { k, se ->
-                HorizontalDivider()
-                SerieV(g, b, i, k, ej.txt("ejercicio_id")!!, se, sesiones)
-            }
         }
     }
 
@@ -382,6 +433,7 @@ private fun Sesion(g: Gym) {
         }
     }
 }
+}
 
 @Composable
 private fun SerieV(g: Gym, b: JsonObject, i: Int, k: Int, ejId: String, se: JsonObject, sesiones: List<JsonObject>) {
@@ -412,7 +464,7 @@ private fun SerieV(g: Gym, b: JsonObject, i: Int, k: Int, ejId: String, se: Json
     if (!se.esNulo("carga_prescrita_kg") || modo != "rango") TextButton(onClick = { g.guardar(Gimnasio.copiarIndicado(g.borrador!!, i, k)) }) { Text("= Indicado") }
 }
 
-private fun anotar(g: Gym, i: Int, k: Int, clave: String, texto: String, entero: Boolean) {
+internal fun anotar(g: Gym, i: Int, k: Int, clave: String, texto: String, entero: Boolean) {
     when (val p = Gimnasio.parseNum(texto, entero)) {
         is Gimnasio.Num.Error -> { g.guardado = "Valor no válido: usa solo números (decimales con coma o punto)."; g.guardadoError = true }
         is Gimnasio.Num.Valor -> g.guardar(Gimnasio.conValorSerie(g.borrador!!, i, k, clave, p.v))
@@ -545,7 +597,7 @@ private fun Importar(g: Gym, a: AccionesGym) {
 }
 
 @Composable
-private fun FichaImagenes(g: Gym, id: String, nombre: String) {
+internal fun FichaImagenes(g: Gym, id: String, nombre: String) {
     val img = g.imagenes?.meta(id, g.base)
     val srcs = (img?.get("srcs") as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content } ?: emptyList()
     if (img == null || srcs.isEmpty()) { Gris("Sin imagen todavía. Solo se agregan imágenes con licencia abierta."); return }
