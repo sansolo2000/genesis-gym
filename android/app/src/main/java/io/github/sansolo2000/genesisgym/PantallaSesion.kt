@@ -72,22 +72,23 @@ import kotlinx.serialization.json.JsonPrimitive
  * (registrar / cómo se hace) y descanso con cuenta regresiva. Tema oscuro solo en la sesión.
  * Los datos son los mismos de antes: el registro de la sesión no cambia de formato.
  */
-private val FONDO = Color(0xFF111315)
-private val CAJA = Color(0xFF1B1E21)
-private val CAJA2 = Color(0xFF24282C)
-private val LINEA = Color(0xFF30353A)
-private val TEXTO = Color(0xFFF2F1EC)
-private val GRIS = Color(0xFFA3A8AD)
-private val AMBAR = Color(0xFFF0A43A)
-private val VERDE = Color(0xFF6CC3A0)
-private val AZUL = Color(0xFF8FB7E8)
+internal val FONDO = Color(0xFF111315)
+internal val CAJA = Color(0xFF1B1E21)
+internal val CAJA2 = Color(0xFF24282C)
+internal val LINEA = Color(0xFF30353A)
+internal val TEXTO = Color(0xFFF2F1EC)
+internal val GRIS = Color(0xFFA3A8AD)
+internal val AMBAR = Color(0xFFF0A43A)
+internal val VERDE = Color(0xFF6CC3A0)
+internal val AZUL = Color(0xFF8FB7E8)
 
-private val OSCURO = darkColorScheme(
+internal val OSCURO = darkColorScheme(
     primary = AMBAR, onPrimary = Color(0xFF1A1300), secondary = VERDE, onSecondary = Color(0xFF0E1F18),
     background = FONDO, onBackground = TEXTO, surface = CAJA, onSurface = TEXTO, surfaceVariant = CAJA2, onSurfaceVariant = GRIS,
     outline = LINEA, error = Color(0xFFFF8A7A), errorContainer = Color(0xFF4A2420), onErrorContainer = Color(0xFFFFDAD4),
     primaryContainer = Color(0xFF3A2A10), onPrimaryContainer = TEXTO, secondaryContainer = Color(0xFF1E3A2F), onSecondaryContainer = TEXTO,
-    tertiaryContainer = CAJA2, onTertiaryContainer = TEXTO
+    tertiaryContainer = CAJA2, onTertiaryContainer = TEXTO, tertiary = AZUL, onTertiary = FONDO,
+    surfaceContainer = CAJA, surfaceContainerHigh = CAJA2, surfaceContainerHighest = Color(0xFF2C3135), surfaceContainerLow = CAJA, surfaceContainerLowest = FONDO
 )
 
 private val NOMBRE_BLOQUE = mapOf("cal" to "CALENTAMIENTO", "fuerza" to "FUERZA", "elong" to "ELONGACIÓN")

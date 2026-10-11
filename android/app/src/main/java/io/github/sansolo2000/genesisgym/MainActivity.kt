@@ -64,6 +64,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.ui.unit.dp
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -300,13 +304,19 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) prefs.edit().putInt("aperturas", aperturas).apply()
         Alarmas.crearCanal(this)
         Programador.crearCanal(this)
+        // Fondo oscuro: íconos claros en las barras de estado y de navegación.
+        androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false; isAppearanceLightNavigationBars = false
+        }
+        window.decorView.setBackgroundColor(android.graphics.Color.parseColor("#111315"))
         gym.alDescanso = { fin, texto -> runCatching { if (fin == null) Programador.cancelarDescanso(this) else Programador.programarDescanso(this, fin, texto) } }
         runCatching { Programador.reprogramar(this) }
         intent?.getStringExtra(Programador.EXTRA_VISTA)?.let { abrirVista(it) }
 
         setContent {
-            MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
+            // 0.7.0: el tema oscuro del mockup en toda la app (pedido de Héctor, 11-oct)
+            MaterialTheme(colorScheme = OSCURO) {
+                Surface(modifier = Modifier.fillMaxSize(), color = FONDO, contentColor = TEXTO) {
                     var pestana by remember { mutableIntStateOf(0) }
                     BackHandler(enabled = gym.vista == "sesion") {
                         when {
@@ -321,7 +331,7 @@ class MainActivity : ComponentActivity() {
                             listOf("hoy" to "Hoy", "comidas" to "Comidas", "rutina" to "Rutina", "historial" to "Historial", "importar" to "Importar", "avisos" to "Avisos", "pruebas" to "Pruebas").forEach { (v, t) ->
                                 val activa = gym.vista == v || (v == "hoy" && gym.vista == "sesion")
                                 val ir = { if (v == "comidas" && gym.vista != "comidas") com.cargar(); gym.ir(v) }
-                                if (activa) Button(onClick = ir) { Text(t) } else OutlinedButton(onClick = ir) { Text(t) }
+                                Pestana(t, activa, ir)
                             }
                         }
                         if (gym.vista == "comidas") PantallaComidas(com, accionesComidas)
@@ -363,6 +373,22 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         refresco++   // al volver de Ajustes o de una notificación, se vuelven a leer permisos y avisos
+    }
+
+    /** Pestaña con la forma del mockup: píldora ámbar si está activa, gris oscuro si no. */
+    @Composable
+    private fun Pestana(texto: String, activa: Boolean, alTocar: () -> Unit) {
+        androidx.compose.foundation.layout.Box(
+            Modifier.heightIn(min = 44.dp)
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(99.dp))
+                .background(if (activa) AMBAR else CAJA)
+                .clickable(onClick = alTocar)
+                .padding(horizontal = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(texto, color = if (activa) androidx.compose.ui.graphics.Color(0xFF1A1300) else GRIS,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+        }
     }
 
     private fun tieneNotificaciones() =
