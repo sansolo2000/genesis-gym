@@ -69,8 +69,10 @@ object Recordatorios {
             }
             if (cfg.entrenamiento) {
                 val cuando = en(cfg.horaEntrenamiento)
-                if (cuando != null) for ((ds, id, nombre) in sesionesRutina)
-                    if (ds == Gimnasio.diaDe(f) && "${f}_$id" !in registradas)
+                // D-01 (QA): si ese día ya hay CUALQUIER sesión registrada (por ejemplo, la A movida a un miércoles), no se avisa.
+                val yaEntreno = registradas.any { it.startsWith("${f}_") }
+                if (cuando != null && !yaEntreno) for ((ds, _, nombre) in sesionesRutina)
+                    if (ds == Gimnasio.diaDe(f))
                         lista.add(Recordatorio(cuando, ENTRENAMIENTO, "Entrenamiento · ${cfg.horaEntrenamiento.trim()}", nombre, "hoy"))
             }
             if (cfg.reporte) en(cfg.horaReporte)?.let { lista.add(Recordatorio(it, REPORTE, "Reporte del día · ${cfg.horaReporte.trim()}", TEXTO_REPORTE, "hoy")) }

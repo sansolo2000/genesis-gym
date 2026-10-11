@@ -49,6 +49,14 @@ class RecordatoriosTest {
         assertTrue(Recordatorios.calcular(cfg.copy(horaEntrenamiento = ""), null, sesiones, emptySet(), ahora).isEmpty())
     }
 
+    @Test fun entrenamiento_no_avisa_si_ese_dia_ya_hay_otra_sesion_registrada() {
+        // D-01: la A (lunes) registrada un miércoles calla el aviso de la B de ese miércoles; los demás días siguen igual.
+        val cfg = Recordatorios.Config(entrenamiento = true, horaEntrenamiento = "18:30")
+        val r = Recordatorios.calcular(cfg, null, sesiones, setOf("2026-10-07_a"), ahora)
+        assertEquals(listOf("2026-10-05", "2026-10-09"), r.map { it.cuando.toLocalDate().toString() })
+        assertEquals(listOf("Sesión A", "Sesión C"), r.map { it.texto })
+    }
+
     @Test fun reporte_diario_y_se_juntan_los_del_mismo_minuto() {
         val cfg = Recordatorios.Config(tareas = true, reporte = true, horaReporte = "21:00")
         val r = Recordatorios.calcular(cfg, EstadoComidas(programa()), sesiones, emptySet(), ahora)
