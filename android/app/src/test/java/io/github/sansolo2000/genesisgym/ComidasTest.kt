@@ -127,17 +127,21 @@ class ComidasTest {
         assertTrue(r.errores.toString(), r.ok)   // los campos nuevos nunca bloquean (la 2.0 los ignora)
         assertTrue(r.avisos.contains("compras[1].items[1].nombre: falta; ese ítem se ignora."))
         assertTrue(r.avisos.contains("compras[2].fecha: fecha inválida; esa compra se ignora."))
-        assertTrue(r.avisos.contains("preparaciones.plato-pollo.receta: no trae mise_en_place ni pasos; se ignora."))
+        assertTrue(r.avisos.toString(), r.avisos.contains("cocinas[1]: no trae mise_en_place ni pasos; se ignora."))
+        assertTrue(r.avisos.toString(), r.avisos.contains("cocinas[1].produce: \"no-existe\" no existe en preparaciones."))
         val compras = Comidas.compras(obj)
         assertEquals(listOf("super-ej", "feria-ej"), compras.map { it.id })
         assertEquals("Feria", compras[1].titulo)
         assertEquals(1, compras[1].items.size)
         assertEquals("pechuga", compras[0].items[1].nota)
-        val receta = Comidas.receta((obj!!["preparaciones"] as JsonObject)["plato-lentejas"] as JsonObject)!!
-        assertEquals("12", receta.pasos[0].minutos)
-        assertEquals("Olla a presión", receta.pasos[1].olla)
-        assertEquals("cubos", receta.mise[1].corte)
-        assertEquals(null, Comidas.receta((obj["preparaciones"] as JsonObject)["plato-pollo"] as JsonObject))
+        val cocinas = Comidas.cocinas(obj)
+        assertEquals(listOf("tanda-ej"), cocinas.map { it.id })   // la vacía se omite
+        val k = cocinas[0]
+        assertEquals("2026-10-04", k.fecha)
+        assertEquals(listOf("plato-lentejas", "plato-pollo"), k.produce)
+        assertEquals("12", k.pasos[0].minutos)
+        assertEquals("Olla a presión", k.pasos[1].olla)
+        assertEquals("cubos", k.mise[1].corte)
         // sin los campos nuevos, el resultado es el mismo de la 2.0
         assertEquals(Comidas.validarPrograma(Json.parseToJsonElement(texto)).errores, r.errores)
     }

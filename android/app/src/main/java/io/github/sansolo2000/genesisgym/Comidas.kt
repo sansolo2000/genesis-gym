@@ -158,7 +158,9 @@ object Comidas {
     data class Compra(val id: String, val fecha: String, val lugar: String, val titulo: String, val items: List<ItemCompra>)
     data class Mise(val item: String, val cantidad: String, val corte: String?)
     data class Paso(val olla: String?, val texto: String, val minutos: String?)
-    data class Receta(val rinde: String?, val mise: List<Mise>, val pasos: List<Paso>, val porcionado: String?)
+    /** Una sesión de cocina (p. ej. la tanda del domingo): se muestra solo su día, en Cocinar. */
+    data class Cocina(val id: String, val fecha: String, val titulo: String, val hora: String?, val produce: List<String>,
+                      val mise: List<Mise>, val pasos: List<Paso>, val porcionado: String?)
 
     private fun tx(o: JsonObject?, k: String): String? = (o?.get(k) as? JsonPrimitive)?.let { if (it.isString) it.content else js(it) }?.trim()?.takeIf { it.isNotEmpty() }
 
@@ -175,20 +177,23 @@ object Comidas {
         Compra(tx(o, "id") ?: "compra-$i", fecha, lugar, tx(o, "titulo") ?: (lugar.replaceFirstChar { it.uppercase() }.ifEmpty { "Compra" }), items)
     }.sortedBy { it.fecha }
 
-    /** Receta de una preparación (campo opcional "receta"). null si no trae. */
-    fun receta(prep: JsonObject?): Receta? {
-        val r = prep?.get("receta") as? JsonObject ?: return null
-        val mise = ((r["mise_en_place"] as? JsonArray) ?: JsonArray(emptyList())).mapNotNull { x ->
-            val o = x as? JsonObject ?: return@mapNotNull null
-            Mise(tx(o, "item") ?: return@mapNotNull null, tx(o, "cantidad") ?: "", tx(o, "corte"))
+    /** Sesiones de cocina del programa (campo opcional "cocinas"), ordenadas por fecha. */
+    fun cocinas(programa: JsonObject?): List<Cocina> = ((programa?.get("cocinas") as? JsonArray) ?: JsonArray(emptyList())).mapIndexedNotNull { i, e ->
+        val o = e as? JsonObject ?: return@mapIndexedNotNull null
+        val fecha = tx(o, "fecha") ?: return@mapIndexedNotNull null
+        if (!fechaOk(JsonPrimitive(fecha))) return@mapIndexedNotNull null
+        val mise = ((o["mise_en_place"] as? JsonArray) ?: JsonArray(emptyList())).mapNotNull { x ->
+            val m = x as? JsonObject ?: return@mapNotNull null
+            Mise(tx(m, "item") ?: return@mapNotNull null, tx(m, "cantidad") ?: "", tx(m, "corte"))
         }
-        val pasos = ((r["pasos"] as? JsonArray) ?: JsonArray(emptyList())).mapNotNull { x ->
-            val o = x as? JsonObject ?: return@mapNotNull null
-            Paso(tx(o, "olla"), tx(o, "texto") ?: return@mapNotNull null, tx(o, "minutos"))
+        val pasos = ((o["pasos"] as? JsonArray) ?: JsonArray(emptyList())).mapNotNull { x ->
+            val p = x as? JsonObject ?: return@mapNotNull null
+            Paso(tx(p, "olla"), tx(p, "texto") ?: return@mapNotNull null, tx(p, "minutos"))
         }
-        if (mise.isEmpty() && pasos.isEmpty()) return null
-        return Receta(tx(r, "rinde"), mise, pasos, tx(r, "porcionado"))
-    }
+        if (mise.isEmpty() && pasos.isEmpty()) return@mapIndexedNotNull null
+        val produce = ((o["produce"] as? JsonArray) ?: JsonArray(emptyList())).mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
+        Cocina(tx(o, "id") ?: "cocina-$i", fecha, tx(o, "titulo") ?: "Cocina", tx(o, "hora"), produce, mise, pasos, tx(o, "porcionado"))
+    }.sortedBy { it.fecha + (it.hora ?: "") }
 
     /** Avisos (no bloquean) sobre compras y recetas mal formadas. */
     fun avisosExtras(o: JsonObject): List<String> {
@@ -203,10 +208,18 @@ object Comidas {
             if (items == null || items.isEmpty()) a.add("compras[$i].items: no hay ítems.")
             items?.forEachIndexed { k, it -> if (tx(it as? JsonObject, "nombre") == null) a.add("compras[$i].items[$k].nombre: falta; ese ítem se ignora.") }
         }
-        for ((id, pr) in (o["preparaciones"] as? JsonObject) ?: JsonObject(emptyMap())) {
-            val r = (pr as? JsonObject)?.get("receta") ?: continue
-            if (r !is JsonObject) { a.add("preparaciones.$id.receta: no es un objeto; se ignora."); continue }
-            if (receta(pr) == null) a.add("preparaciones.$id.receta: no trae mise_en_place ni pasos; se ignora.")
+        val k = o["cocinas"]
+        if (k != null && k !is JsonArray) a.add("cocinas: debe ser una lista; se ignora.")
+        val preps = (o["preparaciones"] as? JsonObject)?.keys ?: emptySet()
+        (k as? JsonArray)?.forEachIndexed { i, e ->
+            val x = e as? JsonObject
+            if (x == null) { a.add("cocinas[$i]: no es un objeto; se ignora."); return@forEachIndexed }
+            if (!fechaOk(x["fecha"])) a.add("cocinas[$i].fecha: fecha inválida; esa cocina se ignora.")
+            if ((x["mise_en_place"] as? JsonArray).isNullOrEmpty() && (x["pasos"] as? JsonArray).isNullOrEmpty()) a.add("cocinas[$i]: no trae mise_en_place ni pasos; se ignora.")
+            ((x["produce"] as? JsonArray) ?: JsonArray(emptyList())).forEach { p ->
+                val id = (p as? JsonPrimitive)?.content
+                if (id == null || id !in preps) a.add("cocinas[$i].produce: \"${js(p)}\" no existe en preparaciones.")
+            }
         }
         return a
     }

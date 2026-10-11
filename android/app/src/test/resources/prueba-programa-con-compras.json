@@ -329,32 +329,6 @@
       "gramos": 5
      }
     ]
-   },
-   "receta": {
-    "rinde": "2 porciones",
-    "mise_en_place": [
-     {
-      "item": "lentejas",
-      "cantidad": "120 g"
-     },
-     {
-      "item": "tomate",
-      "cantidad": "200 g",
-      "corte": "cubos"
-     }
-    ],
-    "pasos": [
-     {
-      "olla": "Olla a presión",
-      "texto": "Cocer las lentejas",
-      "minutos": 12
-     },
-     {
-      "olla": "Olla a presión",
-      "texto": "Agregar el tomate"
-     }
-    ],
-    "porcionado": "Dividir en 2 potes."
    }
   },
   "plato-pollo": {
@@ -383,9 +357,6 @@
       "gramos": 100
      }
     ]
-   },
-   "receta": {
-    "pasos": []
    }
   }
  },
@@ -439,6 +410,49 @@
   {
    "fecha": "2026-99-01",
    "items": []
+  }
+ ],
+ "cocinas": [
+  {
+   "id": "tanda-ej",
+   "fecha": "2026-10-04",
+   "hora": "11:00",
+   "titulo": "Tanda del domingo",
+   "produce": [
+    "plato-lentejas",
+    "plato-pollo"
+   ],
+   "mise_en_place": [
+    {
+     "item": "lentejas",
+     "cantidad": "120 g"
+    },
+    {
+     "item": "tomate",
+     "cantidad": "200 g",
+     "corte": "cubos"
+    }
+   ],
+   "pasos": [
+    {
+     "olla": "Olla a presión",
+     "texto": "Cocer las lentejas",
+     "minutos": 12
+    },
+    {
+     "olla": "Olla a presión",
+     "texto": "Agregar el tomate"
+    }
+   ],
+   "porcionado": "Dividir en 2 potes."
+  },
+  {
+   "id": "vacia",
+   "fecha": "2026-10-06",
+   "produce": [
+    "no-existe"
+   ],
+   "pasos": []
   }
  ]
 }

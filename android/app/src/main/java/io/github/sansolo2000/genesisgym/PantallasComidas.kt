@@ -297,9 +297,10 @@ private fun Dia(c: Com, a: AccionesComidas) {
                     }
                 }
             }
-            if (c.sub == "comprar") { Comprar(c); return@Column }
             // días del programa
-            val fechas = e.dias().mapNotNull { it.s("fecha") }.filter { Comidas.fechaOk(JsonPrimitive(it)) }.sorted()
+            // los días del programa, más los de compras y cocinas (una compra puede ser el día antes del programa)
+            val fechas = (e.dias().mapNotNull { it.s("fecha") } + Comidas.compras(e.programa).map { it.fecha } + Comidas.cocinas(e.programa).map { it.fecha })
+                .filter { Comidas.fechaOk(JsonPrimitive(it)) }.distinct().sorted()
             val estadoLista = rememberLazyListState(initialFirstVisibleItemIndex = (fechas.indexOf(f) - 1).coerceAtLeast(0))
             LazyRow(state = estadoLista, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(fechas) { x ->
@@ -318,8 +319,9 @@ private fun Dia(c: Com, a: AccionesComidas) {
                 }
             }
             c.mensaje?.let { (tipo, texto) -> N(texto, when (tipo) { "err" -> MaterialTheme.colorScheme.errorContainer; "ok" -> MaterialTheme.colorScheme.secondaryContainer; else -> CAJA2 }) }
-            if (d == null) { Caja { G("El programa no trae menú para este día.") } }
+            if (c.sub == "comprar") Comprar(c, f)
             else if (c.sub == "cocinar") Cocinar(c, f, d)
+            else if (d == null) { Caja { G("El programa no trae menú para este día.") } }
             else {
                 val comidas = Comidas.TIPOS.mapNotNull { e.comidaDe(f, it) }
                 val proxima = comidas.firstOrNull { e.estadoDe(Comidas.clave(f, Comidas.js(it["tipo"]))) == null }
@@ -381,9 +383,20 @@ private fun FilaComida(c: Com, f: String, comida: JsonObject, esProxima: Boolean
 private val ORIGEN = mapOf("preparar-en-el-dia" to "Preparar en el día", "cocinar-en-el-dia" to "Cocinar en el día", "mini-tanda" to "De la mini tanda", "tanda-domingo" to "De la tanda del domingo")
 
 @Composable
-private fun Cocinar(c: Com, f: String, d: JsonObject) {
+private fun Cocinar(c: Com, f: String, d: JsonObject?) {
     val e = c.estado
-    val tareas = (d["tareas"] as? JsonArray)?.mapNotNull { it as? JsonObject } ?: emptyList()
+    // 0.10.0: la receta aparece solo el día de su cocina (pedido de Héctor)
+    val cocinasHoy = Comidas.cocinas(e.programa).filter { it.fecha == f }
+    for (k in cocinasHoy) {
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0xFF1B2733)).border(1.dp, AZUL, RoundedCornerShape(14.dp)).padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            EtiC("COCINA" + (k.hora?.let { " · $it" } ?: ""), AZUL)
+            Text(k.titulo, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            if (k.produce.isNotEmpty()) Text("Sale: " + k.produce.joinToString(", ") { id -> (e.preparaciones()[id] as? JsonObject).s("nombre") ?: id }, color = GRIS, fontSize = 14.sp)
+            Button(onClick = { c.verReceta(k.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Ver receta", fontWeight = FontWeight.SemiBold) }
+        }
+    }
+    val tareas = (d?.get("tareas") as? JsonArray)?.mapNotNull { it as? JsonObject } ?: emptyList()
     EtiC("TAREAS DE COCINA", AZUL)
     if (tareas.isEmpty()) G("Este día no tiene tareas de cocina.")
     tareas.forEachIndexed { i, t ->
@@ -399,6 +412,7 @@ private fun Cocinar(c: Com, f: String, d: JsonObject) {
     }
     // Lo que el programa marca para preparar o cocinar ese día (campo "origen"), y de dónde sale el resto.
     val comidas = Comidas.TIPOS.mapNotNull { e.comidaDe(f, it) }
+    if (d == null) return
     val grupos = comidas.groupBy { it.s("origen") ?: "" }.filterKeys { it.isNotEmpty() }
     if (grupos.isNotEmpty()) {
         EtiC("QUÉ SALE DE LA COCINA ESTE DÍA", AZUL)
@@ -413,40 +427,33 @@ private fun Cocinar(c: Com, f: String, d: JsonObject) {
             }
         }
     }
-    EtiC("RECETAS", AZUL)
-    val conReceta = comidas.mapNotNull { x -> Comidas.js(x["preparacion"]).let { id -> (e.preparaciones()[id] as? JsonObject)?.let { id to it } } }
-        .distinctBy { it.first }.filter { Comidas.receta(it.second) != null }
-    if (conReceta.isEmpty()) G("El programa no trae recetas para las comidas de este día.")
-    for ((id, pr) in conReceta) OutlinedButton(onClick = { c.verReceta(id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-        Text("Receta: ${pr.s("nombre") ?: id}", color = TEXTO, modifier = Modifier.fillMaxWidth())
+    if (cocinasHoy.isEmpty()) Comidas.cocinas(e.programa).firstOrNull { it.fecha > f }?.let { k ->
+        TextButton(onClick = { c.dia = k.fecha }) { Text("Próxima cocina: ${k.titulo} · ${Comidas.fechaLarga(k.fecha)} ›") }
     }
 }
 
 @Composable
 private fun RecetaV(c: Com) {
-    val id = c.recetaSel ?: run { c.vista = "dia"; return }
-    val pr = c.estado.preparaciones()[id] as? JsonObject
-    val r = Comidas.receta(pr)
+    val k = Comidas.cocinas(c.estado.programa).firstOrNull { it.id == c.recetaSel } ?: run { c.vista = "dia"; return }
     Column(Modifier.fillMaxSize()) {
-        TextButton(onClick = { c.vista = "dia" }, modifier = Modifier.padding(start = 4.dp, top = 8.dp)) { Text("‹ Cocinar", fontWeight = FontWeight.SemiBold) }
+        TextButton(onClick = { c.vista = "dia" }, modifier = Modifier.padding(start = 4.dp, top = 8.dp)) { Text("‹ Volver", fontWeight = FontWeight.SemiBold) }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            EtiC("RECETA", AZUL)
-            Text(pr.s("nombre") ?: id, fontSize = 30.sp, fontWeight = FontWeight.Bold, lineHeight = 32.sp)
-            if (r == null) { G("Esta preparación no trae receta."); return@Column }
-            r.rinde?.let { ChipC("Rinde: $it") }
-            if (r.mise.isNotEmpty()) {
+            EtiC("RECETA · ${Comidas.fechaLarga(k.fecha).uppercase()}" + (k.hora?.let { " · $it" } ?: ""), AZUL)
+            Text(k.titulo, fontSize = 30.sp, fontWeight = FontWeight.Bold, lineHeight = 32.sp)
+            if (k.produce.isNotEmpty()) Text("Sale: " + k.produce.joinToString(", ") { id -> (c.estado.preparaciones()[id] as? JsonObject).s("nombre") ?: id }, color = GRIS, fontSize = 14.sp)
+            if (k.mise.isNotEmpty()) {
                 EtiC("MISE EN PLACE")
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(CAJA).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    for (m in r.mise) Row(Modifier.fillMaxWidth()) {
+                    for (m in k.mise) Row(Modifier.fillMaxWidth()) {
                         Text(m.item + (m.corte?.let { " · $it" } ?: ""), fontSize = 15.sp, modifier = Modifier.weight(1f))
                         Text(m.cantidad, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
-            if (r.pasos.isNotEmpty()) {
+            if (k.pasos.isNotEmpty()) {
                 EtiC("PASOS")
                 var olla: String? = null
-                r.pasos.forEachIndexed { n, p ->
+                k.pasos.forEachIndexed { n, p ->
                     if (p.olla != null && p.olla != olla) { olla = p.olla; Text(p.olla, color = AMBAR, fontWeight = FontWeight.SemiBold) }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("${n + 1}", color = AMBAR, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.width(22.dp))
@@ -454,17 +461,27 @@ private fun RecetaV(c: Com) {
                     }
                 }
             }
-            r.porcionado?.let { EtiC("PORCIONADO"); Text(it, fontSize = 15.sp) }
+            k.porcionado?.let { EtiC("PORCIONADO"); Text(it, fontSize = 15.sp) }
         }
     }
 }
 
 // ---------- 0.10.0: Comprar (desde el programa; sin Keep) ----------
 @Composable
-private fun Comprar(c: Com) {
-    val compras = Comidas.compras(c.estado.programa)
+private fun Comprar(c: Com, f: String) {
+    // 0.10.0: la lista aparece solo el día de la compra (pedido de Héctor)
+    val todas = Comidas.compras(c.estado.programa)
+    val compras = todas.filter { it.fecha == f }
     if (compras.isEmpty()) {
-        Caja { S("Sin lista de compras"); G("El programa de alimentación activo no trae lista de compras. Cuando Alimentación la incluya en el archivo, aparece aquí.") }
+        Caja {
+            S(if (todas.isEmpty()) "Sin lista de compras" else "Este día no hay compra")
+            G(if (todas.isEmpty()) "El programa de alimentación activo no trae lista de compras. Cuando Alimentación la incluya en el archivo, aparece aquí."
+              else "La lista aparece el día de la compra.")
+        }
+        val hoy = Gimnasio.hoyIso()
+        for (x in todas.filter { it.fecha >= minOf(f, hoy) }.take(4)) OutlinedButton(onClick = { c.dia = x.fecha }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+            Text("${x.titulo} · ${Comidas.fechaLarga(x.fecha)} ›", color = TEXTO, modifier = Modifier.fillMaxWidth())
+        }
         return
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -594,7 +611,9 @@ private fun HojaComida(c: Com, a: AccionesComidas) {
                     if (nota != guardada) OutlinedButton(onClick = { c.anotar(t, nota) }) { Text("Guardar nota") }
                 }
             }
-            if (Comidas.receta(pr) != null) OutlinedButton(onClick = { c.verReceta(Comidas.js(comida["preparacion"])) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Ver receta", color = TEXTO) }
+            Comidas.cocinas(e.programa).firstOrNull { Comidas.js(comida["preparacion"]) in it.produce }?.let { k ->
+                OutlinedButton(onClick = { c.verReceta(k.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Receta: ${k.titulo} (${Comidas.fechaLarga(k.fecha)})", color = TEXTO) }
+            }
             OutlinedButton(onClick = { c.vista = "cambio" }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("⇄ Cambiar por otra comida del programa", color = TEXTO) }
         }
         Button(onClick = { c.cerrarComida() }, modifier = Modifier.padding(16.dp).fillMaxWidth().heightIn(min = 52.dp)) {
