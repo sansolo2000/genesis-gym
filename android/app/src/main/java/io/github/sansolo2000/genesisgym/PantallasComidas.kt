@@ -499,7 +499,6 @@ private fun Comprar(c: Com) {
     }
     G("La lista viene en el programa de Alimentación. Lo marcado queda en este celular y en el respaldo.")
 }
-}
 
 @Composable
 private fun BarraEnvio(c: Com, a: AccionesComidas) {
