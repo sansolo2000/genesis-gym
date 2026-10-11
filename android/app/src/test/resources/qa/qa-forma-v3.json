@@ -1,0 +1,22 @@
+{
+  "formato": "genesis-rutina",
+  "version_formato": "1.0",
+  "rutina": { "id": "qa-forma-v3", "nombre": "QA: forma de la v3 (datos inventados)", "version": 3, "vigente_desde": "2026-10-12", "autor": "Entrenamiento", "notas": "Archivo inventado por QA. No es una rutina." },
+  "sesiones": [
+    { "id": "qa-a", "dia_semana": "lunes", "nombre": "QA A", "duracion_estimada_min": 60, "ejercicios": [
+      { "ejercicio_id": "qa-calentar", "orden": 1, "descanso_seg": 0, "series": [ { "n": 1, "tipo": "calentamiento", "duracion_seg": 300, "carga_kg": null, "carga_indicacion": "suave" } ] },
+      { "ejercicio_id": "qa-fuerza", "orden": 2, "descanso_seg": 90, "series": [
+        { "n": 1, "tipo": "calentamiento", "reps": 12, "carga_kg": 10 },
+        { "n": 2, "tipo": "efectiva", "reps_min": 10, "reps_max": 15, "carga_kg": 20, "rpe_objetivo": 6 } ] },
+      { "ejercicio_id": "qa-elongar", "orden": 3, "descanso_seg": 0, "series": [ { "n": 1, "tipo": "efectiva", "duracion_seg": 30, "carga_kg": null, "carga_indicacion": "peso corporal" } ] } ] },
+    { "id": "qa-b", "dia_semana": "miercoles", "nombre": "QA B", "duracion_estimada_min": 65, "ejercicios": [
+      { "ejercicio_id": "qa-fuerza", "orden": 1, "descanso_seg": 90, "series": [ { "n": 1, "tipo": "efectiva", "reps": 10, "carga_kg": 22.5 } ] } ] },
+    { "id": "qa-c", "dia_semana": "viernes", "nombre": "QA C", "duracion_estimada_min": 65, "ejercicios": [
+      { "ejercicio_id": "qa-elongar", "orden": 1, "descanso_seg": 0, "series": [ { "n": 1, "tipo": "efectiva", "duracion_seg": 30, "carga_kg": null, "carga_indicacion": "peso corporal" } ] } ] }
+  ],
+  "ejercicios": [
+    { "id": "qa-calentar", "nombre": "QA calentar", "descripcion": "Inventado.", "musculos_principales": ["x"], "musculos_secundarios": [], "equipo": "ninguno", "pasos": ["uno", "dos"], "errores_comunes": ["ninguno"] },
+    { "id": "qa-fuerza", "nombre": "QA fuerza", "descripcion": "Inventado.", "musculos_principales": ["x"], "musculos_secundarios": ["y"], "equipo": "máquina", "pasos": ["uno", "dos"], "errores_comunes": ["ninguno"], "precauciones": ["ninguna"] },
+    { "id": "qa-elongar", "nombre": "QA elongar", "descripcion": "Inventado.", "musculos_principales": ["x"], "musculos_secundarios": [], "equipo": "ninguno", "pasos": ["uno", "dos"], "errores_comunes": ["ninguno"] }
+  ]
+}
