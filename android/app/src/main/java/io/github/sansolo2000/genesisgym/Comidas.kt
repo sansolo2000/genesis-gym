@@ -146,9 +146,69 @@ object Comidas {
         val obj = try { Json.parseToJsonElement(texto) } catch (e: Exception) {
             return null to Resultado(false, listOf("El texto no es JSON válido."), emptyList())
         }
-        val r = validarPrograma(obj)
+        val r0 = validarPrograma(obj)
+        // 0.10.0: compras y recetas (campos opcionales propuestos a Alimentación). Si vienen mal, solo avisa: la 2.0 los ignora.
+        val r = if (r0.ok && obj is JsonObject) r0.copy(avisos = r0.avisos + avisosExtras(obj)) else r0
         if (r.ok && activo != null && JsJson.stringify(activo) == JsJson.stringify(obj)) return obj as JsonObject to r.copy(ok = false, yaActivo = true)
         return (obj as? JsonObject) to r
+    }
+
+    // ---------- 0.10.0: lista de compras y recetas dentro del programa ----------
+    data class ItemCompra(val nombre: String, val cantidad: String, val nota: String?)
+    data class Compra(val id: String, val fecha: String, val lugar: String, val titulo: String, val items: List<ItemCompra>)
+    data class Mise(val item: String, val cantidad: String, val corte: String?)
+    data class Paso(val olla: String?, val texto: String, val minutos: String?)
+    data class Receta(val rinde: String?, val mise: List<Mise>, val pasos: List<Paso>, val porcionado: String?)
+
+    private fun tx(o: JsonObject?, k: String): String? = (o?.get(k) as? JsonPrimitive)?.let { if (it.isString) it.content else js(it) }?.trim()?.takeIf { it.isNotEmpty() }
+
+    /** Compras del programa (campo opcional "compras"), ordenadas por fecha. Las mal formadas se omiten (ver avisosExtras). */
+    fun compras(programa: JsonObject?): List<Compra> = ((programa?.get("compras") as? JsonArray) ?: JsonArray(emptyList())).mapIndexedNotNull { i, e ->
+        val o = e as? JsonObject ?: return@mapIndexedNotNull null
+        val fecha = tx(o, "fecha") ?: return@mapIndexedNotNull null
+        if (!fechaOk(JsonPrimitive(fecha))) return@mapIndexedNotNull null
+        val items = ((o["items"] as? JsonArray) ?: JsonArray(emptyList())).mapNotNull { x ->
+            val io = x as? JsonObject ?: return@mapNotNull null
+            ItemCompra(tx(io, "nombre") ?: return@mapNotNull null, tx(io, "cantidad") ?: "", tx(io, "nota"))
+        }
+        val lugar = tx(o, "lugar") ?: ""
+        Compra(tx(o, "id") ?: "compra-$i", fecha, lugar, tx(o, "titulo") ?: (lugar.replaceFirstChar { it.uppercase() }.ifEmpty { "Compra" }), items)
+    }.sortedBy { it.fecha }
+
+    /** Receta de una preparación (campo opcional "receta"). null si no trae. */
+    fun receta(prep: JsonObject?): Receta? {
+        val r = prep?.get("receta") as? JsonObject ?: return null
+        val mise = ((r["mise_en_place"] as? JsonArray) ?: JsonArray(emptyList())).mapNotNull { x ->
+            val o = x as? JsonObject ?: return@mapNotNull null
+            Mise(tx(o, "item") ?: return@mapNotNull null, tx(o, "cantidad") ?: "", tx(o, "corte"))
+        }
+        val pasos = ((r["pasos"] as? JsonArray) ?: JsonArray(emptyList())).mapNotNull { x ->
+            val o = x as? JsonObject ?: return@mapNotNull null
+            Paso(tx(o, "olla"), tx(o, "texto") ?: return@mapNotNull null, tx(o, "minutos"))
+        }
+        if (mise.isEmpty() && pasos.isEmpty()) return null
+        return Receta(tx(r, "rinde"), mise, pasos, tx(r, "porcionado"))
+    }
+
+    /** Avisos (no bloquean) sobre compras y recetas mal formadas. */
+    fun avisosExtras(o: JsonObject): List<String> {
+        val a = mutableListOf<String>()
+        val c = o["compras"]
+        if (c != null && c !is JsonArray) a.add("compras: debe ser una lista; se ignora.")
+        (c as? JsonArray)?.forEachIndexed { i, e ->
+            val x = e as? JsonObject
+            if (x == null) { a.add("compras[$i]: no es un objeto; se ignora."); return@forEachIndexed }
+            if (!fechaOk(x["fecha"])) a.add("compras[$i].fecha: fecha inválida; esa compra se ignora.")
+            val items = x["items"] as? JsonArray
+            if (items == null || items.isEmpty()) a.add("compras[$i].items: no hay ítems.")
+            items?.forEachIndexed { k, it -> if (tx(it as? JsonObject, "nombre") == null) a.add("compras[$i].items[$k].nombre: falta; ese ítem se ignora.") }
+        }
+        for ((id, pr) in (o["preparaciones"] as? JsonObject) ?: JsonObject(emptyMap())) {
+            val r = (pr as? JsonObject)?.get("receta") ?: continue
+            if (r !is JsonObject) { a.add("preparaciones.$id.receta: no es un objeto; se ignora."); continue }
+            if (receta(pr) == null) a.add("preparaciones.$id.receta: no trae mise_en_place ni pasos; se ignora.")
+        }
+        return a
     }
 
     fun clave(f: String, t: String) = "${f}_$t"

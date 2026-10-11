@@ -83,6 +83,10 @@ class Com(val base: BaseLocal, private val alCambiar: () -> Unit) {
     // 0.9.0: Comer | Cocinar | Comprar (pedido de Héctor, 11-oct)
     var sub by mutableStateOf("comer")
     var tareasHechas by mutableStateOf<Set<String>>(emptySet())
+    // 0.10.0: compras y recetas desde el programa
+    var comprasHechas by mutableStateOf<Set<String>>(emptySet())
+    var recetaSel by mutableStateOf<String?>(null)
+    var ocultarComprados by mutableStateOf(false)
     /** La actividad intenta enviar lo pendiente sin preguntar (si Google ya dio el permiso). */
     var enviarAuto: () -> Unit = {}
 
@@ -96,6 +100,8 @@ class Com(val base: BaseLocal, private val alCambiar: () -> Unit) {
             dia = estado.elegirDia(Gimnasio.hoyIso())
             val th = base.get("alimentacion/tareas_hechas")
             val idProg = (prog?.get("programa") as? JsonObject)?.get("id")
+            val ch = base.get("alimentacion/compras_hechas")
+            comprasHechas = if (ch != null && ch["programa_id"] == idProg) ((ch["hechas"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content }?.toSet() ?: emptySet()) else emptySet()
             tareasHechas = if (th != null && th["programa_id"] == idProg) ((th["hechas"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content }?.toSet() ?: emptySet()) else emptySet()
             null
         } catch (e: Exception) { "err" to "No se pudo leer la base de este celular: ${e.javaClass.simpleName}" }
@@ -120,6 +126,18 @@ class Com(val base: BaseLocal, private val alCambiar: () -> Unit) {
             tareasHechas = nuevo
         } catch (e: Exception) { mensaje = "err" to "No se pudo guardar la tarea: ${e.javaClass.simpleName}" }
     }
+
+    /** Marca o desmarca un ítem de la lista de compras (alimentacion/compras_hechas, entra en el respaldo). */
+    fun alternarCompra(clave: String) {
+        val nuevo = if (clave in comprasHechas) comprasHechas - clave else comprasHechas + clave
+        val idProg = (estado.programa?.get("programa") as? JsonObject)?.get("id") ?: return
+        try {
+            base.put("alimentacion/compras_hechas", Comidas.objeto("programa_id" to idProg,
+                "hechas" to JsonArray(nuevo.sorted().map { JsonPrimitive(it) }), "actualizado" to JsonPrimitive(Gimnasio.ahoraIso())))
+            comprasHechas = nuevo
+        } catch (e: Exception) { mensaje = "err" to "No se pudo guardar la compra: ${e.javaClass.simpleName}" }
+    }
+    fun verReceta(prepId: String) { recetaSel = prepId; vista = "receta" }
 
     fun abrir(k: String) { sel = k; vista = "comida"; mensaje = null }
     /** Cierra la hoja de una comida y, si quedó algo listo para enviar, lo envía solo. */
@@ -183,7 +201,6 @@ interface AccionesComidas {
     fun tomarFoto(tipo: String)
     fun elegirFoto(tipo: String)
     fun enviar()
-    fun abrirKeep()
 }
 
 @Composable private fun T(t: String) = Text(t, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
@@ -213,6 +230,7 @@ fun PantallaComidas(c: Com, a: AccionesComidas) {
             }
             c.vista == "comida" -> HojaComida(c, a)
             c.vista == "cambio" -> Cambiar(c)
+            c.vista == "receta" -> RecetaV(c)
             else -> Dia(c, a)
         }
         if (c.aviso.isNotEmpty()) {
@@ -279,7 +297,7 @@ private fun Dia(c: Com, a: AccionesComidas) {
                     }
                 }
             }
-            if (c.sub == "comprar") { Comprar(a); return@Column }
+            if (c.sub == "comprar") { Comprar(c); return@Column }
             // días del programa
             val fechas = e.dias().mapNotNull { it.s("fecha") }.filter { Comidas.fechaOk(JsonPrimitive(it)) }.sorted()
             val estadoLista = rememberLazyListState(initialFirstVisibleItemIndex = (fechas.indexOf(f) - 1).coerceAtLeast(0))
@@ -396,18 +414,91 @@ private fun Cocinar(c: Com, f: String, d: JsonObject) {
         }
     }
     EtiC("RECETAS", AZUL)
-    G("Las recetas aún no vienen en el programa de alimentación. Cuando Alimentación las agregue, aparecen aquí.")
+    val conReceta = comidas.mapNotNull { x -> Comidas.js(x["preparacion"]).let { id -> (e.preparaciones()[id] as? JsonObject)?.let { id to it } } }
+        .distinctBy { it.first }.filter { Comidas.receta(it.second) != null }
+    if (conReceta.isEmpty()) G("El programa no trae recetas para las comidas de este día.")
+    for ((id, pr) in conReceta) OutlinedButton(onClick = { c.verReceta(id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+        Text("Receta: ${pr.s("nombre") ?: id}", color = TEXTO, modifier = Modifier.fillMaxWidth())
+    }
 }
 
-// ---------- 0.9.0: Comprar ----------
 @Composable
-private fun Comprar(a: AccionesComidas) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(CAJA).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        EtiC("LISTA DE COMPRAS", AMBAR)
-        Text("Las listas de supermercado y feria están en Google Keep, compartidas con Majo.", fontSize = 15.sp)
-        Button(onClick = { a.abrirKeep() }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Abrir Google Keep", fontWeight = FontWeight.SemiBold) }
-        G("Cuando Alimentación defina el formato de la lista para la app, se verá aquí.")
+private fun RecetaV(c: Com) {
+    val id = c.recetaSel ?: run { c.vista = "dia"; return }
+    val pr = c.estado.preparaciones()[id] as? JsonObject
+    val r = Comidas.receta(pr)
+    Column(Modifier.fillMaxSize()) {
+        TextButton(onClick = { c.vista = "dia" }, modifier = Modifier.padding(start = 4.dp, top = 8.dp)) { Text("‹ Cocinar", fontWeight = FontWeight.SemiBold) }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            EtiC("RECETA", AZUL)
+            Text(pr.s("nombre") ?: id, fontSize = 30.sp, fontWeight = FontWeight.Bold, lineHeight = 32.sp)
+            if (r == null) { G("Esta preparación no trae receta."); return@Column }
+            r.rinde?.let { ChipC("Rinde: $it") }
+            if (r.mise.isNotEmpty()) {
+                EtiC("MISE EN PLACE")
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(CAJA).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    for (m in r.mise) Row(Modifier.fillMaxWidth()) {
+                        Text(m.item + (m.corte?.let { " · $it" } ?: ""), fontSize = 15.sp, modifier = Modifier.weight(1f))
+                        Text(m.cantidad, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            if (r.pasos.isNotEmpty()) {
+                EtiC("PASOS")
+                var olla: String? = null
+                r.pasos.forEachIndexed { n, p ->
+                    if (p.olla != null && p.olla != olla) { olla = p.olla; Text(p.olla, color = AMBAR, fontWeight = FontWeight.SemiBold) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("${n + 1}", color = AMBAR, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.width(22.dp))
+                        Text(p.texto + (p.minutos?.let { " ($it min)" } ?: ""), fontSize = 15.sp)
+                    }
+                }
+            }
+            r.porcionado?.let { EtiC("PORCIONADO"); Text(it, fontSize = 15.sp) }
+        }
     }
+}
+
+// ---------- 0.10.0: Comprar (desde el programa; sin Keep) ----------
+@Composable
+private fun Comprar(c: Com) {
+    val compras = Comidas.compras(c.estado.programa)
+    if (compras.isEmpty()) {
+        Caja { S("Sin lista de compras"); G("El programa de alimentación activo no trae lista de compras. Cuando Alimentación la incluya en el archivo, aparece aquí.") }
+        return
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        androidx.compose.material3.Switch(checked = c.ocultarComprados, onCheckedChange = { c.ocultarComprados = it }); Text("Ocultar lo ya comprado")
+    }
+    for (compra in compras) {
+        val total = compra.items.size
+        val hechos = compra.items.indices.count { "${compra.id}|$it" in c.comprasHechas }
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                Column(Modifier.weight(1f)) {
+                    EtiC(compra.titulo.uppercase(), if (hechos == total) VERDE else AMBAR)
+                    Text(Comidas.fechaLarga(compra.fecha), color = GRIS, fontSize = 13.sp)
+                }
+                Text("$hechos de $total", color = if (hechos == total) VERDE else GRIS, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            }
+            compra.items.forEachIndexed { i, it ->
+                val clave = "${compra.id}|$i"; val hecho = clave in c.comprasHechas
+                if (hecho && c.ocultarComprados) return@forEachIndexed
+                Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(10.dp)).background(CAJA).clickable { c.alternarCompra(clave) }
+                    .padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(if (hecho) VERDE else Color.Transparent).border(2.dp, if (hecho) VERDE else Color(0xFF4A5057), RoundedCornerShape(6.dp)),
+                        contentAlignment = Alignment.Center) { if (hecho) Text("✓", color = FONDO, fontWeight = FontWeight.Bold) }
+                    Column(Modifier.weight(1f)) {
+                        Text(it.nombre, fontSize = 15.sp, color = if (hecho) GRIS else TEXTO, fontWeight = FontWeight.SemiBold)
+                        it.nota?.let { n -> Text(n, color = GRIS, fontSize = 12.sp) }
+                    }
+                    Text(it.cantidad, fontSize = 14.sp, color = if (hecho) GRIS else TEXTO)
+                }
+            }
+        }
+    }
+    G("La lista viene en el programa de Alimentación. Lo marcado queda en este celular y en el respaldo.")
+}
 }
 
 @Composable
@@ -504,6 +595,7 @@ private fun HojaComida(c: Com, a: AccionesComidas) {
                     if (nota != guardada) OutlinedButton(onClick = { c.anotar(t, nota) }) { Text("Guardar nota") }
                 }
             }
+            if (Comidas.receta(pr) != null) OutlinedButton(onClick = { c.verReceta(Comidas.js(comida["preparacion"])) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Ver receta", color = TEXTO) }
             OutlinedButton(onClick = { c.vista = "cambio" }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("⇄ Cambiar por otra comida del programa", color = TEXTO) }
         }
         Button(onClick = { c.cerrarComida() }, modifier = Modifier.padding(16.dp).fillMaxWidth().heightIn(min = 52.dp)) {

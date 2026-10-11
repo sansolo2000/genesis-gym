@@ -120,4 +120,25 @@ class ComidasTest {
         assertEquals("{\n  \"a\": [],\n  \"b\": {},\n  \"c\": [\n    1,\n    {\n      \"d\": null\n    }\n  ],\n  \"e\": \"x\\\"y\"\n}", JsJson.indentado(o))
         assertEquals("null", JsJson.indentado(JsonNull))
     }
+
+    @Test fun compras_y_recetas_opcionales() {
+        val texto = recurso("prueba-programa-con-compras.json")
+        val (obj, r) = Comidas.revisarTexto(texto, null)
+        assertTrue(r.errores.toString(), r.ok)   // los campos nuevos nunca bloquean (la 2.0 los ignora)
+        assertTrue(r.avisos.contains("compras[1].items[1].nombre: falta; ese ítem se ignora."))
+        assertTrue(r.avisos.contains("compras[2].fecha: fecha inválida; esa compra se ignora."))
+        assertTrue(r.avisos.contains("preparaciones.plato-pollo.receta: no trae mise_en_place ni pasos; se ignora."))
+        val compras = Comidas.compras(obj)
+        assertEquals(listOf("super-ej", "feria-ej"), compras.map { it.id })
+        assertEquals("Feria", compras[1].titulo)
+        assertEquals(1, compras[1].items.size)
+        assertEquals("pechuga", compras[0].items[1].nota)
+        val receta = Comidas.receta((obj!!["preparaciones"] as JsonObject)["plato-lentejas"] as JsonObject)!!
+        assertEquals("12", receta.pasos[0].minutos)
+        assertEquals("Olla a presión", receta.pasos[1].olla)
+        assertEquals("cubos", receta.mise[1].corte)
+        assertEquals(null, Comidas.receta((obj["preparaciones"] as JsonObject)["plato-pollo"] as JsonObject))
+        // sin los campos nuevos, el resultado es el mismo de la 2.0
+        assertEquals(Comidas.validarPrograma(Json.parseToJsonElement(texto)).errores, r.errores)
+    }
 }

@@ -186,11 +186,6 @@ class MainActivity : ComponentActivity() {
             fotoCamara = u
             try { tomarFotoCamara.launch(u) } catch (e: Exception) { com.mensaje = "err" to "No se encontró una app de cámara. Usa \"Elegir de la galería\"." }
         }
-        override fun abrirKeep() {
-            val app = packageManager.getLaunchIntentForPackage("com.google.android.keep")
-            try { startActivity(app ?: Intent(Intent.ACTION_VIEW, Uri.parse("https://keep.google.com/"))) }
-            catch (e: Exception) { com.mensaje = "err" to "No se pudo abrir Google Keep." }
-        }
         override fun enviar() {
             com.enviando = "Conectando con Google…"
             pedirToken({ token ->
@@ -338,7 +333,7 @@ class MainActivity : ComponentActivity() {
                 Surface(modifier = Modifier.fillMaxSize(), color = FONDO, contentColor = TEXTO) {
                     var pestana by remember { mutableIntStateOf(0) }
                     BackHandler(enabled = gym.vista == "comidas" && (com.vista != "dia" || com.verImport)) {
-                        when { com.verImport && com.estado.programa != null -> com.verImport = false; com.vista == "cambio" -> com.vista = "comida"; else -> com.cerrarComida() }
+                        when { com.verImport && com.estado.programa != null -> com.verImport = false; com.vista == "cambio" -> com.vista = "comida"; com.vista == "receta" -> com.vista = "dia"; else -> com.cerrarComida() }
                     }
                     BackHandler(enabled = gym.vista == "sesion") {
                         when {
