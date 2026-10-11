@@ -186,6 +186,11 @@ class MainActivity : ComponentActivity() {
             fotoCamara = u
             try { tomarFotoCamara.launch(u) } catch (e: Exception) { com.mensaje = "err" to "No se encontró una app de cámara. Usa \"Elegir de la galería\"." }
         }
+        override fun abrirKeep() {
+            val app = packageManager.getLaunchIntentForPackage("com.google.android.keep")
+            try { startActivity(app ?: Intent(Intent.ACTION_VIEW, Uri.parse("https://keep.google.com/"))) }
+            catch (e: Exception) { com.mensaje = "err" to "No se pudo abrir Google Keep." }
+        }
         override fun enviar() {
             com.enviando = "Conectando con Google…"
             pedirToken({ token ->

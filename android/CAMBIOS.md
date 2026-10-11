@@ -2,6 +2,7 @@
 
 | Versión | Fecha | Cambio |
 |---|---|---|
+| 0.9.0 | 2026-10-11 | Sin publicar (espera aprobación de Héctor). Comidas separada en Comer, Cocinar y Comprar (pedido de Héctor). Cocinar: tareas del día con marca de hecha (se guarda en alimentacion/tareas_hechas, entra en el respaldo) y qué comidas se preparan o salen de la tanda según el programa; recetas pendientes de Alimentación. Comprar: abre Google Keep hasta que exista el formato lista-compras. |
 | 0.8.0 | 2026-10-11 | Publicada con aprobación de Héctor (01:14). Comidas simplificada según el mockup aprobado: días arriba, "Próxima" con ✓ de un toque, el día en una lista (comidas y tareas por hora), una hoja por comida (porción, cómo te fue, foto y nota solo si fue otra cosa, cambiar por otra) y envío automático a Alimentación al marcar o cerrar una comida, si Google ya dio el permiso; si no hay internet o falta la foto, queda pendiente con botón Enviar. Mismos documentos y registro-comida que antes. |
 | 0.7.0 | 2026-10-11 | Publicada con aprobación de Héctor (00:54). El estilo del mockup (tema oscuro de alto contraste, ámbar y verde) pasa a toda la app: Hoy, Comidas, Rutina, Historial, Importar, Avisos y Pruebas. Pestañas de arriba con forma de píldora; íconos claros en las barras del sistema. Pedido de Héctor. |
 | 0.6.1 | 2026-10-10 | Publicada con aprobación de Héctor (22:09). Corrige que el teclado se cerrara al escribir cada número de carga o repeticiones en la hoja del ejercicio (lo vio Héctor). |

@@ -19,6 +19,8 @@
 
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
+        <!-- 0.9.0: Comidas → Comprar abre Google Keep -->
+        <package android:name="com.google.android.keep" />
     </queries>
 
     <!-- allowBackup=false: la copia automática de Android no se usa. Los datos (de salud, más adelante)

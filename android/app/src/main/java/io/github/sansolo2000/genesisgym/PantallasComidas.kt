@@ -80,6 +80,9 @@ class Com(val base: BaseLocal, private val alCambiar: () -> Unit) {
     var sel by mutableStateOf<String?>(null)
     var aviso by mutableStateOf("")
     var faltaPermiso by mutableStateOf(false)
+    // 0.9.0: Comer | Cocinar | Comprar (pedido de Héctor, 11-oct)
+    var sub by mutableStateOf("comer")
+    var tareasHechas by mutableStateOf<Set<String>>(emptySet())
     /** La actividad intenta enviar lo pendiente sin preguntar (si Google ya dio el permiso). */
     var enviarAuto: () -> Unit = {}
 
@@ -91,6 +94,9 @@ class Com(val base: BaseLocal, private val alCambiar: () -> Unit) {
             val fotos = base.rutas("fotos").map { it.removePrefix("fotos/") }.toSet()
             estado = EstadoComidas(prog, base.get("alimentacion/intercambios"), base.coleccion("comidas"), fotos)
             dia = estado.elegirDia(Gimnasio.hoyIso())
+            val th = base.get("alimentacion/tareas_hechas")
+            val idProg = (prog?.get("programa") as? JsonObject)?.get("id")
+            tareasHechas = if (th != null && th["programa_id"] == idProg) ((th["hechas"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content }?.toSet() ?: emptySet()) else emptySet()
             null
         } catch (e: Exception) { "err" to "No se pudo leer la base de este celular: ${e.javaClass.simpleName}" }
         tick++
@@ -104,6 +110,17 @@ class Com(val base: BaseLocal, private val alCambiar: () -> Unit) {
     }
 
     fun marcar(t: String, e: String) = escribir(estado.marcar(dia, t, e, Gimnasio.ahoraIso()))
+    /** Marca o desmarca una tarea de cocina. Se guarda en alimentacion/tareas_hechas (entra en el respaldo; la 2.0 lo conserva sin usarlo). */
+    fun alternarTarea(clave: String) {
+        val nuevo = if (clave in tareasHechas) tareasHechas - clave else tareasHechas + clave
+        val idProg = (estado.programa?.get("programa") as? JsonObject)?.get("id") ?: return
+        try {
+            base.put("alimentacion/tareas_hechas", Comidas.objeto("programa_id" to idProg,
+                "hechas" to JsonArray(nuevo.sorted().map { JsonPrimitive(it) }), "actualizado" to JsonPrimitive(Gimnasio.ahoraIso())))
+            tareasHechas = nuevo
+        } catch (e: Exception) { mensaje = "err" to "No se pudo guardar la tarea: ${e.javaClass.simpleName}" }
+    }
+
     fun abrir(k: String) { sel = k; vista = "comida"; mensaje = null }
     /** Cierra la hoja de una comida y, si quedó algo listo para enviar, lo envía solo. */
     fun cerrarComida() { vista = "dia"; sel = null; enviarAuto() }
@@ -166,6 +183,7 @@ interface AccionesComidas {
     fun tomarFoto(tipo: String)
     fun elegirFoto(tipo: String)
     fun enviar()
+    fun abrirKeep()
 }
 
 @Composable private fun T(t: String) = Text(t, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
@@ -252,6 +270,16 @@ private fun Dia(c: Com, a: AccionesComidas) {
                 Text("Comidas", fontSize = 32.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 Text(e.programa.o("programa").s("nombre") ?: "", color = GRIS, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
             }
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(CAJA).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                for ((v, txt) in listOf("comer" to "Comer", "cocinar" to "Cocinar", "comprar" to "Comprar")) {
+                    val sel = c.sub == v
+                    Box(Modifier.weight(1f).heightIn(min = 44.dp).clip(RoundedCornerShape(9.dp)).background(if (sel) Color(0xFF2C3135) else Color.Transparent)
+                        .clickable { c.sub = v; c.mensaje = null }, contentAlignment = Alignment.Center) {
+                        Text(txt, color = if (sel) TEXTO else GRIS, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    }
+                }
+            }
+            if (c.sub == "comprar") { Comprar(a); return@Column }
             // días del programa
             val fechas = e.dias().mapNotNull { it.s("fecha") }.filter { Comidas.fechaOk(JsonPrimitive(it)) }.sorted()
             val estadoLista = rememberLazyListState(initialFirstVisibleItemIndex = (fechas.indexOf(f) - 1).coerceAtLeast(0))
@@ -273,6 +301,7 @@ private fun Dia(c: Com, a: AccionesComidas) {
             }
             c.mensaje?.let { (tipo, texto) -> N(texto, when (tipo) { "err" -> MaterialTheme.colorScheme.errorContainer; "ok" -> MaterialTheme.colorScheme.secondaryContainer; else -> CAJA2 }) }
             if (d == null) { Caja { G("El programa no trae menú para este día.") } }
+            else if (c.sub == "cocinar") Cocinar(c, f, d)
             else {
                 val comidas = Comidas.TIPOS.mapNotNull { e.comidaDe(f, it) }
                 val proxima = comidas.firstOrNull { e.estadoDe(Comidas.clave(f, Comidas.js(it["tipo"]))) == null }
@@ -298,11 +327,9 @@ private fun Dia(c: Com, a: AccionesComidas) {
                     Text("≈ ${num(kcalInd)} kcal indicadas", color = GRIS, fontSize = 13.sp)
                 }
                 // la lista del día: comidas y tareas por hora
-                val filas = comidas.map { (it.s("hora") ?: "") to it } + ((d["tareas"] as? JsonArray)?.mapNotNull { it as? JsonObject }?.map { (it.s("hora") ?: "") to it } ?: emptyList())
-                for ((hora, x) in filas.sortedBy { it.first }) {
-                    if (x.containsKey("texto") && !x.containsKey("tipo")) FilaTarea(hora, x.s("texto") ?: "")
-                    else FilaComida(c, f, x, x === proxima)
-                }
+                for (x in comidas.sortedBy { it.s("hora") ?: "" }) FilaComida(c, f, x, x === proxima)
+                val nt = (d["tareas"] as? JsonArray)?.size ?: 0
+                if (nt > 0) TextButton(onClick = { c.sub = "cocinar" }) { Text("Hoy hay $nt tarea${if (nt == 1) "" else "s"} de cocina › Cocinar") }
                 val restr = (e.programa?.get("restricciones") as? JsonArray)?.map { Comidas.js(it) } ?: emptyList()
                 if (restr.isNotEmpty()) Text("Restricciones: " + restr.joinToString(" · "), color = GRIS, fontSize = 12.sp)
                 Text("Las kcal son estimaciones del programa.", color = GRIS, fontSize = 12.sp)
@@ -332,13 +359,56 @@ private fun FilaComida(c: Com, f: String, comida: JsonObject, esProxima: Boolean
     }
 }
 
+// ---------- 0.9.0: Cocinar ----------
+private val ORIGEN = mapOf("preparar-en-el-dia" to "Preparar en el día", "cocinar-en-el-dia" to "Cocinar en el día", "mini-tanda" to "De la mini tanda", "tanda-domingo" to "De la tanda del domingo")
+
 @Composable
-private fun FilaTarea(hora: String, texto: String) =
-    Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF15181A)).padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(hora, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = AZUL, modifier = Modifier.width(48.dp))
-        Column(Modifier.weight(1f)) { Text("Tarea de cocina", color = GRIS, fontSize = 12.sp); Text(texto, fontSize = 15.sp) }
+private fun Cocinar(c: Com, f: String, d: JsonObject) {
+    val e = c.estado
+    val tareas = (d["tareas"] as? JsonArray)?.mapNotNull { it as? JsonObject } ?: emptyList()
+    EtiC("TAREAS DE COCINA", AZUL)
+    if (tareas.isEmpty()) G("Este día no tiene tareas de cocina.")
+    tareas.forEachIndexed { i, t ->
+        val clave = "${f}_${t.s("hora") ?: ""}_$i"
+        val hecha = clave in c.tareasHechas
+        Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).clip(RoundedCornerShape(12.dp)).background(CAJA).clickable { c.alternarTarea(clave) }
+            .padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(t.s("hora") ?: "", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = if (hecha) GRIS else AZUL, modifier = Modifier.width(48.dp))
+            Text(t.s("texto") ?: "", fontSize = 15.sp, color = if (hecha) GRIS else TEXTO, modifier = Modifier.weight(1f))
+            Box(Modifier.size(32.dp).clip(CircleShape).background(if (hecha) VERDE else Color.Transparent).border(2.dp, if (hecha) VERDE else Color(0xFF4A5057), CircleShape),
+                contentAlignment = Alignment.Center) { if (hecha) Text("✓", color = FONDO, fontWeight = FontWeight.Bold) }
+        }
     }
+    // Lo que el programa marca para preparar o cocinar ese día (campo "origen"), y de dónde sale el resto.
+    val comidas = Comidas.TIPOS.mapNotNull { e.comidaDe(f, it) }
+    val grupos = comidas.groupBy { it.s("origen") ?: "" }.filterKeys { it.isNotEmpty() }
+    if (grupos.isNotEmpty()) {
+        EtiC("QUÉ SALE DE LA COCINA ESTE DÍA", AZUL)
+        for ((origen, lista) in grupos.toSortedMap(compareBy { if (it.contains("dia")) "0$it" else "1$it" })) {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(CAJA).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(ORIGEN[origen] ?: origen.replace('-', ' ').replaceFirstChar { it.uppercase() }, fontWeight = FontWeight.SemiBold)
+                for (x in lista) {
+                    val pr = e.preparaciones()[Comidas.js(x["preparacion"])] as? JsonObject
+                    Text("${x.s("hora")} · ${Comidas.ETQ[Comidas.js(x["tipo"])]}: ${pr.s("nombre") ?: Comidas.js(x["preparacion"])}" +
+                        (x.s("conservacion")?.takeIf { it.isNotEmpty() }?.let { " (desde el $it)" } ?: ""), color = GRIS, fontSize = 14.sp)
+                }
+            }
+        }
+    }
+    EtiC("RECETAS", AZUL)
+    G("Las recetas aún no vienen en el programa de alimentación. Cuando Alimentación las agregue, aparecen aquí.")
+}
+
+// ---------- 0.9.0: Comprar ----------
+@Composable
+private fun Comprar(a: AccionesComidas) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(CAJA).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        EtiC("LISTA DE COMPRAS", AMBAR)
+        Text("Las listas de supermercado y feria están en Google Keep, compartidas con Majo.", fontSize = 15.sp)
+        Button(onClick = { a.abrirKeep() }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Abrir Google Keep", fontWeight = FontWeight.SemiBold) }
+        G("Cuando Alimentación defina el formato de la lista para la app, se verá aquí.")
+    }
+}
 
 @Composable
 private fun BarraEnvio(c: Com, a: AccionesComidas) {
