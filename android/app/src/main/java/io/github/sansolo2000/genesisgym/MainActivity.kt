@@ -249,6 +249,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** 0.8.0: envía solo lo que está listo, sin abrir ventanas. Si Google pide confirmar, queda el botón Enviar. */
+    private fun enviarAutomatico() {
+        if (com.enviando.isNotEmpty() || com.estado.listosParaEnviar() == 0) return
+        val pedido = AuthorizationRequest.builder().setRequestedScopes(listOf(Scope(DriveTexto.ALCANCE))).build()
+        Identity.getAuthorizationClient(this).authorize(pedido)
+            .addOnSuccessListener { r ->
+                val tok = r.accessToken
+                if (r.hasResolution() || tok == null) { com.faltaPermiso = true; return@addOnSuccessListener }
+                lifecycleScope.launch { com.subir(tok, "genesis-gym-n ${BuildConfig.VERSION_NAME}", automatico = true) }
+            }
+            .addOnFailureListener { com.faltaPermiso = true }
+    }
+
     private fun pedirToken(listo: (String?) -> Unit, error: (String) -> Unit) {
         trasToken = listo; trasError = error
         val pedido = AuthorizationRequest.builder().setRequestedScopes(listOf(Scope(DriveTexto.ALCANCE))).build()
@@ -309,6 +322,7 @@ class MainActivity : ComponentActivity() {
             isAppearanceLightStatusBars = false; isAppearanceLightNavigationBars = false
         }
         window.decorView.setBackgroundColor(android.graphics.Color.parseColor("#111315"))
+        com.enviarAuto = { enviarAutomatico() }
         gym.alDescanso = { fin, texto -> runCatching { if (fin == null) Programador.cancelarDescanso(this) else Programador.programarDescanso(this, fin, texto) } }
         runCatching { Programador.reprogramar(this) }
         intent?.getStringExtra(Programador.EXTRA_VISTA)?.let { abrirVista(it) }
@@ -318,6 +332,9 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(colorScheme = OSCURO) {
                 Surface(modifier = Modifier.fillMaxSize(), color = FONDO, contentColor = TEXTO) {
                     var pestana by remember { mutableIntStateOf(0) }
+                    BackHandler(enabled = gym.vista == "comidas" && (com.vista != "dia" || com.verImport)) {
+                        when { com.verImport && com.estado.programa != null -> com.verImport = false; com.vista == "cambio" -> com.vista = "comida"; else -> com.cerrarComida() }
+                    }
                     BackHandler(enabled = gym.vista == "sesion") {
                         when {
                             gym.ficha != null -> gym.ficha = null

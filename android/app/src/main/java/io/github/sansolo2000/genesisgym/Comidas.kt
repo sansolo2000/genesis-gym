@@ -268,6 +268,9 @@ class EstadoComidas(
     private fun enviadoVersion(r: JsonObject): Long? = (r["enviado"] as? JsonObject)?.let { version(it) }
     fun enviado(k: String): Boolean = registros[k]?.let { enviadoVersion(it) == version(it) } ?: false
 
+    /** Pendientes que ya se pueden enviar (las "otra cosa" necesitan foto). */
+    fun listosParaEnviar(): Int = pendientes().count { Comidas.js(it["estado"]) != "otro" || Comidas.clave(Comidas.js(it["fecha"]), Comidas.js(it["tipo"])) in fotos }
+
     fun pendientes(): List<JsonObject> = registros.values.filter { Comidas.verdadero(it["estado"]) && (it["enviado"] !is JsonObject || enviadoVersion(it) != version(it)) }
         .sortedBy { Comidas.js(it["fecha"]) + Comidas.js(it["tipo"]) }
 
@@ -305,8 +308,9 @@ class EstadoComidas(
     data class Archivo(val nombre: String, val mime: String, val clave: String, val texto: String?)
 
     /** Lo que se sube al tocar "Enviar a Alimentación". null si no hay nada o falta una foto (queda en [mensaje]). */
-    fun preparaEnvio(app: String): List<Archivo>? {
-        val lista = pendientes()
+    fun preparaEnvio(app: String, omitirSinFoto: Boolean = false): List<Archivo>? {
+        // 0.8.0 (envío automático): las comidas "otra cosa" sin foto se dejan para después en vez de frenar todo.
+        val lista = pendientes().filter { !omitirSinFoto || Comidas.js(it["estado"]) != "otro" || Comidas.clave(Comidas.js(it["fecha"]), Comidas.js(it["tipo"])) in fotos }
         if (lista.isEmpty()) { mensaje = "info" to "No hay nada nuevo que enviar."; return null }
         val sinFoto = lista.filter { Comidas.js(it["estado"]) == "otro" && Comidas.clave(Comidas.js(it["fecha"]), Comidas.js(it["tipo"])) !in fotos }
         if (sinFoto.isNotEmpty()) {
