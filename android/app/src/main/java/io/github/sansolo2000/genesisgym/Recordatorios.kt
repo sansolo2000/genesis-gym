@@ -39,10 +39,12 @@ object Recordatorios {
     /**
      * @param sesionesRutina (dia_semana, id, nombre) de cada sesión de la rutina activa.
      * @param registradas claves "fecha_sesionId" de las sesiones ya guardadas.
+     * @param reportados fechas (AAAA-MM-DD) con el reporte de Apoyo ya guardado.
      */
     fun calcular(
         cfg: Config, comidas: EstadoComidas?, sesionesRutina: List<Triple<String, String, String>>, registradas: Set<String>,
-        ahora: ZonedDateTime, dias: Int = 7
+        ahora: ZonedDateTime, dias: Int = 7,
+        reportados: Set<String> = emptySet(), textoReporte: String = TEXTO_REPORTE
     ): List<Recordatorio> {
         val zona = ahora.zone
         val lista = mutableListOf<Recordatorio>()
@@ -75,7 +77,8 @@ object Recordatorios {
                     if (ds == Gimnasio.diaDe(f))
                         lista.add(Recordatorio(cuando, ENTRENAMIENTO, "Entrenamiento · ${cfg.horaEntrenamiento.trim()}", nombre, "hoy"))
             }
-            if (cfg.reporte) en(cfg.horaReporte)?.let { lista.add(Recordatorio(it, REPORTE, "Reporte del día · ${cfg.horaReporte.trim()}", TEXTO_REPORTE, "hoy")) }
+            // Módulo Apoyo (contrato v2 §3.6): no avisa si el reporte de ese día ya está guardado; el texto viene del programa.
+            if (cfg.reporte && f !in reportados) en(cfg.horaReporte)?.let { lista.add(Recordatorio(it, REPORTE, "Reporte del día · ${cfg.horaReporte.trim()}", textoReporte, "reporte")) }
         }
         return lista.filter { it.cuando.isAfter(ahora) }.sortedBy { it.cuando.toInstant() }
     }
@@ -83,7 +86,7 @@ object Recordatorios {
     fun juntar(lista: List<Recordatorio>): List<Aviso> = lista.groupBy { it.cuando.toInstant() }.values.map { g ->
         if (g.size == 1) Aviso(g[0].cuando, g[0].titulo, g[0].texto, g[0].vista)
         else Aviso(g[0].cuando, "${g.size} avisos · ${g[0].cuando.format(DateTimeFormatter.ofPattern("HH:mm"))}",
-            g.joinToString("\n") { "${it.titulo}: ${it.texto}" }, if (g.any { it.vista == "comidas" }) "comidas" else "hoy")
+            g.joinToString("\n") { "${it.titulo}: ${it.texto}" }, if (g.any { it.vista == "comidas" }) "comidas" else if (g.any { it.vista == "reporte" }) "reporte" else "hoy")
     }
 
     private val formato = DateTimeFormatter.ofPattern("EEE d HH:mm", java.util.Locale.forLanguageTag("es-CL"))

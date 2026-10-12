@@ -1,0 +1,43 @@
+{
+  "formato": "programa-apoyo",
+  "version_formato": "1.0",
+  "programa": { "id": "apoyo-prueba", "version": 1, "vigente_desde": "2026-10-03", "zona_horaria": "America/Santiago", "autor": "Datos inventados para pruebas", "generado": "2026-10-01T10:00:00-03:00", "nota": "Programa inventado: no es el de nadie." },
+  "perfil": { "id": "prueba", "nombre": "Persona de prueba" },
+  "semana": { "inicio": "sabado" },
+  "horario": { "reporte": "21:00", "plazo_dia_siguiente": "12:00" },
+  "plan_semanal": { "lunes": "fuerza", "martes": "descanso", "miercoles": "fuerza", "jueves": "descanso", "viernes": "fuerza", "sabado": "mtb", "domingo": "mtb" },
+  "preguntas": [
+    { "id": "energia", "tipo": "escala", "texto": "Energía (prueba)", "min": 1, "max": 5, "etiquetas": { "1": "e1", "2": "e2", "3": "e3", "4": "e4", "5": "e5" }, "obligatoria": true },
+    { "id": "hambre", "tipo": "escala", "texto": "Hambre (prueba)", "min": 1, "max": 5, "etiquetas": { "1": "h1", "2": "h2", "3": "h3", "4": "h4", "5": "h5" }, "obligatoria": true },
+    { "id": "animo", "tipo": "escala", "texto": "Ánimo (prueba)", "min": 1, "max": 5, "etiquetas": { "1": "a1", "2": "a2", "3": "a3", "4": "a4", "5": "a5" }, "obligatoria": true },
+    { "id": "palabra", "tipo": "texto", "texto": "Palabra (prueba)", "max_caracteres": 10, "obligatoria": false },
+    { "id": "sueno_h", "tipo": "numero", "texto": "Sueño (prueba)", "min": 0, "max": 14, "paso": 0.5, "obligatoria": false },
+    { "id": "agua", "tipo": "si_no", "texto": "Agua (prueba)", "obligatoria": true },
+    { "id": "alarma", "tipo": "si_no", "texto": "Alarma (prueba)", "obligatoria": true },
+    { "id": "novedad", "tipo": "texto", "texto": "Novedad (prueba)", "max_caracteres": 80, "obligatoria": false },
+    { "id": "nota", "tipo": "texto", "texto": "Nota (prueba)", "max_caracteres": 280, "obligatoria": false },
+    { "id": "pasos_extra", "tipo": "numero", "texto": "Pregunta desconocida (prueba)", "obligatoria": false }
+  ],
+  "comidas": { "total": 5, "tipos": ["desayuno", "colacion_am", "almuerzo", "colacion_pm", "cena"], "cuenta_como_hecha": ["indicado", "otro"] },
+  "dia_minimo": { "comidas_hechas": 5, "agua": true, "reporte": true },
+  "alertas": [
+    { "id": "animo-bajo", "campo": "animo", "operador": "<=", "valor": 2, "dias_seguidos": 3, "texto": "alerta_animo" },
+    { "id": "hambre-alta", "campo": "hambre", "operador": ">=", "valor": 4, "dias_seguidos": 3, "texto": "alerta_hambre" }
+  ],
+  "alarma_inmediata": { "campo": "alarma", "valor": true, "texto": "alarma_fisica" },
+  "barreras": [ { "id": "cansancio", "etiqueta": "Cansancio" }, { "id": "otro", "etiqueta": "Otra" } ],
+  "textos": {
+    "recordatorio_reporte": "Texto de recordatorio (prueba).",
+    "reporte_dia_minimo": "Mínimo. Racha: {racha}.",
+    "reporte_no_minimo": "No mínimo.",
+    "ayer_fuera": "Ayer fuera (prueba).",
+    "racha_reinicio": "Reinicio; mejor {mejor_racha}.",
+    "reporte_tardio": "Tardío (prueba).",
+    "alerta_animo": "Alerta ánimo (prueba).",
+    "alerta_hambre": "Alerta hambre (prueba).",
+    "alarma_fisica": "Alarma física (prueba).",
+    "resumen_listo": "Resumen (prueba).",
+    "resumen_sin_reto": "Sin reto (prueba).",
+    "resumen_parcial": "Parcial (prueba)."
+  }
+}

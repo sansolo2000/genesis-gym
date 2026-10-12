@@ -143,7 +143,10 @@ object Programador {
         val rutina = base.get("config/rutina_activa")?.obj("rutina")   // el archivo de la rutina: trae "sesiones"
         val sesionesRutina = rutina?.arr("sesiones")?.mapNotNull { s -> val d = s.txt("dia_semana"); val id = s.txt("id"); if (d != null && id != null) Triple(d, id, s.txt("nombre") ?: id) else null } ?: emptyList()
         val registradas = base.coleccion("sesiones").mapNotNull { d -> d.data.txt("fecha")?.let { f -> d.data.txt("sesion_id")?.let { "${f}_$it" } } }.toSet()
-        return Recordatorios.juntar(Recordatorios.calcular(config(c), comidas, sesionesRutina, registradas, ahora))
+        val apoyo = base.get("programas_apoyo/activo")?.obj("programa")
+        val reportados = base.rutas("reportes_apoyo").map { it.removePrefix("reportes_apoyo/") }.toSet()
+        val texto = apoyo?.obj("textos")?.txt("recordatorio_reporte") ?: Recordatorios.TEXTO_REPORTE
+        return Recordatorios.juntar(Recordatorios.calcular(config(c), comidas, sesionesRutina, registradas, ahora, reportados = reportados, textoReporte = texto))
     }
 
     private fun pendiente(c: Context, i: Int, a: Recordatorios.Aviso?): PendingIntent {
