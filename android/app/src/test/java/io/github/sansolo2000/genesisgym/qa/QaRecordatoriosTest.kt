@@ -3,7 +3,6 @@ package io.github.sansolo2000.genesisgym.qa
 import io.github.sansolo2000.genesisgym.Recordatorios
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Ignore
 import org.junit.Test
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -20,7 +19,7 @@ class QaRecordatoriosTest {
         assertEquals(listOf("QA B"), r.map { it.texto })
     }
 
-    @Ignore("D-01: QA quita este @Ignore cuando Desarrollador 3 suba la corrección (no avisar si cualquier sesión del día está registrada)")
+    /** D-01, corregido en la 0.10.2 (`a48b87a`). QA lo activó el 12-oct. */
     @Test fun qa_t04_sin_aviso_si_otra_sesion_del_dia_esta_registrada() {
         val r = Recordatorios.calcular(cfg, null, sesiones, setOf("2026-10-14_qa-a"), miercoles, dias = 1)
         assertTrue(r.toString(), r.isEmpty())
