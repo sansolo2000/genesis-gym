@@ -76,12 +76,15 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
     var sesVista by mutableStateOf("mapa")
     var idxEj by mutableIntStateOf(0)
     var verFicha by mutableStateOf(false)
-    var descansoFin by mutableStateOf<Long?>(null)
-    var descansoTotal by mutableIntStateOf(0)
-    var descansoDe by mutableStateOf<Pair<Int, Int>?>(null)
     var aviso by mutableStateOf("")
     /** La actividad programa (fin en ms, texto) o cancela (null) el aviso de fin de descanso. */
     var alDescanso: (Long?, String) -> Unit = { _, _ -> }
+    /** 0.11.2 (D-03, D-04): el descanso vive aparte y sigue corriendo aunque se navegue o se salga de la app. */
+    val reloj = RelojDescanso { f, t -> alDescanso(f, t) }
+    val descansoFin: Long? get() = reloj.fin
+    val descansoTotal: Int get() = reloj.total
+    val descansoDe: Pair<Int, Int>? get() = reloj.de
+    private fun claveSesion(): String? = borrador?.let { "${it.txt("fecha")}_${it.txt("sesion_id")}" }
 
     fun refrescar() { tick++; alCambiar() }
 
@@ -107,7 +110,8 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
         inicioApertura = if (existente == null) System.currentTimeMillis() else null
         guardado = if (existente != null) "Guardado ✓" else "Sin guardar: se guarda al anotar la primera serie"
         guardadoError = false; errorCierre = ""; confirmarBorrado = false; editarFecha = false; errorFecha = ""
-        sesVista = "mapa"; verFicha = false; aviso = ""; cancelarDescanso()
+        sesVista = "mapa"; verFicha = false; aviso = ""
+        reloj.alAbrirSesion(claveSesion(), System.currentTimeMillis())   // la misma sesión conserva su descanso
         idxEj = Gimnasio.primerPendiente(borrador!!).coerceAtLeast(0)
         vista = "sesion"
     }
@@ -122,7 +126,8 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
         refrescar()
     }
 
-    fun ir(v: String) { if (vista == "sesion" && v != "sesion") { borrador = null; cancelarDescanso() }; vista = v; confirmarBorrado = false; errorCierre = ""; editarFecha = false }
+    // 0.11.2 (D-03): salir de la sesión ya no cancela el descanso; el aviso suena igual en 0.
+    fun ir(v: String) { if (vista == "sesion" && v != "sesion") borrador = null; vista = v; confirmarBorrado = false; errorCierre = ""; editarFecha = false }
 
     // ---------- 0.6.0: hoja y descanso ----------
     fun abrirEjercicio(i: Int) { idxEj = i; verFicha = false; sesVista = "hoja" }
@@ -152,44 +157,55 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
         val ej = borrador?.arr("ejercicios")?.getOrNull(i) ?: return
         val seg = ej.num("descanso_seg")?.toInt() ?: 0
         if (seg <= 0) { if (k == ej.arr("series").size - 1) aviso = "Ejercicio listo. Toca \"Siguiente\" cuando quieras."; return }
-        descansoTotal = seg; descansoDe = i to k
-        descansoFin = System.currentTimeMillis() + seg * 1000L
+        reloj.iniciar(System.currentTimeMillis(), seg, i, k, claveSesion(), textoSiguienteDe(i, k))
         sesVista = "descanso"
-        alDescanso(descansoFin, textoSiguiente())
     }
 
-    fun textoSiguiente(): String {
-        val (i, k) = descansoDe ?: return ""
+    fun textoSiguiente(): String = descansoDe?.let { textoSiguienteDe(it.first, it.second) } ?: ""
+
+    private fun textoSiguienteDe(i: Int, k: Int): String {
         val ejs = borrador?.arr("ejercicios") ?: return ""
         val sig = siguienteDe(i, k) ?: return "Pasa al cierre de la sesión."
         val se = ejs[sig.first].arr("series")[sig.second]
         return if (sig.first == i) "Serie ${sig.second + 1}: ${Gimnasio.prescritoTexto(se)}" else "Siguiente: ${ejs[sig.first].txt("nombre")}"
     }
 
-    fun masTreinta() { val f = descansoFin ?: return; descansoFin = f + 30_000; descansoTotal += 30; alDescanso(descansoFin, textoSiguiente()) }
+    fun masTreinta() = reloj.mas30(textoSiguiente())
 
-    fun cancelarDescanso() { if (descansoFin != null) alDescanso(null, ""); descansoFin = null }
+    fun cancelarDescanso() = reloj.cancelar()
 
-    /** Fin del descanso (por tiempo o tocando "Terminar"): vuelve a la hoja, en el ejercicio que sigue. */
+    /**
+     * Fin del descanso. "Terminar descanso" (porTiempo = false) corta el aviso y muestra lo que sigue.
+     * Al llegar a 0 (porTiempo = true) el aviso ya está sonando: si la pantalla de descanso está abierta,
+     * muestra lo que sigue; si Héctor ya avanzó con "Ir ahora", no lo mueve de donde está.
+     */
     fun terminarDescanso(porTiempo: Boolean) {
+        val enPantalla = sesVista == "descanso"
+        if (porTiempo) { reloj.vencer(); aviso = "Descanso terminado." } else reloj.cancelar()
+        if (!porTiempo || enPantalla) mostrarSiguiente()
+    }
+
+    /** 0.11.2 (D-04): "Ir ahora" muestra la serie o el ejercicio que sigue sin cortar el descanso; el aviso suena en 0. */
+    fun irAhora() = mostrarSiguiente()
+
+    private fun mostrarSiguiente() {
         val de = descansoDe
-        if (!porTiempo) alDescanso(null, "")
-        descansoFin = null
         val sig = de?.let { siguienteDe(it.first, it.second) }
         if (de != null && sig == null) { sesVista = "cierre"; return }
         if (sig != null && sig.first != idxEj) { idxEj = sig.first; verFicha = false }
         sesVista = "hoja"
-        if (porTiempo) aviso = "Descanso terminado."
     }
 
     fun cerrarSesion() {
         val b = borrador ?: return
         if (b.esNulo("rpe_sesion") || b.esNulo("duracion_min")) { errorCierre = "Para cerrar, indica el RPE de la sesión y la duración en minutos."; return }
         errorCierre = ""; guardar(b.con("estado", JsonPrimitive("cerrada")))
+        if (reloj.clave == claveSesion()) reloj.cancelar()
     }
 
     fun borrarSesion() {
         val b = borrador ?: return
+        if (reloj.clave == claveSesion()) reloj.cancelar()
         base.borrar("sesiones/" + Gimnasio.docIdSesion(b.txt("fecha")!!, b.txt("sesion_id")!!)); refrescar(); ir("historial")
     }
 

@@ -392,7 +392,7 @@ class MainActivity : ComponentActivity() {
                     BackHandler(enabled = gym.vista == "sesion") {
                         when {
                             gym.ficha != null -> gym.ficha = null
-                            gym.sesVista == "descanso" -> { gym.cancelarDescanso(); gym.sesVista = "mapa" }
+                            gym.sesVista == "descanso" -> gym.sesVista = "mapa"   // 0.11.2 (D-03): Atrás ya no corta el descanso
                             gym.sesVista != "mapa" -> gym.sesVista = "mapa"
                             else -> gym.ir("hoy")
                         }

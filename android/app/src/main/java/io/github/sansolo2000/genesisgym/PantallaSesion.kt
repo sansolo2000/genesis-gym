@@ -114,11 +114,17 @@ fun SesionNueva(g: Gym) {
     MaterialTheme(colorScheme = OSCURO) {
         Surface(Modifier.fillMaxSize(), color = FONDO, contentColor = TEXTO) {
             Box(Modifier.fillMaxSize()) {
-                when (g.sesVista) {
-                    "hoja" -> Hoja(g)
-                    "descanso" -> Descanso(g)
-                    "cierre" -> CierreSesion(g)
-                    else -> Mapa(g)
+                Column(Modifier.fillMaxSize()) {
+                    // 0.11.2 (D-04): si el descanso sigue corriendo fuera de su pantalla, se ve arriba y se vuelve a él con un toque.
+                    if (g.descansoFin != null && g.sesVista != "descanso") BarraDescanso(g)
+                    Box(Modifier.weight(1f)) {
+                        when (g.sesVista) {
+                            "hoja" -> Hoja(g)
+                            "descanso" -> Descanso(g)
+                            "cierre" -> CierreSesion(g)
+                            else -> Mapa(g)
+                        }
+                    }
                 }
                 if (g.aviso.isNotEmpty()) {
                     LaunchedEffect(g.aviso) { delay(3500); g.aviso = "" }
@@ -352,6 +358,31 @@ private fun FichaHoja(g: Gym, ej: JsonObject) {
 }
 
 // ---------- Descanso ----------
+/** Barra del descanso en curso cuando Héctor pasó a otra pantalla con "Ir ahora", "‹ Mapa" o Atrás. */
+@Composable
+private fun BarraDescanso(g: Gym) {
+    val fin = g.descansoFin ?: return
+    var ahora by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(fin) {
+        while (true) {
+            ahora = System.currentTimeMillis()
+            if (ahora >= fin) { g.terminarDescanso(true); break }
+            delay(250)
+        }
+    }
+    val restante = (((fin - ahora) + 999) / 1000).toInt().coerceAtLeast(0)
+    Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp).fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(10.dp))
+        .background(Color(0xFF3A2A10)).border(1.dp, AMBAR, RoundedCornerShape(10.dp))
+        .semantics { contentDescription = "Descanso en curso: quedan ${mmss(restante)}. Toca para verlo." }
+        .clickable { g.sesVista = "descanso" }.padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Eti("DESCANSO", AMBAR)
+        Spacer(Modifier.weight(1f))
+        Text(mmss(restante), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = AMBAR)
+        Text("Ver ›", color = GRIS, fontSize = 13.sp)
+    }
+}
+
 @Composable
 private fun Descanso(g: Gym) {
     val fin = g.descansoFin
@@ -369,7 +400,7 @@ private fun Descanso(g: Gym) {
     val ej = g.descansoDe?.let { g.borrador?.arr("ejercicios")?.getOrNull(it.first) }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = { g.cancelarDescanso(); g.sesVista = "mapa" }) { Text("‹ Mapa", fontWeight = FontWeight.SemiBold) }
+            TextButton(onClick = { g.sesVista = "mapa" }) { Text("‹ Mapa", fontWeight = FontWeight.SemiBold) }   // 0.11.2: no corta el descanso
             Text("${ej?.txt("nombre") ?: ""} · serie ${(g.descansoDe?.second ?: 0) + 1} ✓", color = GRIS, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f), textAlign = TextAlign.End)
         }
@@ -398,7 +429,8 @@ private fun Descanso(g: Gym) {
         Column(Modifier.padding(16.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(CAJA).padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Eti("LO QUE SIGUE", AMBAR)
             Text(g.textoSiguiente(), fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Button(onClick = { g.terminarDescanso(false) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(top = 6.dp)) { Text("Ir ahora") }
+            Button(onClick = { g.irAhora() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(top = 6.dp)) { Text("Ir ahora") }
+            Text("El descanso sigue corriendo y suena al llegar a 0.", color = GRIS, fontSize = 12.sp)
         }
     }
 }
