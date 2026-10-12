@@ -16,6 +16,10 @@
     <uses-permission android:name="android.permission.health.READ_SLEEP" />
     <uses-permission android:name="android.permission.health.READ_EXERCISE" />
     <uses-permission android:name="android.permission.health.READ_RESTING_HEART_RATE" />
+    <!-- E6: datos de las actividades para el Evaluador (distancia, desnivel y FC media de cada salida). -->
+    <uses-permission android:name="android.permission.health.READ_DISTANCE" />
+    <uses-permission android:name="android.permission.health.READ_ELEVATION_GAINED" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
 
     <queries>
         <package android:name="com.google.android.apps.healthdata" />

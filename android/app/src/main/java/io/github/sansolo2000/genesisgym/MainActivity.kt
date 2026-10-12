@@ -162,6 +162,24 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // E6: Health Connect para el Evaluador (pestaña Salud).
+    private val hc by lazy { Hc(this) }
+    private val pedirSaludE6 = registerForActivityResult(PermissionController.createRequestPermissionResultContract()) {
+        lifecycleScope.launch { hc.refrescarPermisos() }
+    }
+    private val accionesHc = object : AccionesHc {
+        override fun pedirPermisos() = pedirSaludE6.launch(hc.permisos)
+        override fun leer() { lifecycleScope.launch { hc.refrescarPermisos(); hc.leer() } }
+        override fun enviar() {
+            hc.enviando = "Conectando con Google…"
+            pedirToken({ token ->
+                hc.enviando = ""
+                if (token == null) { hc.mensaje = "err" to "Google no entregó un permiso de acceso."; return@pedirToken }
+                lifecycleScope.launch { hc.subir(token, gym.perfil()) }
+            }, { m -> hc.enviando = ""; hc.mensaje = "err" to "No se pudo enviar a Drive: $m" })
+        }
+    }
+
     /** Como en Comidas: envía sin abrir ventanas si Google ya dio el permiso; si no, queda el botón Enviar. */
     private fun enviarAutomaticoApoyo() {
         if (apo.enviando.isNotEmpty() || apo.estado.pendientes().isEmpty()) return
@@ -381,14 +399,15 @@ class MainActivity : ComponentActivity() {
                     }
                     Column(modifier = Modifier.safeDrawingPadding()) {
                         if (gym.vista != "sesion") Row(modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf("hoy" to "Hoy", "comidas" to "Comidas", "reporte" to "Reporte", "rutina" to "Rutina", "historial" to "Historial", "importar" to "Importar", "avisos" to "Avisos", "pruebas" to "Pruebas").forEach { (v, t) ->
+                            listOf("hoy" to "Hoy", "comidas" to "Comidas", "reporte" to "Reporte", "salud" to "Salud", "rutina" to "Rutina", "historial" to "Historial", "importar" to "Importar", "avisos" to "Avisos", "pruebas" to "Pruebas").forEach { (v, t) ->
                                 val activa = gym.vista == v || (v == "hoy" && gym.vista == "sesion")
-                                val ir = { if (v == "comidas" && gym.vista != "comidas") com.cargar(); if (v == "reporte" && gym.vista != "reporte") apo.refrescar(); gym.ir(v) }
+                                val ir = { if (v == "comidas" && gym.vista != "comidas") com.cargar(); if (v == "reporte" && gym.vista != "reporte") apo.refrescar(); if (v == "salud" && gym.vista != "salud" && hc.disponible()) lifecycleScope.launch { hc.refrescarPermisos() }; gym.ir(v) }
                                 Pestana(t, activa, ir)
                             }
                         }
                         if (gym.vista == "comidas") PantallaComidas(com, accionesComidas)
                         else if (gym.vista == "reporte") PantallaApoyo(apo, accionesApoyo)
+                        else if (gym.vista == "salud") PantallaSaludE6(hc, accionesHc)
                         else if (gym.vista == "avisos") PantallaAvisos(this@MainActivity, accionesAvisos, refresco, eleccionSonido, uriSonido)
                         else if (gym.vista != "pruebas") PantallaGimnasio(gym, accionesGym)
                         else {

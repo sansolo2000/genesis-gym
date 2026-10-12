@@ -23,7 +23,11 @@ class QaRespaldoTest {
         d("alimentacion/tareas_hechas", "programa_id" to "qa-prog"),
         d("programas_alimentacion/qa-prog", "id" to "qa-prog"),
         d("comidas/2026-10-14_almuerzo", "estado" to "indicado"),
-        d("fotos/2026-10-14_almuerzo", "jpg" to "AAAA")
+        d("fotos/2026-10-14_almuerzo", "jpg" to "AAAA"),
+        // 0.11.0 (módulo Apoyo): editado por Desarrollador 3 con autorización de Héctor (12-oct); QA lo revisa.
+        d("programas_apoyo/activo", "importado_en" to "2026-10-14T12:00:00.000Z"),
+        d("reportes_apoyo/2026-10-14", "formato" to "reporte-diario"),
+        d("resumenes_apoyo/2026-10-16", "formato" to "resumen-semanal")
     )
 
     @Test fun qa_t01_ida_y_vuelta_con_todas_las_colecciones() {

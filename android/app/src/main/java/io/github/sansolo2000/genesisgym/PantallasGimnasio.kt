@@ -275,7 +275,7 @@ fun PantallaGimnasio(g: Gym, acciones: AccionesGym) {
     @Suppress("UNUSED_VARIABLE") val t = g.tick   // se vuelve a dibujar cuando cambian los datos
     if (g.vista == "sesion" && g.borrador != null) { SesionNueva(g); g.ficha?.let { Ficha(g, it) }; return }
     Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Nota(PRUEBA, MaterialTheme.colorScheme.tertiaryContainer)
+        if (Gimnasio.hoyIso() < "2026-10-14") Nota(PRUEBA, MaterialTheme.colorScheme.tertiaryContainer)   // desde el 14-oct la 3.0 es la oficial (estado-genesis v29)
         when (g.vista) {
             "sesion" -> Hoy(g)   // sin registro abierto
             "rutina" -> RutinaV(g)
