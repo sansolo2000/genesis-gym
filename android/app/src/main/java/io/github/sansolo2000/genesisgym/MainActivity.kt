@@ -141,10 +141,10 @@ class MainActivity : ComponentActivity() {
     }
 
     // E5: Comidas. Mismos documentos que la 2.0; cada cambio vuelve a calcular los avisos.
-    private val com by lazy { Com(base) { runCatching { Programador.reprogramar(this) }; runCatching { apo.sincronizarComidas() } } }
+    private val com: Com by lazy { Com(base) { runCatching { Programador.reprogramar(this) }; runCatching { apo.sincronizarComidas() } } }
 
     // Módulo Apoyo psicológico (contrato v2): pestaña Reporte. Las comidas del reporte salen de Comidas.
-    private val apo by lazy { Apo(base, { com.estado }) { runCatching { Programador.reprogramar(this) } } }
+    private val apo: Apo by lazy { Apo(base, { com.estado }) { runCatching { Programador.reprogramar(this) } } }
     private val elegirProgramaApoyo = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) try { apo.validar(leerTexto(uri)) } catch (e: Exception) {
             apo.importacion = null to Apoyo.Resultado(false, listOf("No se pudo leer el archivo."), emptyList())
