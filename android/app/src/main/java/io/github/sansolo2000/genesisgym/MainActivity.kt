@@ -141,7 +141,39 @@ class MainActivity : ComponentActivity() {
     }
 
     // E5: Comidas. Mismos documentos que la 2.0; cada cambio vuelve a calcular los avisos.
-    private val com by lazy { Com(base) { runCatching { Programador.reprogramar(this) } } }
+    private val com by lazy { Com(base) { runCatching { Programador.reprogramar(this) }; runCatching { apo.sincronizarComidas() } } }
+
+    // Módulo Apoyo psicológico (contrato v2): pestaña Reporte. Las comidas del reporte salen de Comidas.
+    private val apo by lazy { Apo(base, { com.estado }) { runCatching { Programador.reprogramar(this) } } }
+    private val elegirProgramaApoyo = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) try { apo.validar(leerTexto(uri)) } catch (e: Exception) {
+            apo.importacion = null to Apoyo.Resultado(false, listOf("No se pudo leer el archivo."), emptyList())
+        }
+    }
+    private val accionesApoyo = object : AccionesApoyo {
+        override fun elegirPrograma() = elegirProgramaApoyo.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*"))
+        override fun enviar() {
+            apo.enviando = "Conectando con Google…"
+            pedirToken({ token ->
+                apo.enviando = ""
+                if (token == null) { apo.mensaje = "err" to "Google no entregó un permiso de acceso."; return@pedirToken }
+                lifecycleScope.launch { apo.subir(token) }
+            }, { m -> apo.enviando = ""; apo.mensaje = "err" to "No se pudo enviar a Drive: $m" })
+        }
+    }
+
+    /** Como en Comidas: envía sin abrir ventanas si Google ya dio el permiso; si no, queda el botón Enviar. */
+    private fun enviarAutomaticoApoyo() {
+        if (apo.enviando.isNotEmpty() || apo.estado.pendientes().isEmpty()) return
+        val pedido = AuthorizationRequest.builder().setRequestedScopes(listOf(Scope(DriveTexto.ALCANCE))).build()
+        Identity.getAuthorizationClient(this).authorize(pedido)
+            .addOnSuccessListener { r ->
+                val tok = r.accessToken
+                if (r.hasResolution() || tok == null) { apo.faltaPermiso = true; return@addOnSuccessListener }
+                lifecycleScope.launch { apo.subir(tok, automatico = true) }
+            }
+            .addOnFailureListener { apo.faltaPermiso = true }
+    }
     private var fotoTipo: String = ""
     private var fotoCamara: Uri? = null
 
@@ -323,6 +355,7 @@ class MainActivity : ComponentActivity() {
         }
         window.decorView.setBackgroundColor(android.graphics.Color.parseColor("#111315"))
         com.enviarAuto = { enviarAutomatico() }
+        apo.enviarAuto = { enviarAutomaticoApoyo() }
         gym.alDescanso = { fin, texto -> runCatching { if (fin == null) Programador.cancelarDescanso(this) else Programador.programarDescanso(this, fin, texto) } }
         runCatching { Programador.reprogramar(this) }
         intent?.getStringExtra(Programador.EXTRA_VISTA)?.let { abrirVista(it) }
@@ -335,6 +368,9 @@ class MainActivity : ComponentActivity() {
                     BackHandler(enabled = gym.vista == "comidas" && (com.vista != "dia" || com.verImport)) {
                         when { com.verImport && com.estado.programa != null -> com.verImport = false; com.vista == "cambio" -> com.vista = "comida"; com.vista == "receta" -> com.vista = "dia"; else -> com.cerrarComida() }
                     }
+                    BackHandler(enabled = gym.vista == "reporte" && (apo.vista == "resumen" || apo.verImport)) {
+                        if (apo.vista == "resumen") apo.vista = "reporte" else { apo.verImport = false; apo.importacion = null }
+                    }
                     BackHandler(enabled = gym.vista == "sesion") {
                         when {
                             gym.ficha != null -> gym.ficha = null
@@ -345,13 +381,14 @@ class MainActivity : ComponentActivity() {
                     }
                     Column(modifier = Modifier.safeDrawingPadding()) {
                         if (gym.vista != "sesion") Row(modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf("hoy" to "Hoy", "comidas" to "Comidas", "rutina" to "Rutina", "historial" to "Historial", "importar" to "Importar", "avisos" to "Avisos", "pruebas" to "Pruebas").forEach { (v, t) ->
+                            listOf("hoy" to "Hoy", "comidas" to "Comidas", "reporte" to "Reporte", "rutina" to "Rutina", "historial" to "Historial", "importar" to "Importar", "avisos" to "Avisos", "pruebas" to "Pruebas").forEach { (v, t) ->
                                 val activa = gym.vista == v || (v == "hoy" && gym.vista == "sesion")
-                                val ir = { if (v == "comidas" && gym.vista != "comidas") com.cargar(); gym.ir(v) }
+                                val ir = { if (v == "comidas" && gym.vista != "comidas") com.cargar(); if (v == "reporte" && gym.vista != "reporte") apo.refrescar(); gym.ir(v) }
                                 Pestana(t, activa, ir)
                             }
                         }
                         if (gym.vista == "comidas") PantallaComidas(com, accionesComidas)
+                        else if (gym.vista == "reporte") PantallaApoyo(apo, accionesApoyo)
                         else if (gym.vista == "avisos") PantallaAvisos(this@MainActivity, accionesAvisos, refresco, eleccionSonido, uriSonido)
                         else if (gym.vista != "pruebas") PantallaGimnasio(gym, accionesGym)
                         else {
@@ -374,6 +411,7 @@ class MainActivity : ComponentActivity() {
 
     private fun abrirVista(v: String) {
         if (v == "comidas") com.cargar()
+        if (v == "reporte") { apo.vista = "reporte"; apo.cargar() }
         if (v == "sesion" && gym.borrador == null) gym.ir("hoy") else gym.ir(v)
     }
 
