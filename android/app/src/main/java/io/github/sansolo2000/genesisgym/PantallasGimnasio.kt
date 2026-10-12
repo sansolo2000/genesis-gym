@@ -2,10 +2,10 @@ package io.github.sansolo2000.genesisgym
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -397,10 +397,12 @@ internal fun CierreSesion(g: Gym) {
     Tarjeta {
         Sub("Cierre de la sesión")
         Gris("RPE de la sesión (1 = muy fácil, 10 = máximo)")
-        for (fila in listOf(1..5, 6..10)) Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        // D-07: los 5 botones de cada fila reparten el ancho disponible para que el 5 y el 10 siempre se vean.
+        for (fila in listOf(1..5, 6..10)) Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             for (n in fila) {
                 val sel = b.num("rpe_sesion") == n.toDouble()
-                Button(onClick = { g.errorCierre = ""; g.guardar(b.con("rpe_sesion", JsonPrimitive(n))) }, modifier = Modifier.width(60.dp),
+                Button(onClick = { g.errorCierre = ""; g.guardar(b.con("rpe_sesion", JsonPrimitive(n))) }, modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(0.dp),
                     colors = if (sel) ButtonDefaults.buttonColors() else ButtonDefaults.outlinedButtonColors()) { Text("$n") }
             }
         }

@@ -8,6 +8,9 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -195,8 +198,13 @@ private fun FilaMapa(g: Gym, i: Int, ej: JsonObject) {
 }
 
 // ---------- Hoja del ejercicio ----------
+// D-02 (QA #7, 12-oct): con el teclado abierto, la cabecera, las pestañas y los botones de abajo ocupaban casi toda la
+// pantalla y la fila de la serie quedaba tapada. Mientras el teclado está abierto se ocultan las pestañas, la barra de
+// avance y los botones de abajo, y el nombre se achica: la lista de series usa ese espacio y la fila con foco se ve.
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Hoja(g: Gym) {
+    val teclado = WindowInsets.isImeVisible
     val b = g.borrador ?: return
     val ejs = b.arr("ejercicios")
     if (ejs.isEmpty()) { g.sesVista = "mapa"; return }
@@ -214,15 +222,17 @@ private fun Hoja(g: Gym) {
             Text(b.txt("sesion_nombre") ?: "", color = GRIS, fontSize = 14.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text("${i + 1}", fontSize = 20.sp, fontWeight = FontWeight.Bold); Text(" / ${ejs.size}", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = GRIS)
         }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        if (!teclado) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             for (j in ejs.indices) Box(Modifier.weight(1f).height(5.dp).clip(RoundedCornerShape(3.dp))
                 .background(if (j == i) AMBAR else if (Gimnasio.ejercicioListo(ejs[j])) VERDE else LINEA))
         }
-        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (teclado) Text(ej.txt("nombre") ?: "", fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 16.dp))
+        else Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Eti("${NOMBRE_BLOQUE[bloque]} · ${enBloque.indexOf(i) + 1} DE ${enBloque.size}", COLOR_BLOQUE[bloque]!!)
             Text(ej.txt("nombre") ?: "", fontSize = 28.sp, fontWeight = FontWeight.Bold, lineHeight = 30.sp)
         }
-        Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(CAJA).padding(4.dp),
+        if (!teclado) Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(CAJA).padding(4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             for ((ficha, txt) in listOf(false to "Registrar", true to "Cómo se hace")) {
                 val sel = g.verFicha == ficha
@@ -245,11 +255,11 @@ private fun Hoja(g: Gym) {
                 series.forEachIndexed { k, se -> FilaSerie(g, b, i, k, ej.txt("ejercicio_id")!!, se, sesiones, k == actual) }
             }
         }
-        if (descanso > 0 && !g.verFicha) OutlinedButton(onClick = {
+        if (descanso > 0 && !g.verFicha && !teclado) OutlinedButton(onClick = {
             val k = if (actual < 0) series.size - 1 else (actual - 1).coerceAtLeast(0)
             g.iniciarDescanso(i, k)
         }, modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth().heightIn(min = 48.dp)) { Text("Iniciar descanso ${mmss(descanso)}", color = AMBAR) }
-        Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (!teclado) Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { g.abrirEjercicio(i - 1) }, enabled = i > 0, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) {
                 Column(Modifier.fillMaxWidth()) {
                     Text("‹ Anterior", fontSize = 11.sp, color = GRIS)
