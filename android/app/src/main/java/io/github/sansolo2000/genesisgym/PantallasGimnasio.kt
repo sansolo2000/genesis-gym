@@ -387,22 +387,32 @@ private fun Hoy(g: Gym) {
 
     val sesiones = g.sesiones()
     val ses = rutina.arr("sesiones").firstOrNull { it.txt("dia_semana") == dia }
+    // M-05: cada sesión de la rutina se hace una vez por semana (lunes a domingo).
+    val semana = Gimnasio.sesionesDeSemana(sesiones, hoy)
     Tarjeta {
         if (ses != null) {
+            // La de hoy, o si ya se registró otro día de esta semana, esa (no se ofrece empezarla de nuevo).
             val doc = sesiones.firstOrNull { it.txt("fecha") == hoy && it.txt("sesion_id") == ses.txt("id") }
+                ?: semana.firstOrNull { it.txt("sesion_id") == ses.txt("id") }
+            val otroDia = doc != null && doc.txt("fecha") != hoy
             Gris("Sesión de hoy"); Sub(ses.txt("nombre") ?: "")
             Gris("~${JsJson.numero(ses["duracion_estimada_min"].toString())} min · ${ses.arr("ejercicios").size} ejercicios" + (doc?.let { " · " + if (it.txt("estado") == "cerrada") "cerrada" else "en curso" } ?: ""))
+            if (otroDia) Nota("Ya la registraste esta semana, el ${Gimnasio.fechaCorta(doc!!.txt("fecha")!!)}. Cada sesión va una vez por semana.")
             ses.txt("notas")?.takeIf { it.isNotEmpty() }?.let { Text(it) }
-            Button(onClick = { g.abrirSesion(hoy, ses.txt("id")!!) }, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = { g.abrirSesion(doc?.txt("fecha") ?: hoy, ses.txt("id")!!) }, modifier = Modifier.fillMaxWidth()) {
                 Text(if (doc == null) "Empezar sesión" else if (doc.txt("estado") == "cerrada") "Ver sesión" else "Continuar sesión")
             }
         } else { Gris("Hoy"); Sub("Sin fuerza hoy"); Gris("La rutina no tiene sesión para el ${Gimnasio.DIA_LABEL[dia]?.lowercase()}.") }
     }
-    sesiones.firstOrNull { !(ses != null && it.txt("fecha") == hoy && it.txt("sesion_id") == ses.txt("id")) }?.let { u ->
+    if (semana.isNotEmpty()) {
+        Sub("Sesiones de esta semana")
+        Gris("Semana del ${Gimnasio.fechaCorta(Gimnasio.lunesDe(hoy))} (lunes a domingo).")
+        for (s in semana) FilaSesion(g, s)
+    } else sesiones.firstOrNull()?.let { u ->
         Sub("Última sesión registrada")
         FilaSesion(g, u)
     }
-    val otras = rutina.arr("sesiones").filter { ses == null || it.txt("id") != ses.txt("id") }
+    val otras = Gimnasio.pendientesDeSemana(rutina.arr("sesiones"), sesiones, hoy, ses?.txt("id"))
     if (otras.isNotEmpty()) {
         Sub("Registrar otra sesión hoy")
         for (s in otras) OutlinedButton(onClick = { g.abrirSesion(hoy, s.txt("id")!!) }, modifier = Modifier.fillMaxWidth()) {

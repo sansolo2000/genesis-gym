@@ -142,6 +142,22 @@ object Gimnasio {
     }
 
     /** Orden del historial de la 2.0: fecha descendente y, si empatan, la actualizada más reciente primero. */
+    // ---------- M-05 (Héctor, 13-oct): cada sesión de la rutina se hace una vez por semana, de lunes a domingo ----------
+    /** Lunes de la semana (lunes a domingo) que contiene [fecha]. */
+    fun lunesDe(fecha: String): String = LocalDate.parse(fecha).let { it.minusDays((it.dayOfWeek.value - 1).toLong()) }.toString()
+
+    /** Sesiones registradas (cerradas o en curso) en la semana de [hoy], de la más antigua a la más reciente. */
+    fun sesionesDeSemana(sesiones: List<JsonObject>, hoy: String): List<JsonObject> {
+        val desde = lunesDe(hoy); val hasta = LocalDate.parse(desde).plusDays(6).toString()
+        return sesiones.filter { val f = it.txt("fecha") ?: ""; f in desde..hasta }.sortedBy { it.txt("fecha") }
+    }
+
+    /** Sesiones de la rutina que todavía no tienen registro en la semana de [hoy], sin contar [excluir] (la del día). */
+    fun pendientesDeSemana(rutinaSesiones: List<JsonObject>, sesiones: List<JsonObject>, hoy: String, excluir: String?): List<JsonObject> {
+        val hechas = sesionesDeSemana(sesiones, hoy).mapNotNull { it.txt("sesion_id") }.toSet()
+        return rutinaSesiones.filter { val id = it.txt("id"); id != excluir && id !in hechas }
+    }
+
     fun ordenarSesiones(s: List<JsonObject>): List<JsonObject> = s.filter { !it.txt("fecha").isNullOrEmpty() }
         .sortedWith(compareByDescending<JsonObject> { it.txt("fecha") }.thenByDescending { it.txt("actualizado") ?: "" })
 
