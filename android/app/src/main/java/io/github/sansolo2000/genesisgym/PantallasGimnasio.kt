@@ -84,6 +84,11 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
     val descansoFin: Long? get() = reloj.fin
     val descansoTotal: Int get() = reloj.total
     val descansoDe: Pair<Int, Int>? get() = reloj.de
+    /** M-01: temporizador de una serie por tiempo; suena en 0 aunque se salga de la app. El ✓ lo marca Héctor. */
+    var alSerie: (Long?, String) -> Unit = { _, _ -> }
+    val relojSerie = RelojDescanso { f, t -> alSerie(f, t) }
+    /** M-04: la actividad aplica Avisos y sonido del respaldo restaurado. */
+    var alRestaurar: () -> Unit = {}
     private fun claveSesion(): String? = borrador?.let { "${it.txt("fecha")}_${it.txt("sesion_id")}" }
 
     fun refrescar() { tick++; alCambiar() }
@@ -105,13 +110,15 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
         borrador = existente ?: run {
             val r = rutina() ?: return
             val ses = r.arr("sesiones").firstOrNull { it.txt("id") == sesionId } ?: return
-            Gimnasio.nuevoBorrador(fecha, ses, r, Gimnasio.ahoraIso())
+            // M-02: la hora de inicio queda en el registro, para proponer la duración aunque se salga de la app o se gire el celular.
+            Gimnasio.nuevoBorrador(fecha, ses, r, Gimnasio.ahoraIso()).con("inicio", JsonPrimitive(Gimnasio.ahoraIso()))
         }
         inicioApertura = if (existente == null) System.currentTimeMillis() else null
         guardado = if (existente != null) "Guardado ✓" else "Sin guardar: se guarda al anotar la primera serie"
         guardadoError = false; errorCierre = ""; confirmarBorrado = false; editarFecha = false; errorFecha = ""
         sesVista = "mapa"; verFicha = false; aviso = ""
         reloj.alAbrirSesion(claveSesion(), System.currentTimeMillis())   // la misma sesión conserva su descanso
+        relojSerie.alAbrirSesion(claveSesion(), System.currentTimeMillis())
         idxEj = Gimnasio.primerPendiente(borrador!!).coerceAtLeast(0)
         vista = "sesion"
     }
@@ -144,8 +151,24 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
             guardar(copia)
         }
         aviso = ""
+        if (relojSerie.de == (i to k)) relojSerie.cancelar()   // M-01: si el temporizador de esta serie seguía, ya no hace falta
         iniciarDescanso(i, k)
     }
+
+    // ---------- M-01: series por tiempo ----------
+    fun iniciarSerieTiempo(i: Int, k: Int) {
+        val ej = borrador?.arr("ejercicios")?.getOrNull(i) ?: return
+        val se = ej.arr("series").getOrNull(k) ?: return
+        val seg = se.num("prescrito_seg")?.toInt() ?: return
+        if (seg <= 0) return
+        relojSerie.iniciar(System.currentTimeMillis(), seg, i, k, claveSesion(), "${ej.txt("nombre")} · serie ${k + 1}: ${seg} s cumplidos. Marca ✓ al terminar.")
+        aviso = ""
+    }
+    fun detenerSerieTiempo() = relojSerie.cancelar()
+    fun serieTiempoCumplida() { relojSerie.vencer(); aviso = "Tiempo cumplido. Marca ✓ cuando termines." }
+
+    /** M-02: inicio de la sesión (guardado en el registro); si es una sesión anterior a la 0.12.0, desde que se abrió. */
+    fun inicioSesionMs(): Long? = borrador?.txt("inicio")?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() } ?: inicioApertura
 
     fun siguienteDe(i: Int, k: Int): Pair<Int, Int>? {
         val ejs = borrador?.arr("ejercicios") ?: return null
@@ -201,11 +224,13 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
         if (b.esNulo("rpe_sesion") || b.esNulo("duracion_min")) { errorCierre = "Para cerrar, indica el RPE de la sesión y la duración en minutos."; return }
         errorCierre = ""; guardar(b.con("estado", JsonPrimitive("cerrada")))
         if (reloj.clave == claveSesion()) reloj.cancelar()
+        if (relojSerie.clave == claveSesion()) relojSerie.cancelar()
     }
 
     fun borrarSesion() {
         val b = borrador ?: return
         if (reloj.clave == claveSesion()) reloj.cancelar()
+        if (relojSerie.clave == claveSesion()) relojSerie.cancelar()
         base.borrar("sesiones/" + Gimnasio.docIdSesion(b.txt("fecha")!!, b.txt("sesion_id")!!)); refrescar(); ir("historial")
     }
 
@@ -237,11 +262,24 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
         catch (e: Exception) { importMensaje = "No se pudo guardar la rutina. Vuelve a intentarlo." }
     }
 
+    // ---------- plan Génesis (sobre del Consolidador) ----------
+    var plan by mutableStateOf<Plan.Revision?>(null)
+    var planMensaje by mutableStateOf("")
+    /** La actividad revisa el sobre con los programas activos de Comidas y Apoyo, y aplica las partes nuevas. */
+    var revisarPlan: (String) -> Plan.Revision? = { null }
+    var aplicarPlan: (Plan.Revision) -> String = { "" }
+    fun validarPlan(texto: String) { planMensaje = ""; plan = revisarPlan(texto) }
+    fun activarPlan() {
+        val r = plan ?: return
+        if (!r.ok || r.nuevas.isEmpty()) return
+        planMensaje = aplicarPlan(r); plan = null; refrescar()
+    }
+
     fun textoCsv(): String = "﻿" + Gimnasio.csv(sesiones())
 
     fun textoRespaldo(): Pair<String, String> {
         val docs = base.todos()
-        return Respaldo.nombreArchivo(perfil(), Gimnasio.hoyIso()) to Respaldo.crear(docs, perfil(), BuildConfig.VERSION_NAME, Gimnasio.ahoraIso())
+        return Respaldo.nombreArchivo(perfil(), Gimnasio.sello()) to Respaldo.crear(docs, perfil(), BuildConfig.VERSION_NAME, Gimnasio.ahoraIso())
     }
 
     fun respaldoGuardado(nombre: String) {
@@ -267,6 +305,7 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
             base.reemplazarTodo(r.docs)
             if (Respaldo.huella(base.todos()) != Respaldo.huella(r.docs)) throw IllegalStateException("verificación")
             respaldoMensaje = "Restauración completa: ${r.docs.size} documentos, huella verificada."
+            runCatching { alRestaurar() }
             restaurar = null; restaurarConfirmar = false; refrescar()
         } catch (e: Exception) {
             respaldoMensaje = "No se pudo restaurar. Si dice \"verificación\", vuelve a restaurar desde el mismo archivo. (${e.message})"
@@ -306,6 +345,7 @@ fun PantallaGimnasio(g: Gym, acciones: AccionesGym) {
 
 /** Lo que solo la actividad puede hacer (abrir el selector de archivos, guardar un archivo). */
 interface AccionesGym {
+    fun elegirPlan()
     fun elegirRutina()
     fun guardarCsv()
     fun guardarRespaldo()
@@ -433,9 +473,9 @@ internal fun CierreSesion(g: Gym) {
                 }
             }, label = { Text("Duración (min)") }, placeholder = { Text("${b["duracion_estimada_min"]}") }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-            val sugerido = g.inicioApertura?.let { maxOf(1L, Math.round((System.currentTimeMillis() - it) / 60000.0)) }
+            val sugerido = g.inicioSesionMs()?.let { maxOf(1L, Math.round((System.currentTimeMillis() - it) / 60000.0)) }?.takeIf { it <= 300 }
             if (sugerido != null && b.txt("estado") != "cerrada") TextButton(onClick = { dur = "$sugerido"; g.guardar(g.borrador!!.con("duracion_min", JsonPrimitive(sugerido))) }) {
-                Text("Llevas $sugerido min con la sesión abierta. Usar $sugerido min")
+                Text("Llevas $sugerido min desde que iniciaste la sesión. Usar $sugerido min")
             }
             var nota by remember { mutableStateOf(b.txt("nota") ?: "") }
             OutlinedTextField(value = nota, onValueChange = { nota = it; g.guardar(g.borrador!!.con("nota", JsonPrimitive(it))) }, label = { Text("Nota (opcional)") }, modifier = Modifier.fillMaxWidth())
@@ -551,7 +591,7 @@ private fun Historial(g: Gym, a: AccionesGym) {
     Tarjeta {
         Sub("Respaldo de todos tus datos")
         Gris("Tus datos viven solo en este celular. Crea un respaldo cada semana y guárdalo en Drive. Es el mismo formato de la 2.0.")
-        Text((g.ultimoRespaldo()?.let { "Último respaldo: ${it.take(16).replace('T', ' ')} UTC" } ?: "Todavía no hay respaldos.") + (g.perfil()?.let { " · perfil: $it" } ?: ""))
+        Text((g.ultimoRespaldo()?.let { "Último respaldo: ${Gimnasio.horaLocal(it) ?: it}" } ?: "Todavía no hay respaldos.") + (g.perfil()?.let { " · perfil: $it" } ?: ""))
         Button(onClick = { a.guardarRespaldo() }) { Text("Crear respaldo") }
         HorizontalDivider()
         Sub("Restaurar desde un respaldo")
@@ -583,6 +623,7 @@ private fun Historial(g: Gym, a: AccionesGym) {
 // ---------- Importar ----------
 @Composable
 private fun Importar(g: Gym, a: AccionesGym) {
+    ImportarPlan(g, a)
     Gris("Rutina de Entrenamiento"); Titulo("Importar rutina")
     Gris("Elige el archivo o pega el JSON que entregó Entrenamiento. Si tiene un solo error, la rutina se rechaza completa y no se corrige nada.")
     Tarjeta {
@@ -611,6 +652,39 @@ private fun Importar(g: Gym, a: AccionesGym) {
                 if (g.importMensaje != "Rutina activada.") Button(onClick = { g.activar() }) { Text("Activar esta rutina") }
             }
         }
+    }
+}
+
+/** Plan Génesis: un solo archivo del Consolidador con la rutina, el programa de alimentación y el de apoyo. */
+@Composable
+private fun ImportarPlan(g: Gym, a: AccionesGym) {
+    Gris("Plan Génesis (Consolidador)"); Titulo("Importar plan completo")
+    Gris("Un solo archivo con la rutina, el programa de alimentación y el programa de apoyo. Cada parte se revisa con su validador; si una tiene errores, no se importa ninguna. Las partes iguales a las activas se omiten.")
+    Tarjeta {
+        Button(onClick = { a.elegirPlan() }) { Text("Elegir plan (.json)") }
+        Gris("En el selector puedes ir a Drive → Genesis Gym → planes.")
+    }
+    if (g.planMensaje.isNotEmpty()) Text(g.planMensaje)
+    val r = g.plan ?: return
+    Tarjeta {
+        when {
+            r.errores.isNotEmpty() -> {
+                Nota("Plan rechazado. Devuelve esta lista al Consolidador.", MaterialTheme.colorScheme.errorContainer)
+                r.errores.forEach { Text("• $it") }
+            }
+            !r.ok -> Nota("Plan rechazado: una parte tiene errores, así que no se importa ninguna. Devuelve la lista al área dueña de esa parte.", MaterialTheme.colorScheme.errorContainer)
+            r.nuevas.isEmpty() -> Nota("Las tres partes ya están activas. No hay nada que importar.")
+            else -> Nota("Plan válido.")
+        }
+        r.avisos.forEach { Text("• $it") }
+        for (p in r.partes) {
+            HorizontalDivider()
+            Text("${p.nombre}: " + when (p.estado) { "nueva" -> "se importa"; "igual" -> "ya está activa, se omite"; else -> "con errores" }, fontWeight = FontWeight.SemiBold)
+            Gris(p.detalle)
+            p.errores.forEach { Text("• $it") }
+            if (p.avisos.isNotEmpty()) p.avisos.forEach { Gris("Aviso: $it") }
+        }
+        if (r.ok && r.nuevas.isNotEmpty()) Button(onClick = { g.activarPlan() }) { Text("Importar ${r.nuevas.size} ${if (r.nuevas.size == 1) "parte" else "partes"}") }
     }
 }
 

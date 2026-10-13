@@ -282,6 +282,26 @@ private fun Hoja(g: Gym) {
     }
 }
 
+/** M-01: cuenta regresiva de la serie por tiempo en curso, con "Detener". Al llegar a 0 suena el aviso. */
+@Composable
+private fun CuentaSerie(g: Gym) {
+    val fin = g.relojSerie.fin ?: return
+    var ahora by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(fin) {
+        while (true) {
+            ahora = System.currentTimeMillis()
+            if (ahora >= fin) { g.serieTiempoCumplida(); break }
+            delay(250)
+        }
+    }
+    val restante = (((fin - ahora) + 999) / 1000).toInt().coerceAtLeast(0)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.semantics { contentDescription = "Quedan ${mmss(restante)} de la serie" }) {
+        Text(mmss(restante), fontSize = 24.sp, fontWeight = FontWeight.Bold, color = AZUL)
+        TextButton(onClick = { g.detenerSerieTiempo() }) { Text("Detener", color = GRIS) }
+    }
+}
+
 @Composable
 private fun FilaSerie(g: Gym, b: JsonObject, i: Int, k: Int, ejId: String, se: JsonObject, sesiones: List<JsonObject>, actual: Boolean) {
     val modo = se.txt("modo")
@@ -295,7 +315,17 @@ private fun FilaSerie(g: Gym, b: JsonObject, i: Int, k: Int, ejId: String, se: J
                 Text(if (se.txt("tipo") == "calentamiento") "calent." else "efectiva", color = GRIS, fontSize = 11.sp)
             }
             if (modo == "tiempo") {
-                Text(if (hecha) "${se.num("seg_reales")?.toInt() ?: 0} s ✓" else prescrito(se), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                // M-01 (pedido de Héctor, 12-oct 09:37): botón "Iniciar" aparte; suena al llegar a 0; el ✓ lo marca él.
+                val corriendo = g.relojSerie.fin != null && g.relojSerie.de == (i to k)
+                Column(Modifier.weight(1f)) {
+                    Text(if (hecha) "${se.num("seg_reales")?.toInt() ?: 0} s ✓" else prescrito(se), fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                    if (!hecha) {
+                        if (corriendo) CuentaSerie(g)
+                        else TextButton(onClick = { g.iniciarSerieTiempo(i, k) }, contentPadding = ButtonDefaults.TextButtonContentPadding) {
+                            Text("▶ Iniciar", color = AZUL, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
             } else key(b.txt("fecha"), b.txt("sesion_id"), i, k) {
                 // 0.6.1: la clave ya no incluye el valor guardado. Antes, cada número escrito cambiaba la clave,
                 // el campo se volvía a crear y perdía el foco (se cerraba el teclado). Lo vio Héctor el 10-oct.

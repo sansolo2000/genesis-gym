@@ -82,8 +82,19 @@ object Programador {
         val am = c.getSystemService(AudioManager::class.java)
         if (!s.alarma && am.ringerMode != AudioManager.RINGER_MODE_NORMAL) { alTerminar(); return }
         detener()
+        // M-04: un sonido elegido que ya no existe (por ejemplo, restaurado desde otro celular) cae al sonido del celular.
+        val mp = preparar(c, s) ?: (if (s.uri != null) preparar(c, s.copy(uri = null)) else null) ?: run { alTerminar(); return }
+        sonando = mp
+        var listo = false
+        val fin = { if (!listo) { listo = true; if (sonando === mp) sonando = null; runCatching { mp.stop() }; mp.release(); alTerminar() } }
+        mp.setOnCompletionListener { fin() }
+        Handler(Looper.getMainLooper()).postDelayed({ fin() }, DURACION_MS)
+        mp.start()
+    }
+
+    private fun preparar(c: Context, s: Sonido): MediaPlayer? {
         val mp = MediaPlayer()
-        try {
+        return try {
             mp.setAudioAttributes(AudioAttributes.Builder()
                 .setUsage(if (s.alarma) AudioAttributes.USAGE_ALARM else AudioAttributes.USAGE_NOTIFICATION)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
@@ -92,13 +103,8 @@ object Programador {
             mp.setVolume(v, v)
             mp.isLooping = s.alarma
             mp.prepare()
-        } catch (e: Exception) { mp.release(); alTerminar(); return }
-        sonando = mp
-        var listo = false
-        val fin = { if (!listo) { listo = true; if (sonando === mp) sonando = null; runCatching { mp.stop() }; mp.release(); alTerminar() } }
-        mp.setOnCompletionListener { fin() }
-        Handler(Looper.getMainLooper()).postDelayed({ fin() }, DURACION_MS)
-        mp.start()
+            mp
+        } catch (e: Exception) { mp.release(); null }
     }
 
     fun detener() { sonando?.let { runCatching { it.stop() }; it.release() }; sonando = null }
@@ -155,23 +161,52 @@ object Programador {
         return PendingIntent.getBroadcast(c, BASE_CODIGO + i, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 
-    // ---------- 0.6.0: fin del descanso en la sesión ----------
+    // ---------- 0.6.0: fin del descanso en la sesión; M-01: fin de una serie por tiempo ----------
     private const val CODIGO_DESCANSO = 1999
+    private const val CODIGO_SERIE = 1998
 
-    private fun pendienteDescanso(c: Context, texto: String?): PendingIntent {
+    private fun pendienteSesion(c: Context, codigo: Int, titulo: String, texto: String?): PendingIntent {
         val intent = Intent(c, RecordatorioReceiver::class.java)
-        if (texto != null) intent.putExtra(EXTRA_TITULO, "Descanso terminado").putExtra(EXTRA_TEXTO, texto).putExtra(EXTRA_VISTA, "sesion")
-        return PendingIntent.getBroadcast(c, CODIGO_DESCANSO, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        if (texto != null) intent.putExtra(EXTRA_TITULO, titulo).putExtra(EXTRA_TEXTO, texto).putExtra(EXTRA_VISTA, "sesion")
+        return PendingIntent.getBroadcast(c, codigo, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    }
+
+    private fun programarSesion(c: Context, pi: PendingIntent, finMs: Long) {
+        val am = c.getSystemService(AlarmManager::class.java)
+        if (am.canScheduleExactAlarms()) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, finMs, pi)
+        else am.setWindow(AlarmManager.RTC_WAKEUP, finMs, 60_000L, pi)
     }
 
     /** Programa el aviso de fin de descanso (suena con la configuración de Avisos, aunque la pantalla esté apagada). */
-    fun programarDescanso(c: Context, finMs: Long, texto: String) {
-        val am = c.getSystemService(AlarmManager::class.java)
-        if (am.canScheduleExactAlarms()) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, finMs, pendienteDescanso(c, texto))
-        else am.setWindow(AlarmManager.RTC_WAKEUP, finMs, 60_000L, pendienteDescanso(c, texto))
+    fun programarDescanso(c: Context, finMs: Long, texto: String) = programarSesion(c, pendienteSesion(c, CODIGO_DESCANSO, "Descanso terminado", texto), finMs)
+    fun cancelarDescanso(c: Context) { c.getSystemService(AlarmManager::class.java).cancel(pendienteSesion(c, CODIGO_DESCANSO, "", null)) }
+
+    /** M-01: aviso al cumplirse el tiempo de una serie por tiempo (elíptica, elongaciones). */
+    fun programarSerie(c: Context, finMs: Long, texto: String) = programarSesion(c, pendienteSesion(c, CODIGO_SERIE, "Tiempo cumplido", texto), finMs)
+    fun cancelarSerie(c: Context) { c.getSystemService(AlarmManager::class.java).cancel(pendienteSesion(c, CODIGO_SERIE, "", null)) }
+
+    // ---------- M-04: Avisos y sonido en el respaldo ----------
+    /** Guarda la configuración de Avisos y sonido en config/avisos, para que entre en el respaldo. */
+    fun respaldarEn(c: Context, base: BaseLocal) {
+        val s = sonido(c)
+        base.put("config/avisos", Recordatorios.avisosAJson(Recordatorios.Respaldados(config(c), s.uri?.toString(), s.alarma, s.volumen)))
     }
 
-    fun cancelarDescanso(c: Context) { c.getSystemService(AlarmManager::class.java).cancel(pendienteDescanso(c, null)) }
+    /** Después de restaurar: si el respaldo trae config/avisos, la aplica y vuelve a programar los avisos. */
+    fun restaurarDesde(c: Context, base: BaseLocal) {
+        val o = base.get("config/avisos") ?: return
+        val r = Recordatorios.avisosDesdeJson(o)
+        guardarConfig(c, r.config)
+        guardarSonido(c, Sonido(r.sonido?.let(Uri::parse), r.alarma, r.volumen))
+        reprogramar(c)
+    }
+
+    /** Avisos toma la hora del reporte del programa de apoyo como hora inicial (Recordatorios.horaReporteAAplicar). */
+    fun horaReporteDesdeApoyo(c: Context, nueva: String?, anterior: String?) {
+        val h = Recordatorios.horaReporteAAplicar(nueva, anterior) ?: return
+        guardarConfig(c, config(c).copy(horaReporte = h))
+        reprogramar(c)
+    }
 
     /** Borra los avisos anteriores y programa los de los próximos 7 días. Devuelve cuántos quedaron. */
     fun reprogramar(c: Context): Int {

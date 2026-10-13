@@ -55,6 +55,8 @@ import java.time.ZonedDateTime
  * Todos los textos que ve Héctor salen del programa de Apoyo psicológico, tal cual.
  */
 class Apo(val base: BaseLocal, private val comidas: () -> EstadoComidas?, private val alCambiar: () -> Unit) {
+    /** Al activar un programa: (hora del reporte del programa nuevo, la del anterior). La actividad ajusta Avisos. */
+    var alActivar: (String?, String?) -> Unit = { _, _ -> }
     var tick by mutableIntStateOf(0)
     var estado by mutableStateOf(EstadoApoyo(null)); private set
     var dia by mutableStateOf(Gimnasio.hoyIso())
@@ -196,14 +198,25 @@ class Apo(val base: BaseLocal, private val comidas: () -> EstadoComidas?, privat
     }
 
     // ---------- programa ----------
+    fun horaReporteDe(p: JsonObject?): String? = ((p?.get("horario") as? JsonObject)?.get("reporte") as? kotlinx.serialization.json.JsonPrimitive)?.content
+
+    /** Plan Génesis: el programa ya se guardó junto con las otras partes; aquí se recarga y se avisa como en activar(). */
+    fun trasImportarPlan(horaAntes: String?) {
+        cargar()
+        importacion = null; verImport = false
+        alActivar(horaReporteDe(estado.programa), horaAntes)
+        alCambiar()
+    }
     fun validar(texto: String) { importacion = Apoyo.revisarTexto(texto, estado.programa) }
     fun activar() {
         val (obj, r) = importacion ?: return
         if (obj == null || !r.ok) return
         try {
+            val horaAntes = horaReporteDe(estado.programa)
             base.ponerVarios(Apoyo.documentosActivacion(obj, Gimnasio.ahoraIso()))
             importacion = null; verImport = false
             cargar()
+            alActivar(horaReporteDe(obj), horaAntes)
             mensaje = "ok" to "Programa de apoyo activado: ${obj.o("programa").s("id")} (versión ${obj.o("programa").n("version")?.toInt()})."
             alCambiar()
         } catch (e: Exception) { mensaje = "err" to "No se pudo guardar el programa: ${e.javaClass.simpleName}" }

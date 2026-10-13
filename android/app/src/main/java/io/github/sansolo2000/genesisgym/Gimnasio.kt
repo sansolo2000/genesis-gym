@@ -30,6 +30,13 @@ object Gimnasio {
 
     val ZONA: java.time.ZoneId = java.time.ZoneId.of("America/Santiago")
     fun hoyIso(): String = LocalDate.now(ZONA).toString()
+    /** M-03 (12-oct): prefijo AAAAMMDD_HHMMSS en hora local para los archivos que genera la app (respaldo y CSV de gimnasio). */
+    fun sello(ahora: java.time.ZonedDateTime = java.time.ZonedDateTime.now(ZONA)): String =
+        ahora.format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
+    /** D-08 (12-oct): un instante ISO en UTC, mostrado en hora local ("2026-10-12 09:42"). */
+    fun horaLocal(iso: String): String? = runCatching {
+        java.time.Instant.parse(iso).atZone(ZONA).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+    }.getOrNull()
     /** Instante como toISOString() de JavaScript: siempre con milisegundos y en UTC. */
     fun ahoraIso(): String = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
         .withZone(java.time.ZoneOffset.UTC).format(java.time.Instant.now())

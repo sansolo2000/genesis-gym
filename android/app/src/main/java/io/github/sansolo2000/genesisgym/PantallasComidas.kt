@@ -167,6 +167,14 @@ class Com(val base: BaseLocal, private val alCambiar: () -> Unit) {
         } catch (e: Exception) { mensaje = "err" to "No se pudo guardar el programa: ${e.javaClass.simpleName}" }
     }
 
+    /** Plan Génesis: el programa ya se guardó junto con las otras partes; aquí solo se recarga, como en activar(). */
+    fun trasImportarPlan(idAnterior: kotlinx.serialization.json.JsonElement?) {
+        cargar()
+        if ((estado.programa?.get("programa") as? JsonObject)?.get("id") != idAnterior) estado.cambios.clear()
+        importacion = null; verImport = false
+        alCambiar()
+    }
+
     fun fotoBytes(k: String): ByteArray? = base.get("fotos/$k")?.txt("dataUrl")?.let { u -> runCatching { Base64.decode(u.substringAfter(','), Base64.DEFAULT) }.getOrNull() }
 
     /** Sube lo pendiente a Drive. [token] viene de AuthorizationClient (permiso drive.file). */

@@ -71,5 +71,12 @@ class RespaldoTest {
         assertEquals("17.25", JsJson.stringify(JsJson.primitivo(17.25)))
     }
 
-    @Test fun nombre_de_archivo() = assertEquals("genesis-respaldo-hector-2026-10-10.json", Respaldo.nombreArchivo("Héctor", "2026-10-10"))
+    @Test fun nombre_de_archivo() = assertEquals("20261010_214500_genesis-respaldo-hector.json", Respaldo.nombreArchivo("Héctor", "20261010_214500"))
+
+    @Test fun sello_y_hora_local() {
+        val t = java.time.ZonedDateTime.of(2026, 10, 12, 9, 42, 5, 0, Gimnasio.ZONA)
+        assertEquals("20261012_094205", Gimnasio.sello(t))
+        assertEquals("2026-10-12 09:42", Gimnasio.horaLocal("2026-10-12T12:42:00.000Z"))   // Chile, UTC-3 en octubre
+        assertEquals(null, Gimnasio.horaLocal("no es fecha"))
+    }
 }

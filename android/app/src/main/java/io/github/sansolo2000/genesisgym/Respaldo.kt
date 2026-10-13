@@ -95,10 +95,10 @@ object Respaldo {
         return JsJson.stringify(archivo)
     }
 
-    /** Nombre del archivo, igual que la 2.0: genesis-respaldo-<perfil>-AAAA-MM-DD.json */
-    fun nombreArchivo(perfil: String?, fechaIso: String): String {
+    /** M-03 (12-oct): AAAAMMDD_HHMMSS_genesis-respaldo-<perfil>.json, en hora local. El contenido no cambia. */
+    fun nombreArchivo(perfil: String?, sello: String): String {
         val slug = java.text.Normalizer.normalize(perfil ?: "sin-perfil", java.text.Normalizer.Form.NFD)
             .replace(Regex("[\\u0300-\\u036f]"), "").lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').ifEmpty { "sin-perfil" }
-        return "genesis-respaldo-$slug-$fechaIso.json"
+        return "${sello}_genesis-respaldo-$slug.json"
     }
 }

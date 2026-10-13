@@ -133,10 +133,29 @@ class MainActivity : ComponentActivity() {
     private val elegirRespaldoArchivo = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) try { gym.leerRespaldo(leerTexto(uri).removePrefix("\uFEFF")) } catch (e: Exception) { gym.respaldoMensaje = "No se pudo leer el archivo." }
     }
+    private val elegirPlanArchivo = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) try { gym.validarPlan(leerTexto(uri)) } catch (e: Exception) { gym.planMensaje = "No se pudo leer el archivo." }
+    }
+
+    /** Plan Génesis: guarda todas las partes nuevas en una sola transacción y recarga cada módulo. */
+    private fun aplicarPlan(r: Plan.Revision): String = try {
+        val idAlimAntes = (com.estado.programa?.get("programa") as? kotlinx.serialization.json.JsonObject)?.get("id")
+        val horaApoyoAntes = apo.horaReporteDe(apo.estado.programa)
+        base.ponerVarios(r.nuevas.flatMap { it.docs })
+        val claves = r.nuevas.map { it.clave }.toSet()
+        if ("alimentacion" in claves) com.trasImportarPlan(idAlimAntes)
+        if ("apoyo" in claves) apo.trasImportarPlan(horaApoyoAntes)
+        runCatching { Programador.reprogramar(this) }
+        val omitidas = r.partes.filter { it.estado == "igual" }
+        "Plan importado: " + r.nuevas.joinToString(", ") { it.nombre.lowercase() } + "." +
+            (if (omitidas.isNotEmpty()) " Ya estaban activas: " + omitidas.joinToString(", ") { it.nombre.lowercase() } + "." else "")
+    } catch (e: Exception) { "No se pudo guardar el plan; no cambió nada. (${e.javaClass.simpleName})" }
+
     private val accionesGym = object : AccionesGym {
+        override fun elegirPlan() = elegirPlanArchivo.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*"))
         override fun elegirRutina() = elegirRutinaArchivo.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*"))
-        override fun guardarCsv() { csvPendiente = gym.textoCsv(); guardarCsvArchivo.launch("genesis-fuerza-${Gimnasio.hoyIso()}.csv") }
-        override fun guardarRespaldo() { val p = gym.textoRespaldo(); respaldoPendiente = p; guardarRespaldoArchivo.launch(p.first) }
+        override fun guardarCsv() { csvPendiente = gym.textoCsv(); guardarCsvArchivo.launch("${Gimnasio.sello()}_genesis-fuerza.csv") }
+        override fun guardarRespaldo() { runCatching { Programador.respaldarEn(this@MainActivity, base) }; val p = gym.textoRespaldo(); respaldoPendiente = p; guardarRespaldoArchivo.launch(p.first) }
         override fun elegirRespaldo() = elegirRespaldoArchivo.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*"))
     }
 
@@ -375,6 +394,11 @@ class MainActivity : ComponentActivity() {
         com.enviarAuto = { enviarAutomatico() }
         apo.enviarAuto = { enviarAutomaticoApoyo() }
         gym.alDescanso = { fin, texto -> runCatching { if (fin == null) Programador.cancelarDescanso(this) else Programador.programarDescanso(this, fin, texto) } }
+        gym.alSerie = { fin, texto -> runCatching { if (fin == null) Programador.cancelarSerie(this) else Programador.programarSerie(this, fin, texto) } }
+        gym.alRestaurar = { runCatching { Programador.restaurarDesde(this, base) }; refresco++ }
+        gym.revisarPlan = { t -> Plan.revisar(t, gym.rutinaActiva(), com.estado.programa, apo.estado.programa, gym.perfil(), Gimnasio.ahoraIso()) }
+        gym.aplicarPlan = { r -> aplicarPlan(r) }
+        apo.alActivar = { nueva, anterior -> runCatching { Programador.horaReporteDesdeApoyo(this, nueva, anterior) }; refresco++ }
         runCatching { Programador.reprogramar(this) }
         intent?.getStringExtra(Programador.EXTRA_VISTA)?.let { abrirVista(it) }
 

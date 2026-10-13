@@ -25,6 +25,39 @@ object Recordatorios {
         val horaReporte: String = "21:00"
     )
 
+    // ---------- M-04 (12-oct): Avisos y sonido dentro del respaldo (documento config/avisos) ----------
+    data class Respaldados(val config: Config, val sonido: String?, val alarma: Boolean, val volumen: Int)
+
+    fun avisosAJson(r: Respaldados): JsonObject = kotlinx.serialization.json.buildJsonObject {
+        put("comidas", JsonPrimitive(r.config.comidas)); put("minutos_antes", JsonPrimitive(r.config.minutosAntes))
+        put("tareas", JsonPrimitive(r.config.tareas)); put("entrenamiento", JsonPrimitive(r.config.entrenamiento))
+        put("hora_entrenamiento", JsonPrimitive(r.config.horaEntrenamiento)); put("reporte", JsonPrimitive(r.config.reporte))
+        put("hora_reporte", JsonPrimitive(r.config.horaReporte))
+        put("sonido", r.sonido?.let { JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull)
+        put("sonido_alarma", JsonPrimitive(r.alarma)); put("volumen", JsonPrimitive(r.volumen))
+    }
+
+    /** Lee config/avisos; si falta un campo o viene mal, usa el valor por defecto de Avisos. */
+    fun avisosDesdeJson(o: JsonObject): Respaldados {
+        fun b(k: String, d: Boolean) = (o[k] as? JsonPrimitive)?.takeIf { !it.isString }?.content?.toBooleanStrictOrNull() ?: d
+        fun i(k: String, d: Int) = (o[k] as? JsonPrimitive)?.takeIf { !it.isString }?.content?.toDoubleOrNull()?.toInt() ?: d
+        fun s(k: String) = (o[k] as? JsonPrimitive)?.takeIf { it.isString }?.content
+        val d = Config()
+        return Respaldados(
+            Config(b("comidas", d.comidas), i("minutos_antes", d.minutosAntes).coerceIn(0, 120), b("tareas", d.tareas), b("entrenamiento", d.entrenamiento),
+                s("hora_entrenamiento") ?: d.horaEntrenamiento, b("reporte", d.reporte), s("hora_reporte")?.takeIf { horaValida(it) } ?: d.horaReporte),
+            s("sonido"), b("sonido_alarma", false), i("volumen", 70).coerceIn(0, 100)
+        )
+    }
+
+    /**
+     * Avisos toma la hora del reporte del programa de apoyo (acordado con Apoyo #5) como hora inicial:
+     * se aplica si el programa nuevo trae una hora distinta de la del anterior (o no había anterior),
+     * para no pisar un cambio que Héctor haya hecho a mano en Avisos.
+     */
+    fun horaReporteAAplicar(nueva: String?, anterior: String?): String? =
+        nueva?.takeIf { horaValida(it) && it != anterior }
+
     data class Recordatorio(val cuando: ZonedDateTime, val categoria: String, val titulo: String, val texto: String, val vista: String)
 
     /** Un aviso del celular: los recordatorios del mismo minuto se juntan en una sola notificación. */
