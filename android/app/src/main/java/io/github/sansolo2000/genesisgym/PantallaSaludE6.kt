@@ -151,12 +151,14 @@ interface AccionesHc {
 }
 
 @Composable
-fun PantallaSaludE6(h: Hc, a: AccionesHc) {
+fun PantallaSaludE6(h: Hc, a: AccionesHc, ci: Cin, ac: AccionesCintura) {
     @Suppress("UNUSED_VARIABLE") val t = h.tick
     Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Salud", fontSize = 32.sp, fontWeight = FontWeight.Bold)
         Text("Lee una semana de Health Connect y sube al Drive los 2 CSV del Evaluador: diario (FC en reposo, sueño y peso) y actividades. Si un dato no está, la celda va vacía. Las 2 primeras semanas se compara con el script de Garmin.",
             color = GRIS, fontSize = 14.sp)
+        SeccionCintura(ci, ac)   // M-07
+        Text("Health Connect", fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
         if (!h.disponible()) { Text("Health Connect no está disponible en este celular.", color = AMBAR); return@Column }
         val faltan = h.tipos.filter { !h.tiene(it.second) }
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(CAJA).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

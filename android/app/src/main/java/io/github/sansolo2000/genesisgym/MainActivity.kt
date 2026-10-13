@@ -186,6 +186,18 @@ class MainActivity : ComponentActivity() {
     private val pedirSaludE6 = registerForActivityResult(PermissionController.createRequestPermissionResultContract()) {
         lifecycleScope.launch { hc.refrescarPermisos() }
     }
+    // M-07: cintura (sección de la pestaña Salud).
+    private val cin by lazy { Cin(this, base) }
+    private val accionesCintura = object : AccionesCintura {
+        override fun enviar() {
+            cin.enviando = "Conectando con Google…"
+            pedirToken({ token ->
+                cin.enviando = ""
+                if (token == null) { cin.mensaje = "err" to "Google no entregó un permiso de acceso."; return@pedirToken }
+                lifecycleScope.launch { cin.subir(token, gym.perfil()) }
+            }, { m -> cin.enviando = ""; cin.mensaje = "err" to "No se pudo enviar a Drive: $m" })
+        }
+    }
     private val accionesHc = object : AccionesHc {
         override fun pedirPermisos() = pedirSaludE6.launch(hc.permisos)
         override fun leer() { lifecycleScope.launch { hc.refrescarPermisos(); hc.leer() } }
@@ -396,6 +408,7 @@ class MainActivity : ComponentActivity() {
         gym.alDescanso = { fin, texto -> runCatching { if (fin == null) Programador.cancelarDescanso(this) else Programador.programarDescanso(this, fin, texto) } }
         gym.alSerie = { fin, texto -> runCatching { if (fin == null) Programador.cancelarSerie(this) else Programador.programarSerie(this, fin, texto) } }
         gym.alRestaurar = { runCatching { Programador.restaurarDesde(this, base) }; refresco++ }
+        gym.fraseHoy = { Frases.deHoy(apo.estado.programa) }
         gym.revisarPlan = { t -> Plan.revisar(t, gym.rutinaActiva(), com.estado.programa, apo.estado.programa, gym.perfil(), Gimnasio.ahoraIso()) }
         gym.aplicarPlan = { r -> aplicarPlan(r) }
         apo.alActivar = { nueva, anterior -> runCatching { Programador.horaReporteDesdeApoyo(this, nueva, anterior) }; refresco++ }
@@ -431,7 +444,7 @@ class MainActivity : ComponentActivity() {
                         }
                         if (gym.vista == "comidas") PantallaComidas(com, accionesComidas)
                         else if (gym.vista == "reporte") PantallaApoyo(apo, accionesApoyo)
-                        else if (gym.vista == "salud") PantallaSaludE6(hc, accionesHc)
+                        else if (gym.vista == "salud") PantallaSaludE6(hc, accionesHc, cin, accionesCintura)
                         else if (gym.vista == "avisos") PantallaAvisos(this@MainActivity, accionesAvisos, refresco, eleccionSonido, uriSonido)
                         else if (gym.vista != "pruebas") PantallaGimnasio(gym, accionesGym)
                         else {

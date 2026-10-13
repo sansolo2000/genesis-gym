@@ -267,6 +267,8 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
     var planMensaje by mutableStateOf("")
     /** La actividad revisa el sobre con los programas activos de Comidas y Apoyo, y aplica las partes nuevas. */
     var revisarPlan: (String) -> Plan.Revision? = { null }
+    /** M-06: frase del día del programa de apoyo activo (null si no hay); la conecta la actividad. */
+    var fraseHoy: () -> Pair<String, String>? = { null }
     var aplicarPlan: (Plan.Revision) -> String = { "" }
     fun validarPlan(texto: String) { planMensaje = ""; plan = revisarPlan(texto) }
     fun activarPlan() {
@@ -360,6 +362,15 @@ private fun Hoy(g: Gym) {
     Gris("${Gimnasio.DIA_LABEL[dia]} · hora de Chile")
     Titulo(Gimnasio.fechaLarga(hoy))
     rutina?.obj("rutina")?.let { Gris("${it.txt("nombre")} · versión ${JsJson.numero(it["version"].toString())}") }
+    // M-06 (CONTEXTO-MODULO-APOYO §5.1): una frase por día según el tipo de día del plan semanal, tal cual.
+    g.fraseHoy()?.let { (tipo, frase) ->
+        Card(modifier = Modifier.fillMaxWidth(), colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Frase del día · ${Frases.ETIQUETA[tipo] ?: tipo}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                Text(frase, style = MaterialTheme.typography.bodyLarge, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, color = MaterialTheme.colorScheme.onTertiaryContainer)
+            }
+        }
+    }
 
     val perfil = g.perfil()
     if (perfil != null && !g.editarPerfil) Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {

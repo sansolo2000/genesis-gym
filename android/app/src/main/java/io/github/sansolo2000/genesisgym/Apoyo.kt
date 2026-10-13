@@ -145,6 +145,7 @@ object Apoyo {
             if (t == null) { err.add("textos.$k: debe ser un texto."); return@forEach }
             for (m in Regex("\\{([^}]*)\\}").findAll(t)) if (m.groupValues[1] !in MARCADORES) av.add("textos.$k: el marcador {${m.groupValues[1]}} no es conocido; se mostrará tal cual.")
         }
+        Frases.validar(o, err, av)   // M-06, §8
         return Resultado(err.isEmpty(), err, av)
     }
 

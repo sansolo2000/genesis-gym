@@ -19,7 +19,8 @@ object Respaldo {
     const val VERSION = 1
     /** Colecciones válidas (2.0 desde la 0.7.5). Las de Comidas se conservan aunque la nativa aún no las use. */
     val COLECCIONES = listOf("config", "rutinas", "sesiones", "imagenes", "alimentacion", "programas_alimentacion", "comidas", "fotos",
-        "programas_apoyo", "reportes_apoyo", "resumenes_apoyo")   // módulo Apoyo psicológico (3.0; la 2.0 no las conoce)
+        "programas_apoyo", "reportes_apoyo", "resumenes_apoyo",   // módulo Apoyo psicológico (3.0; la 2.0 no las conoce)
+        "cintura")                                                 // M-07 (0.13.0; una versión anterior no restaura un respaldo que la traiga)
     private val BASE_CONTEOS = listOf("config", "rutinas", "sesiones", "imagenes")
     private val RUTA = Regex("^[A-Za-z0-9_\\-.~:@+]{1,200}/[A-Za-z0-9_\\-.~:@+]{1,200}$")
 
