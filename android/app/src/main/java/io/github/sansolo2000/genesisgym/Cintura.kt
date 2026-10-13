@@ -15,7 +15,7 @@ import java.time.LocalDate
  *    mediciones va el promedio de las 3 o de las 2 más cercanas; mientras no responda, las 3].
  *  - "Dato anterior": solo el promedio y cuántas mediciones lo formaron, sin valores individuales (ej.: 13-oct, 93,0, n = 2).
  *  - CSV semanal de sábado a viernes con las convenciones de los hc-… (";", coma decimal, UTF-8 con BOM, CRLF, -vN).
- * Documentos en la base (entran en el respaldo): cintura/<AAAA-MM-DD>_<HHMM>. Guardar con la misma fecha y hora reemplaza.
+ * Documentos en la base (entran en el respaldo): cintura/<AAAA-MM-DD>_<HHMM> (o _sin-hora en un dato anterior sin hora). Guardar con la misma fecha y hora reemplaza.
  * Los datos quedan solo en el celular y en el Drive de Héctor; nunca en el repositorio.
  */
 object Cintura {
@@ -49,7 +49,8 @@ object Cintura {
         val err = mutableListOf<String>()
         if (!Apoyo.fechaOk(fecha)) err.add("Fecha: usa AAAA-MM-DD.")
         else if (LocalDate.parse(fecha).isAfter(hoy)) err.add("Fecha: no puede ser futura.")
-        if (!Apoyo.horaOk(hora)) err.add("Hora: usa HH:MM (24 horas).")
+        // O-13 (QA #24): en "dato anterior" la hora puede ir vacía (el historial no la tiene); en el CSV queda vacía.
+        if (!(soloPromedio && hora.isEmpty()) && !Apoyo.horaOk(hora)) err.add(if (soloPromedio) "Hora: usa HH:MM (24 horas) o déjala vacía." else "Hora: usa HH:MM (24 horas).")
         if (nota.length > NOTA_MAX) err.add("Nota: máximo $NOTA_MAX caracteres.")
         fun cm(t: String, que: String): Double? {
             val v = leerCm(t)
@@ -80,7 +81,7 @@ object Cintura {
         return Registro(fecha, hora, prom, n, med, ayunas, nota.trim().ifEmpty { null }) to emptyList()
     }
 
-    fun ruta(r: Registro): String = "$COLECCION/${r.fecha}_${r.hora.replace(":", "")}"
+    fun ruta(r: Registro): String = "$COLECCION/${r.fecha}_${r.hora.replace(":", "").ifEmpty { "sin-hora" }}"
 
     fun aJson(r: Registro, guardadoEn: String): JsonObject = Apoyo.objeto(
         "fecha" to JsonPrimitive(r.fecha), "hora" to JsonPrimitive(r.hora), "cintura_cm" to JsJson.primitivo(r.cm),

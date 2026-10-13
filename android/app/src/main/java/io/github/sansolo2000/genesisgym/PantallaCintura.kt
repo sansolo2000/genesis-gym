@@ -69,7 +69,7 @@ class Cin(private val c: Context, private val base: BaseLocal) {
         val ruta = Cintura.ruta(r)
         val reemplaza = base.get(ruta) != null
         base.put(ruta, Cintura.aJson(r, Gimnasio.ahoraIso()))
-        mensaje = "ok" to "Guardado: ${Cintura.cmTexto(r.cm)} cm el ${Comidas.fechaLarga(r.fecha)} a las ${r.hora}" + (if (reemplaza) " (reemplazó el registro de esa fecha y hora)." else ".")
+        mensaje = "ok" to "Guardado: ${Cintura.cmTexto(r.cm)} cm el ${Comidas.fechaLarga(r.fecha)}" + (if (r.hora.isEmpty()) "" else " a las ${r.hora}") + (if (reemplaza) " (reemplazó el registro de esa fecha y hora)." else ".")
         m1 = ""; m2 = ""; m3 = ""; nota = ""; soloPromedio = false; nTexto = "2"
         val f = LocalDate.parse(r.fecha); desde = SaludCsv.sabadoDe(f)
         tick++
@@ -116,10 +116,10 @@ fun SeccionCintura(ci: Cin, a: AccionesCintura) {
         Text("La medición oficial es la del viernes; las de otros días son de referencia.", color = GRIS, fontSize = 12.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(ci.fecha, { ci.fecha = it.take(10) }, Modifier.weight(1.3f), label = { Text("Fecha") }, singleLine = true)
-            OutlinedTextField(ci.hora, { ci.hora = it.take(5) }, Modifier.weight(1f), label = { Text("Hora") }, singleLine = true)
+            OutlinedTextField(ci.hora, { ci.hora = it.take(5) }, Modifier.weight(1f), label = { Text(if (ci.soloPromedio) "Hora (opcional)" else "Hora") }, singleLine = true)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(ci.soloPromedio, { ci.soloPromedio = it })
+            Checkbox(ci.soloPromedio, { ci.soloPromedio = it; ci.hora = if (it) "" else LocalTime.now(Gimnasio.ZONA).format(DateTimeFormatter.ofPattern("HH:mm")) })
             Text("Dato anterior: solo tengo el promedio", fontSize = 14.sp)
         }
         if (ci.soloPromedio) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -158,7 +158,7 @@ fun SeccionCintura(ci: Cin, a: AccionesCintura) {
         if (semana.isEmpty()) Text("Sin mediciones esta semana.", color = GRIS, fontSize = 13.sp)
         for ((ruta, r) in semana) Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("${Comidas.fechaLarga(r.fecha)} ${r.hora} · ${Cintura.cmTexto(r.cm)} cm", fontSize = 14.sp)
+                Text("${Comidas.fechaLarga(r.fecha)} ${r.hora.ifEmpty { "sin hora" }} · ${Cintura.cmTexto(r.cm)} cm", fontSize = 14.sp)
                 Text("n = ${r.n}" + (if (r.mediciones.isNotEmpty()) " (" + r.mediciones.joinToString(" · ") { Cintura.cmTexto(it) } + ")" else " · solo promedio") +
                     (if (r.ayunas) " · en ayunas" else "") + (r.nota?.let { " · $it" } ?: ""), color = GRIS, fontSize = 12.sp)
             }

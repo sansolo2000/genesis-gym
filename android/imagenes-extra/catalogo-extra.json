@@ -1,0 +1,39 @@
+{
+ "descripcion": "Universo v12 (Entrenamiento #34, 13-oct): 2 elongaciones de la rutina v5 que no están en imagenes/ de la 2.0. Fotos copiadas sin modificar; validadas por Entrenamiento el 13-oct. Procedencia no verificada: se usan por decisión de Héctor (9-oct) con el riesgo registrado.",
+ "imagenes": {
+  "estiramiento-pecho-codos-atras": {
+   "nombre": "Estiramiento de pecho con manos en la zona lumbar",
+   "srcs": [
+    "imagenes/free-exercise-db/estiramiento-pecho-codos-atras-inicio.jpg",
+    "imagenes/free-exercise-db/estiramiento-pecho-codos-atras-final.jpg"
+   ],
+   "etiquetas": [
+    "Posición inicial",
+    "Posición final"
+   ],
+   "credito": "free-exercise-db (github.com/yuhonas/free-exercise-db), basado en wrkout/exercises.json — licencia declarada Unlicense (dominio público) — sin modificaciones",
+   "licencia": "Unlicense (declarada)",
+   "fuente": "free-exercise-db",
+   "url_fuente": "yuhonas/free-exercise-db@f00c92c7dcf1216a928a52c3706c7ce8e2f71ed5:exercises/Elbows_Back/0.jpg · yuhonas/free-exercise-db@f00c92c7dcf1216a928a52c3706c7ce8e2f71ed5:exercises/Elbows_Back/1.jpg",
+   "validada_entrenamiento": true,
+   "nota": "La foto de inicio es solo de pie; la final muestra las manos en la zona lumbar y los codos hacia atrás."
+  },
+  "estiramiento-espalda-alta-brazos-adelante": {
+   "nombre": "Estiramiento de espalda alta con brazos adelante",
+   "srcs": [
+    "imagenes/free-exercise-db/estiramiento-espalda-alta-brazos-adelante-inicio.jpg",
+    "imagenes/free-exercise-db/estiramiento-espalda-alta-brazos-adelante-final.jpg"
+   ],
+   "etiquetas": [
+    "Posición inicial",
+    "Posición final"
+   ],
+   "credito": "free-exercise-db (github.com/yuhonas/free-exercise-db), basado en wrkout/exercises.json — licencia declarada Unlicense (dominio público) — sin modificaciones",
+   "licencia": "Unlicense (declarada)",
+   "fuente": "free-exercise-db",
+   "url_fuente": "yuhonas/free-exercise-db@f00c92c7dcf1216a928a52c3706c7ce8e2f71ed5:exercises/Upper_Back_Stretch/0.jpg · yuhonas/free-exercise-db@f00c92c7dcf1216a928a52c3706c7ce8e2f71ed5:exercises/Upper_Back_Stretch/1.jpg",
+   "validada_entrenamiento": true,
+   "nota": "La foto de inicio es solo de pie; la foto no muestra bien el redondeo de la espalda: lo explica la ficha."
+  }
+ }
+}

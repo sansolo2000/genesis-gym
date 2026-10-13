@@ -18,8 +18,10 @@ import kotlinx.serialization.json.jsonObject
  */
 class Imagenes(private val context: Context) {
     private val catalogo: JsonObject by lazy {
-        runCatching { Json.parseToJsonElement(context.assets.open("imagenes/catalogo.json").bufferedReader().readText()).jsonObject["imagenes"]!!.jsonObject }
-            .getOrElse { JsonObject(emptyMap()) }
+        fun leer(n: String): Map<String, kotlinx.serialization.json.JsonElement> =
+            runCatching { Json.parseToJsonElement(context.assets.open(n).bufferedReader().readText()).jsonObject["imagenes"]!!.jsonObject.toMap() }.getOrElse { emptyMap() }
+        // catalogo-extra.json (android/imagenes-extra/): ejercicios del universo v12 que la carpeta de la 2.0 no trae.
+        JsonObject(leer("imagenes/catalogo-extra.json") + leer("imagenes/catalogo.json"))
     }
     private val cache = HashMap<String, Bitmap?>()
 

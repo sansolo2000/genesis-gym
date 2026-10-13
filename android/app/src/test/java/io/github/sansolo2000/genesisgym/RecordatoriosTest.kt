@@ -57,6 +57,16 @@ class RecordatoriosTest {
         assertEquals(listOf("Sesión A", "Sesión C"), r.map { it.texto })
     }
 
+    @Test fun m08_no_avisa_si_la_sesion_del_dia_ya_se_hizo_antes_en_la_semana() {
+        // La B (miércoles) hecha el lunes 5: el miércoles 7 no avisa; el viernes 9 sí avisa la C.
+        val cfg = Recordatorios.Config(entrenamiento = true, horaEntrenamiento = "18:30")
+        val r = Recordatorios.calcular(cfg, null, sesiones, setOf("2026-10-05_b"), ZonedDateTime.of(2026, 10, 5, 19, 0, 0, 0, zona))
+        assertEquals(listOf("2026-10-09"), r.map { it.cuando.toLocalDate().toString() })
+        // La semana siguiente vuelve a avisar: la B del lunes 5 no cuenta para el miércoles 14.
+        val r2 = Recordatorios.calcular(cfg, null, sesiones, setOf("2026-10-05_b"), ZonedDateTime.of(2026, 10, 14, 8, 0, 0, 0, zona), dias = 1)
+        assertEquals(listOf("Sesión B"), r2.map { it.texto })
+    }
+
     @Test fun reporte_diario_y_se_juntan_los_del_mismo_minuto() {
         val cfg = Recordatorios.Config(tareas = true, reporte = true, horaReporte = "21:00")
         val r = Recordatorios.calcular(cfg, EstadoComidas(programa()), sesiones, emptySet(), ahora)

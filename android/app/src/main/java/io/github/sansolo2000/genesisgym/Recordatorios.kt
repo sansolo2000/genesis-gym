@@ -106,8 +106,11 @@ object Recordatorios {
                 val cuando = en(cfg.horaEntrenamiento)
                 // D-01 (QA): si ese día ya hay CUALQUIER sesión registrada (por ejemplo, la A movida a un miércoles), no se avisa.
                 val yaEntreno = registradas.any { it.startsWith("${f}_") }
-                if (cuando != null && !yaEntreno) for ((ds, _, nombre) in sesionesRutina)
-                    if (ds == Gimnasio.diaDe(f))
+                // M-08 (Héctor, Coordinador #83): tampoco si la sesión del día ya se registró antes en esa semana (desde el lunes).
+                val lunes = fecha.minusDays((fecha.dayOfWeek.value - 1).toLong()).toString()
+                fun hechaEnLaSemana(id: String) = registradas.any { it.length > 11 && it.substring(0, 10) in lunes..f && it.substring(11) == id }
+                if (cuando != null && !yaEntreno) for ((ds, id, nombre) in sesionesRutina)
+                    if (ds == Gimnasio.diaDe(f) && !hechaEnLaSemana(id))
                         lista.add(Recordatorio(cuando, ENTRENAMIENTO, "Entrenamiento · ${cfg.horaEntrenamiento.trim()}", nombre, "hoy"))
             }
             // Módulo Apoyo (contrato v2 §3.6): no avisa si el reporte de ese día ya está guardado; el texto viene del programa.

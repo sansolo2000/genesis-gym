@@ -39,6 +39,13 @@ class CinturaTest {
         assertTrue(e.toString(), e.isEmpty()); assertEquals(93.0, r!!.cm, 0.0); assertEquals(2, r.n); assertTrue(r.mediciones.isEmpty())
     }
 
+    @Test fun datoAnteriorSinHora() {   // O-13 (QA #24)
+        val (r, e) = armar(listOf("94,5"), solo = true, fecha = "2026-10-07", hora = "")
+        assertTrue(e.toString(), e.isEmpty()); assertEquals("cintura/2026-10-07_sin-hora", Cintura.ruta(r!!))
+        assertTrue(Cintura.csv(listOf(r)).contains("2026-10-07;;94,5;2;;;;si;\r\n"))
+        assertTrue(armar(listOf("93", "93"), hora = "").second.any { it.startsWith("Hora") })   // con mediciones, la hora sigue obligatoria
+    }
+
     @Test fun errores() {
         assertTrue(armar(listOf("93", "93"), fecha = "2026-10-17").second.any { it.contains("futura") })
         assertTrue(armar(listOf("93", "93"), hora = "7:05").second.any { it.startsWith("Hora") })

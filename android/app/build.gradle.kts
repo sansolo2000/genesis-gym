@@ -18,6 +18,8 @@ val llave: String? = System.getenv("GG_KEYSTORE_PATH")
 val imagenesAssets = layout.buildDirectory.dir("generated/imagenes-assets")
 val copiarImagenes by tasks.registering(Sync::class) {
     from(rootProject.file("../imagenes"))
+    // Universo v12 (13-oct): imágenes que la carpeta de la 2.0 no tiene, con su propio catálogo (android/imagenes-extra/).
+    from(rootProject.file("imagenes-extra"))
     into(imagenesAssets.map { it.dir("imagenes") })
 }
 tasks.configureEach { if (name != "copiarImagenes" && (name.contains("Assets") || name.startsWith("lint") || name == "preBuild")) dependsOn(copiarImagenes) }
