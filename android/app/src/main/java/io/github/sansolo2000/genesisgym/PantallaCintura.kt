@@ -136,7 +136,7 @@ fun SeccionCintura(ci: Cin, a: AccionesCintura) {
                 OutlinedTextField(ci.m3, { ci.m3 = it.take(6) }, Modifier.fillMaxWidth(), label = { Text("Medición 3 (cm)") }, singleLine = true, keyboardOptions = num)
             }
             val ms = listOfNotNull(Cintura.leerCm(ci.m1), Cintura.leerCm(ci.m2), if (ci.pideTercera()) Cintura.leerCm(ci.m3) else null)
-            if (ms.size >= 2 && !(ci.pideTercera() && ms.size < 3)) Text("Promedio: ${Cintura.cmTexto(Cintura.promedio(ms))} cm", color = VERDE)
+            if (ms.size >= 2 && !(ci.pideTercera() && ms.size < 3)) Text((if (ms.size == 3) "Mediana: " else "Promedio: ") + "${Cintura.cmTexto(Cintura.valor(ms))} cm", color = VERDE)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("En ayunas", Modifier.weight(1f)); Switch(ci.ayunas, { ci.ayunas = it })

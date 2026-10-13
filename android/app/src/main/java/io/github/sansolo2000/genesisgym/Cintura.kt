@@ -11,8 +11,7 @@ import java.time.LocalDate
 /**
  * M-07 — registro de cintura (formato del Evaluador #5, 13-oct). Lógica pura, sin Android, para probarla con JUnit.
  *  - 2 mediciones en cm con 1 decimal; si difieren en más de 1,0 cm se pide una 3.ª.
- *  - cintura_cm = promedio de TODAS las mediciones, redondeado a 2 decimales [E: QA #23 preguntó al Evaluador si con 3
- *    mediciones va el promedio de las 3 o de las 2 más cercanas; mientras no responda, las 3].
+ *  - cintura_cm (Evaluador #7): con 2 mediciones, el promedio redondeado a 2 decimales; con 3, la MEDIANA (descarta la dudosa).
  *  - "Dato anterior": solo el promedio y cuántas mediciones lo formaron, sin valores individuales (ej.: 13-oct, 93,0, n = 2).
  *  - CSV semanal de sábado a viernes con las convenciones de los hc-… (";", coma decimal, UTF-8 con BOM, CRLF, -vN).
  * Documentos en la base (entran en el respaldo): cintura/<AAAA-MM-DD>_<HHMM> (o _sin-hora en un dato anterior sin hora). Guardar con la misma fecha y hora reemplaza.
@@ -42,6 +41,12 @@ object Cintura {
 
     fun promedio(m: List<Double>): Double =
         BigDecimal(m.sumOf { decimas(it) }).divide(BigDecimal(m.size * 10), 2, RoundingMode.HALF_UP).toDouble()
+
+    /** Mediana de 3 mediciones (en décimas, sin redondeo binario). */
+    fun mediana(m: List<Double>): Double = m.map { decimas(it) }.sorted()[1] / 10.0
+
+    /** Valor oficial de cintura_cm (Evaluador #7): 2 → promedio; 3 → mediana. */
+    fun valor(m: List<Double>): Double = if (m.size == 3) mediana(m) else promedio(m)
 
     /** Revisa lo escrito en la pantalla y arma el registro, o devuelve los errores. */
     fun armar(fecha: String, hora: String, textos: List<String>, soloPromedio: Boolean, nTexto: String,
@@ -75,7 +80,7 @@ object Cintura {
                     else cm(t3, "Medición 3")?.let { l.add(it) }
                 }
             }
-            n = l.size; med = l; prom = if (l.size >= 2) promedio(l) else null
+            n = l.size; med = l; prom = if (l.size >= 2) valor(l) else null
         }
         if (err.isNotEmpty() || prom == null) return null to err
         return Registro(fecha, hora, prom, n, med, ayunas, nota.trim().ifEmpty { null }) to emptyList()

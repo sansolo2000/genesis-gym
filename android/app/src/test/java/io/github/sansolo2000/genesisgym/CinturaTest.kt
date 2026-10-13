@@ -31,7 +31,13 @@ class CinturaTest {
         val (r1, e1) = armar(listOf("93,0", "94,5", ""))
         assertNull(r1); assertTrue(e1.single().contains("3.ª"))
         val (r2, e2) = armar(listOf("93,0", "94,5", "93,6"))
-        assertTrue(e2.toString(), e2.isEmpty()); assertEquals(3, r2!!.n); assertEquals(93.7, r2.cm, 0.0)
+        assertTrue(e2.toString(), e2.isEmpty()); assertEquals(3, r2!!.n); assertEquals(93.6, r2.cm, 0.0)   // Evaluador #7: mediana
+    }
+
+    @Test fun tresMedicionesUsaLaMedianaSinImportarElOrden() {   // Evaluador #7
+        assertEquals(93.4, Cintura.valor(listOf(95.0, 93.0, 93.4)), 0.0)
+        assertEquals(93.4, Cintura.valor(listOf(93.4, 95.0, 93.0)), 0.0)
+        assertEquals(93.25, Cintura.valor(listOf(93.0, 93.5)), 0.0)   // con 2 sigue el promedio, 2 decimales
     }
 
     @Test fun datoAnteriorSoloPromedio() {
