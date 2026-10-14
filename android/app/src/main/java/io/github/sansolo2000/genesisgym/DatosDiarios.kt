@@ -126,6 +126,18 @@ object DatosDiarios {
         if (p != null && p.sha256 == a.sha256) null else a to ((p?.v ?: 0) + 1)
     }
 
+    /**
+     * Mejora §1.5.6 (v3.1): la mayor -vN que ya hay en la carpeta del día en Drive, por tipo y para "manifest" (sin sufijo = 1).
+     * Así, tras reinstalar la app o cambiar de celular, la numeración sigue desde Drive y no repite nombres.
+     */
+    fun versionesEnDrive(nombres: List<String>, perfil: String, d: LocalDate): Map<String, Int> {
+        val bases = TIPOS.associateWith { nombre(it, perfil, d, 1).removeSuffix(".csv") to ".csv" } + ("manifest" to (nombreManifest(perfil, d, 1).removeSuffix(".json") to ".json"))
+        return bases.mapNotNull { (tipo, b) ->
+            val r = Regex("^" + Regex.escape(b.first) + "(?:-v(\\d+))?" + Regex.escape(b.second) + "$")
+            nombres.mapNotNull { n -> r.find(n)?.let { it.groupValues[1].ifEmpty { "1" }.toInt() } }.maxOrNull()?.let { tipo to it }
+        }.toMap()
+    }
+
     /** Hay que subir algo si cambió un archivo o quedó un manifest sin subir. Tocar el botón dos veces no crea versiones. */
     fun hayQueSubir(archivos: List<Archivo>, previo: EstadoDia?): Boolean = cambios(archivos, previo).isNotEmpty() || previo?.manifestPendiente == true
 
@@ -157,6 +169,8 @@ object DatosDiarios {
     /** El manifest nombra el archivo vigente de cada tipo, aunque no haya cambiado. Un tipo que nunca se exportó no aparece. */
     fun manifest(perfil: String, d: LocalDate, version: Int, generadoEn: ZonedDateTime, appVersion: String, appCodigo: Int, motivo: String,
                  vigentes: Map<String, Subido>, faltantes: List<Faltante>, hc: LecturaHc, reporte: JsonObject?): String {
+        // Regla de cobertura (v3.1): cada tipo está en vigentes o en faltantes; uno que nunca se exportó y no vino como faltante se agrega aquí.
+        val falt = faltantes + TIPOS.filter { t -> t !in vigentes && faltantes.none { it.tipo == t } }.map { Faltante(it, "error", "No se exportó.") }
         val vig = TIPOS.mapNotNull { t -> vigentes[t]?.let { s -> Apoyo.objeto("tipo" to JsonPrimitive(t), "nombre" to JsonPrimitive(s.nombre),
             "filas" to JsonPrimitive(s.filas), "sha256" to JsonPrimitive(s.sha256)) } }
         val o = Apoyo.objeto(
@@ -166,11 +180,11 @@ object DatosDiarios {
             "app" to Apoyo.objeto("version" to JsonPrimitive(appVersion), "codigo" to JsonPrimitive(appCodigo)),
             "motivo" to JsonPrimitive(motivo),
             "vigentes" to JsonArray(vig),
-            "faltantes" to JsonArray(faltantes.map { Apoyo.objeto("tipo" to JsonPrimitive(it.tipo), "motivo" to JsonPrimitive(it.motivo), "detalle" to JsonPrimitive(it.detalle)) }),
+            "faltantes" to JsonArray(falt.map { Apoyo.objeto("tipo" to JsonPrimitive(it.tipo), "motivo" to JsonPrimitive(it.motivo), "detalle" to JsonPrimitive(it.detalle)) }),
             "health_connect" to Apoyo.objeto("leido_en" to Apoyo.txt(hc.leidoEn?.let { iso(it) }), "segundo_plano" to JsonPrimitive(hc.segundoPlano),
                 "permisos_faltantes" to JsonArray(hc.permisosFaltantes.map { JsonPrimitive(it) })),
             "reporte_apoyo" to reporteApoyo(reporte),
-            "completo" to JsonPrimitive(faltantes.isEmpty() && TIPOS.all { it in vigentes }))
+            "completo" to JsonPrimitive(falt.isEmpty() && TIPOS.all { it in vigentes }))
         return JsJson.indentado(o)
     }
 

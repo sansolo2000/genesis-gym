@@ -62,6 +62,13 @@ object DriveApi {
         leer(c).getString("id") to true
     }
 
+    /** Datos diarios: los nombres de los archivos que hay en una carpeta (para seguir la numeración -vN desde Drive). */
+    suspend fun nombres(token: String, carpeta: String): List<String> = withContext(Dispatchers.IO) {
+        val q = URLEncoder.encode("'${carpeta.replace("\\", "\\\\").replace("'", "\\'")}' in parents and trashed=false", "UTF-8")
+        val l = leer(abrir("$API?q=$q&fields=files(name)&pageSize=1000&spaces=drive", token)).getJSONArray("files")
+        (0 until l.length()).map { l.getJSONObject(it).getString("name") }
+    }
+
     /** Sube un archivo de texto NUEVO a la carpeta. Devuelve el nombre con que quedó. */
     suspend fun subirTexto(token: String, carpeta: String, nombre: String, contenido: String): String = withContext(Dispatchers.IO) {
         val limite = "genesis" + System.currentTimeMillis()

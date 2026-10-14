@@ -158,6 +158,31 @@ class DatosDiariosTest {
         assertEquals("health-connect-no-disponible", (((m2["faltantes"] as JsonArray)[0] as JsonObject)["motivo"] as JsonPrimitive).content)
     }
 
+    @Test fun cadaTipoEstaEnVigentesOEnFaltantes() {
+        val e = subido(archivos())
+        val gen = ZonedDateTime.of(2026, 10, 15, 13, 40, 0, 0, z)
+        fun tipos(m: JsonObject, k: String) = (m[k] as JsonArray).map { ((it as JsonObject)["tipo"] as JsonPrimitive).content }
+        // hc-actividades nunca se exportó y no vino como faltante: igual queda en faltantes y el manifest no está completo.
+        val m = json(DatosDiarios.manifest("hector", d, 1, gen, "0.14.0", 25, "manual", e.tipos - "hc-actividades", emptyList(),
+            DatosDiarios.LecturaHc(gen, false, emptyList()), null))
+        assertEquals(listOf("hc-actividades"), tipos(m, "faltantes"))
+        assertEquals("false", (m["completo"] as JsonPrimitive).content)
+        // Con Health Connect no disponible: los 2 hc- en faltantes, una sola vez cada uno.
+        val m2 = json(DatosDiarios.manifest("hector", d, 1, gen, "0.14.0", 25, "manual", e.tipos - "hc-diario" - "hc-actividades",
+            DatosDiarios.faltantesHc(false, null, emptySet()), DatosDiarios.LecturaHc(null, false, DatosDiarios.PERMISOS), null))
+        assertEquals(listOf("hc-diario", "hc-actividades"), tipos(m2, "faltantes"))
+        for (mm in listOf(m, m2)) assertTrue(DatosDiarios.TIPOS.all { it in tipos(mm, "vigentes") || it in tipos(mm, "faltantes") })
+    }
+
+    @Test fun numeracionSigueDesdeDrive() {
+        val n = listOf("fuerza-hector-2026-10-14.csv", "fuerza-hector-2026-10-14-v3.csv", "comidas-hector-2026-10-14.csv",
+            "manifest-hector-2026-10-14-v2.json", "manifest-hector-2026-10-14.json", "fuerza-otra-2026-10-14-v9.csv", "fuerza-hector-2026-10-13-v7.csv", "nota.txt")
+        assertEquals(mapOf("fuerza" to 3, "comidas" to 1, "manifest" to 2), DatosDiarios.versionesEnDrive(n, "hector", d))
+        assertEquals(emptyMap<String, Int>(), DatosDiarios.versionesEnDrive(emptyList(), "hector", d))
+        // hc-diario no se confunde con hc-actividades ni con fuerza.
+        assertEquals(mapOf("hc-diario" to 2), DatosDiarios.versionesEnDrive(listOf("hc-hector-diario-2026-10-14-v2.csv"), "hector", d))
+    }
+
     @Test fun reporteDeApoyoEnElManifest() {
         val r = json("""{"fecha":"2026-10-14","version":2,"tardio":false,"enviado":{"version":2,"id":"x","en":"2026-10-14T23:00:00.000Z"}}""")
         val o = DatosDiarios.reporteApoyo(r)

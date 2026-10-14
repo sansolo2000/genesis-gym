@@ -89,15 +89,17 @@ class Dd(private val c: Context, private val base: BaseLocal, private val hc: Hc
                 val r = raiz ?: DriveApi.carpeta(token, DatosDiarios.CARPETA).let { (id, nueva) -> if (nueva) carpetaNueva = true; id }
                 raiz = r
                 val sub = DriveApi.carpeta(token, d.toString(), r).first
+                val enDrive = DatosDiarios.versionesEnDrive(DriveApi.nombres(token, sub), perfil, d)   // §1.5.6: no repetir nombres
                 var est = p ?: DatosDiarios.EstadoDia(0, emptyMap(), false)
-                for ((a, v) in DatosDiarios.cambios(archivos, p)) {
+                for ((a, v0) in DatosDiarios.cambios(archivos, p)) {
+                    val v = maxOf(v0, (enDrive[a.tipo] ?: 0) + 1)
                     val n = DatosDiarios.nombre(a.tipo, perfil, d, v)
                     DriveApi.subirArchivo(token, sub, n, "text/csv", a.texto.toByteArray(Charsets.UTF_8))
                     est = est.copy(tipos = est.tipos + (a.tipo to DatosDiarios.Subido(v, n, a.sha256, a.filas)), manifestPendiente = true)
                     guardar(d, est)
                 }
                 // El manifest va al final, después de los CSV (§1.4).
-                val mv = est.version + 1
+                val mv = maxOf(est.version, enDrive["manifest"] ?: 0) + 1
                 val m = DatosDiarios.manifest(perfil, d, mv, ZonedDateTime.now(DatosDiarios.ZONA), BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE,
                     DatosDiarios.motivo(p), est.tipos, faltantes, lectura, base.get("reportes_apoyo/$d"))
                 DriveApi.subirArchivo(token, sub, DatosDiarios.nombreManifest(perfil, d, mv), "application/json", m.toByteArray(Charsets.UTF_8))
