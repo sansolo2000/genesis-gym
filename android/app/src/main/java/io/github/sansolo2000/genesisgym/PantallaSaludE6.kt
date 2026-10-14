@@ -118,6 +118,33 @@ class Hc(private val c: Context) {
         } finally { leyendo = false; tick++ }
     }
 
+    /** Datos diarios: lo leído de Health Connect en un rango, sin tocar la semana que muestra la pantalla. */
+    class Crudo(val fc: List<SaludCsv.Fc>, val sueno: List<SaludCsv.Sueno>, val peso: List<SaludCsv.Peso>, val actividades: List<SaludCsv.Actividad>,
+                val concedidos: Set<String>)
+
+    /** Permisos concedidos, con los nombres del manifest (DatosDiarios.PERMISOS va en el mismo orden que [tipos]). */
+    fun concedidosDd(): Set<String> = tipos.zip(DatosDiarios.PERMISOS).filter { tiene(it.first.second) }.map { it.second }.toSet()
+
+    suspend fun leerRango(ini: Instant, fin: Instant): Crudo {
+        refrescarPermisos()
+        val filtro = TimeRangeFilter.between(ini, fin)
+        val fc = if (tiene(RestingHeartRateRecord::class)) leerTodo<RestingHeartRateRecord>(filtro).map { SaludCsv.Fc(it.time, it.beatsPerMinute, it.metadata.dataOrigin.packageName) } else emptyList()
+        val su = if (tiene(SleepSessionRecord::class)) leerTodo<SleepSessionRecord>(filtro).map { s ->
+            SaludCsv.Sueno(s.startTime, s.endTime, s.stages.map { SaludCsv.Etapa(it.startTime, it.endTime, it.stage) }, s.metadata.dataOrigin.packageName) } else emptyList()
+        val pe = if (tiene(WeightRecord::class)) leerTodo<WeightRecord>(filtro).map { SaludCsv.Peso(it.time, it.weight.inKilograms, it.metadata.dataOrigin.packageName) } else emptyList()
+        val ej = if (tiene(ExerciseSessionRecord::class)) leerTodo<ExerciseSessionRecord>(filtro) else emptyList()
+        val acts = ej.map { e ->
+            val f = TimeRangeFilter.between(e.startTime, e.endTime)
+            suspend fun <T : Any> uno(m: androidx.health.connect.client.aggregate.AggregateMetric<T>, k: KClass<out Record>): T? =
+                if (!tiene(k)) null else runCatching { cliente().aggregate(AggregateRequest(setOf(m), f))[m] }.getOrNull()
+            SaludCsv.Actividad(e.startTime, e.endTime, e.exerciseType, e.title,
+                uno(DistanceRecord.DISTANCE_TOTAL, DistanceRecord::class)?.inMeters,
+                uno(ElevationGainedRecord.ELEVATION_GAINED_TOTAL, ElevationGainedRecord::class)?.inMeters,
+                uno(HeartRateRecord.BPM_AVG, HeartRateRecord::class)?.toDouble(), e.metadata.dataOrigin.packageName)
+        }
+        return Crudo(fc, su, pe, acts, concedidosDd())
+    }
+
     private val prefs get() = c.getSharedPreferences("e6", Context.MODE_PRIVATE)
     fun enviados(): Int = prefs.getInt(desde.toString(), 0)
 
@@ -151,12 +178,13 @@ interface AccionesHc {
 }
 
 @Composable
-fun PantallaSaludE6(h: Hc, a: AccionesHc, ci: Cin, ac: AccionesCintura) {
+fun PantallaSaludE6(h: Hc, a: AccionesHc, ci: Cin, ac: AccionesCintura, dd: Dd, ad: AccionesDd) {
     @Suppress("UNUSED_VARIABLE") val t = h.tick
     Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Salud", fontSize = 32.sp, fontWeight = FontWeight.Bold)
         Text("Lee una semana de Health Connect y sube al Drive los 2 CSV del Evaluador: diario (FC en reposo, sueño y peso) y actividades. Si un dato no está, la celda va vacía. Las 2 primeras semanas se compara con el script de Garmin.",
             color = GRIS, fontSize = 14.sp)
+        SeccionDatosDiarios(dd, ad)   // datos diarios, entrega 1
         SeccionCintura(ci, ac)   // M-07
         Text("Health Connect", fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
         if (!h.disponible()) { Text("Health Connect no está disponible en este celular.", color = AMBAR); return@Column }

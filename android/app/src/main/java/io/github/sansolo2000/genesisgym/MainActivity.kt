@@ -198,6 +198,18 @@ class MainActivity : ComponentActivity() {
             }, { m -> cin.enviando = ""; cin.mensaje = "err" to "No se pudo enviar a Drive: $m" })
         }
     }
+    // Datos diarios, entrega 1: "Subir ahora" en Salud (lee Health Connect con la app abierta).
+    private val dd by lazy { Dd(this, base, hc) }
+    private val accionesDd = object : AccionesDd {
+        override fun subir() {
+            dd.enviando = "Conectando con Google…"
+            pedirToken({ token ->
+                dd.enviando = ""
+                if (token == null) { dd.mensaje = "err" to "Google no entregó un permiso de acceso."; return@pedirToken }
+                lifecycleScope.launch { dd.subir(token, gym.perfil()) }
+            }, { m -> dd.enviando = ""; dd.mensaje = "err" to "No se pudo enviar a Drive: $m" })
+        }
+    }
     private val accionesHc = object : AccionesHc {
         override fun pedirPermisos() = pedirSaludE6.launch(hc.permisos)
         override fun leer() { lifecycleScope.launch { hc.refrescarPermisos(); hc.leer() } }
@@ -438,13 +450,19 @@ class MainActivity : ComponentActivity() {
                         if (gym.vista != "sesion") Row(modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             listOf("hoy" to "Hoy", "comidas" to "Comidas", "reporte" to "Reporte", "salud" to "Salud", "rutina" to "Rutina", "historial" to "Historial", "importar" to "Importar", "avisos" to "Avisos", "pruebas" to "Pruebas").forEach { (v, t) ->
                                 val activa = gym.vista == v || (v == "hoy" && gym.vista == "sesion")
-                                val ir = { if (v == "comidas" && gym.vista != "comidas") com.cargar(); if (v == "reporte" && gym.vista != "reporte") apo.refrescar(); if (v == "salud" && gym.vista != "salud" && hc.disponible()) lifecycleScope.launch { hc.refrescarPermisos() }; gym.ir(v) }
+                                val ir = { if (v == "comidas" && gym.vista != "comidas") com.cargar(); if (v == "reporte" && gym.vista != "reporte") apo.refrescar(); if (v == "salud" && gym.vista != "salud") { dd.revisar(); if (hc.disponible()) lifecycleScope.launch { hc.refrescarPermisos() } }; gym.ir(v) }
                                 Pestana(t, activa, ir)
                             }
                         }
+                        // Datos diarios: al abrir la app, Hoy avisa cuántos días faltan por subir.
+                        if (gym.vista == "hoy" && dd.porSubir > 0) Text(
+                            "${dd.porSubir} ${if (dd.porSubir == 1) "día" else "días"} por subir a Drive · toca para ir a Salud",
+                            color = AMBAR, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                                .background(CAJA).clickable { dd.revisar(); if (hc.disponible()) lifecycleScope.launch { hc.refrescarPermisos() }; gym.ir("salud") }.padding(12.dp))
                         if (gym.vista == "comidas") PantallaComidas(com, accionesComidas)
                         else if (gym.vista == "reporte") PantallaApoyo(apo, accionesApoyo)
-                        else if (gym.vista == "salud") PantallaSaludE6(hc, accionesHc, cin, accionesCintura)
+                        else if (gym.vista == "salud") PantallaSaludE6(hc, accionesHc, cin, accionesCintura, dd, accionesDd)
                         else if (gym.vista == "avisos") PantallaAvisos(this@MainActivity, accionesAvisos, refresco, eleccionSonido, uriSonido)
                         else if (gym.vista != "pruebas") PantallaGimnasio(gym, accionesGym)
                         else {
@@ -484,6 +502,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         refresco++   // al volver de Ajustes o de una notificación, se vuelven a leer permisos y avisos
+        runCatching { dd.revisar() }   // datos diarios: "N días por subir"
     }
 
     /** Pestaña con la forma del mockup: píldora ámbar si está activa, gris oscuro si no. */

@@ -13,6 +13,10 @@ object DriveTexto {
         return "name='$n' and mimeType='application/vnd.google-apps.folder' and trashed=false"
     }
 
+    /** Datos diarios: la carpeta [nombre] dentro de la carpeta [padre] (id de Drive). Sin [padre], la busca en todo lo que la app creó. */
+    fun consultaCarpetaEn(nombre: String, padre: String?): String =
+        consultaCarpeta(nombre) + (if (padre == null) "" else " and '${padre.replace("\\", "\\\\").replace("'", "\\'")}' in parents")
+
     /** Cuerpo multipart/related para subir un archivo de texto con sus metadatos. */
     fun multipart(limite: String, metadatosJson: String, contenido: String, mime: String): ByteArray =
         ("--$limite\r\n" +

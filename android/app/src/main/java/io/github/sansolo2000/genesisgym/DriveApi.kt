@@ -45,6 +45,23 @@ object DriveApi {
         leer(c).getString("id")
     }
 
+    /**
+     * Datos diarios: busca una carpeta que la app creó, por nombre y sin filtrar por carpeta madre (así la encuentra aunque Héctor
+     * la haya movido), o dentro de [padre]. Si no existe, la crea (en la raíz o en [padre]). Devuelve (id, la creó ahora).
+     */
+    suspend fun carpeta(token: String, nombre: String, padre: String? = null): Pair<String, Boolean> = withContext(Dispatchers.IO) {
+        val q = URLEncoder.encode(DriveTexto.consultaCarpetaEn(nombre, padre), "UTF-8")
+        val lista = leer(abrir("$API?q=$q&fields=files(id,name)&spaces=drive", token)).getJSONArray("files")
+        if (lista.length() > 0) return@withContext lista.getJSONObject(0).getString("id") to false
+        val c = abrir("$API?fields=id", token, "POST").apply {
+            doOutput = true
+            setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+        }
+        val padres = if (padre == null) "" else ",\"parents\":[\"${DriveTexto.json(padre)}\"]"
+        c.outputStream.use { it.write("{\"name\":\"${DriveTexto.json(nombre)}\",\"mimeType\":\"application/vnd.google-apps.folder\"$padres}".toByteArray()) }
+        leer(c).getString("id") to true
+    }
+
     /** Sube un archivo de texto NUEVO a la carpeta. Devuelve el nombre con que quedó. */
     suspend fun subirTexto(token: String, carpeta: String, nombre: String, contenido: String): String = withContext(Dispatchers.IO) {
         val limite = "genesis" + System.currentTimeMillis()
