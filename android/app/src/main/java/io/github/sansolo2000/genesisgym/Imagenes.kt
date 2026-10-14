@@ -9,6 +9,7 @@ import android.util.Base64
 import com.caverock.androidsvg.SVG
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 
 /**
@@ -24,6 +25,12 @@ class Imagenes(private val context: Context) {
         JsonObject(leer("imagenes/catalogo-extra.json") + leer("imagenes/catalogo.json"))
     }
     private val cache = HashMap<String, Bitmap?>()
+
+    companion object {
+        /** Enlace a la licencia para la ficha: solo si el catálogo trae `url_licencia` y es una dirección web. */
+        fun enlaceLicencia(img: JsonObject): String? = (img["url_licencia"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()
+            ?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+    }
 
     fun meta(id: String, base: BaseLocal): JsonObject? = (catalogo[id] as? JsonObject) ?: base.get("imagenes/$id")
 

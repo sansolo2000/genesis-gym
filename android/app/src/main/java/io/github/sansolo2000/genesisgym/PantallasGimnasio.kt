@@ -27,6 +27,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -743,7 +744,15 @@ internal fun FichaImagenes(g: Gym, id: String, nombre: String) {
     val validada = (img["validada_entrenamiento"] as? JsonPrimitive)?.content == "true"
     if (validada) nota?.let { Nota("Nota de Entrenamiento: $it") }
     else Nota("Imagen referencial, pendiente de validar por Entrenamiento." + (nota?.let { " $it" } ?: "") + " Sigue siempre los pasos escritos.", MaterialTheme.colorScheme.errorContainer)
-    Text(img.txt("credito")?.takeIf { it.isNotEmpty() }
+    val credito = img.txt("credito")?.takeIf { it.isNotEmpty() }
+    Text(credito
         ?: "Ilustración: ${img.txt("autor") ?: ""} · ${img.txt("fuente") ?: ""} · licencia ${img.txt("licencia") ?: ""} (${img.txt("url_licencia") ?: ""}). Sin modificaciones.",
         style = MaterialTheme.typography.bodySmall)
+    // Con crédito propio, el enlace a la licencia (CC BY-SA lo pide) va aparte y se abre con un toque.
+    if (credito != null) Imagenes.enlaceLicencia(img)?.let { url ->
+        val uri = androidx.compose.ui.platform.LocalUriHandler.current
+        Text("Licencia: $url", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary,
+            textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+            modifier = Modifier.clickable { runCatching { uri.openUri(url) } })
+    }
 }
