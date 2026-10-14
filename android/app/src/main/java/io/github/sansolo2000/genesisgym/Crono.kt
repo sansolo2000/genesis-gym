@@ -93,11 +93,11 @@ object Crono {
         // El tramo final (hasta el fin) es del bloque en curso al detenerse; si no hay uno posterior, del último bloque iniciado.
         val enCurso = c.txt("en_curso")?.takeIf { it in BLOQUES }
         val ultimoIni = iniciados.lastOrNull()
-        val final = if (enCurso != null && (ultimoIni == null || BLOQUES.indexOf(enCurso) >= BLOQUES.indexOf(ultimoIni))) enCurso else ultimoIni
+        val cierre = if (enCurso != null && (ultimoIni == null || BLOQUES.indexOf(enCurso) >= BLOQUES.indexOf(ultimoIni))) enCurso else ultimoIni
         var desde = ini
         val bloques = BLOQUES.associateWith { k ->
-            if (final == null || BLOQUES.indexOf(k) > BLOQUES.indexOf(final)) return@associateWith null
-            val hasta = if (k == final) fin else (instante(ult?.txt(k)) ?: return@associateWith null).let { u -> minOf(maxOf(u, desde), fin) }
+            if (cierre == null || BLOQUES.indexOf(k) > BLOQUES.indexOf(cierre)) return@associateWith null
+            val hasta = if (k == cierre) fin else (instante(ult?.txt(k)) ?: return@associateWith null).let { u -> minOf(maxOf(u, desde), fin) }
             (hasta.toEpochMilli() - desde.toEpochMilli()).also { desde = hasta }
         }
         return Medida(ini, fin, tipo, fin.toEpochMilli() - ini.toEpochMilli(), bloques)

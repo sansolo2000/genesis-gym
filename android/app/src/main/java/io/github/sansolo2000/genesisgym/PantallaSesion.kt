@@ -162,8 +162,7 @@ private fun Mapa(g: Gym) {
                     colors = ButtonDefaults.buttonColors(containerColor = VERDE, contentColor = FONDO)) { Text("Iniciar rutina", fontSize = 17.sp, fontWeight = FontWeight.Bold) }
             // Coordinador (14-oct): sin ninguna serie anotada, se puede volver a partir desde ahora (no queda inflado si se abandonó).
             if (Crono.puedeReiniciar(b)) OutlinedButton(onClick = { g.reiniciarCrono() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Reiniciar cronómetro", color = TEXTO) }
-            Crono.resumen(b)?.let { (t, bl) -> Text("Cronómetro: $t" + (if (bl.isNotEmpty()) "
-$bl" else ""), color = VERDE, fontSize = 13.sp) }
+            Crono.resumen(b)?.let { (t, bl) -> Text("Cronómetro: $t" + (if (bl.isNotEmpty()) "\n$bl" else ""), color = VERDE, fontSize = 13.sp) }
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             val bl = Gimnasio.bloques(ejs)   // M-09: por posición, igual que el cronómetro
