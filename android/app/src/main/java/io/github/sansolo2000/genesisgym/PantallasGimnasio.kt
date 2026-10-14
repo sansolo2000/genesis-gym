@@ -141,6 +141,7 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
     var confirmarTerminar by mutableStateOf(false)
     /** Guarda la sesión con la hora de inicio, para que el cronómetro siga aunque se salga de la app. */
     fun iniciarCrono() { val b = borrador ?: return; if (!Crono.iniciado(b)) guardar(Crono.iniciar(b, java.time.Instant.now())); confirmarTerminar = false }
+    fun reiniciarCrono() { val b = borrador ?: return; if (Crono.puedeReiniciar(b)) guardar(Crono.reiniciar(b, java.time.Instant.now())); confirmarTerminar = false }
     fun terminarCrono() {
         val b = borrador ?: return
         confirmarTerminar = false
@@ -238,7 +239,7 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
     fun cerrarSesion() {
         val b = borrador ?: return
         if (b.esNulo("rpe_sesion") || b.esNulo("duracion_min")) { errorCierre = "Para cerrar, indica el RPE de la sesión y la duración en minutos."; return }
-        errorCierre = ""; guardar(b.con("estado", JsonPrimitive("cerrada")))
+        errorCierre = ""; guardar(Gimnasio.cerrada(b, java.time.Instant.now()))   // O-26: detiene el cronómetro si corría
         if (reloj.clave == claveSesion()) reloj.cancelar()
         if (relojSerie.clave == claveSesion()) relojSerie.cancelar()
     }

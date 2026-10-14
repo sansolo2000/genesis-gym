@@ -15,6 +15,7 @@ import java.time.format.DateTimeFormatter
  * Lógica pura, sin Android, para probarla con JUnit. Queda en el registro de la sesión (entra al respaldo):
  *   crono = { inicio: ISO, fin: ISO | null, fin_tipo: "auto" | "manual" | null, ultima: { cal | fuerza | elong: ISO } }
  * "ultima" es el momento en que se marcó por última vez una serie de cada bloque mientras el cronómetro corría.
+ * Al detenerse guarda "en_curso" (bloque del primer ejercicio pendiente): con "Terminar" o al cerrar, el tramo final es de ese bloque.
  * Una vez detenido no se reabre ni se recalcula (Coordinador, 14-oct). Nunca se inventa un tiempo: sin "Iniciar", todo vacío.
  */
 object Crono {
@@ -40,9 +41,17 @@ object Crono {
     fun iniciar(b: JsonObject, ahora: Instant): JsonObject =
         if (iniciado(b)) b else b.con("crono", Apoyo.objeto("inicio" to JsonPrimitive(iso(ahora)), "fin" to JsonNull, "fin_tipo" to JsonNull, "ultima" to JsonObject(emptyMap())))
 
+    /** Coordinador (14-oct): mientras no haya ninguna serie anotada, "Reiniciar cronómetro" vuelve a partir desde ahora. */
+    fun puedeReiniciar(b: JsonObject?): Boolean = b != null && iniciado(b) && Gimnasio.seriesRegistradas(b) == 0 && b.txt("estado") != "cerrada"
+    fun reiniciar(b: JsonObject, ahora: Instant): JsonObject =
+        if (!puedeReiniciar(b)) b else b.con("crono", Apoyo.objeto("inicio" to JsonPrimitive(iso(ahora)), "fin" to JsonNull, "fin_tipo" to JsonNull, "ultima" to JsonObject(emptyMap())))
+
     private fun detener(b: JsonObject, ahora: Instant, tipo: String): JsonObject {
         val c = de(b) ?: return b
-        return b.con("crono", c.con("fin", JsonPrimitive(iso(ahora))).con("fin_tipo", JsonPrimitive(tipo)))
+        // "en_curso": el bloque del primer ejercicio con series sin anotar al detenerse (null si no queda ninguno).
+        val i = Gimnasio.primerPendiente(b)
+        val enCurso: JsonElement = if (i < 0) JsonNull else JsonPrimitive(Gimnasio.bloques(b.arr("ejercicios"))[i])
+        return b.con("crono", c.con("fin", JsonPrimitive(iso(ahora))).con("fin_tipo", JsonPrimitive(tipo)).con("en_curso", enCurso))
     }
 
     /** "Terminar": el bloque en curso termina aquí. */
@@ -81,10 +90,14 @@ object Crono {
         if (fin == null) return Medida(ini, null, "abierto", null, BLOQUES.associateWith { null })
         val ult = c.obj("ultima")
         val iniciados = BLOQUES.filter { instante(ult?.txt(it)) != null }
+        // El tramo final (hasta el fin) es del bloque en curso al detenerse; si no hay uno posterior, del último bloque iniciado.
+        val enCurso = c.txt("en_curso")?.takeIf { it in BLOQUES }
+        val ultimoIni = iniciados.lastOrNull()
+        val final = if (enCurso != null && (ultimoIni == null || BLOQUES.indexOf(enCurso) >= BLOQUES.indexOf(ultimoIni))) enCurso else ultimoIni
         var desde = ini
         val bloques = BLOQUES.associateWith { k ->
-            val u = instante(ult?.txt(k)) ?: return@associateWith null
-            val hasta = if (k == iniciados.last()) fin else minOf(maxOf(u, desde), fin)
+            if (final == null || BLOQUES.indexOf(k) > BLOQUES.indexOf(final)) return@associateWith null
+            val hasta = if (k == final) fin else (instante(ult?.txt(k)) ?: return@associateWith null).let { u -> minOf(maxOf(u, desde), fin) }
             (hasta.toEpochMilli() - desde.toEpochMilli()).also { desde = hasta }
         }
         return Medida(ini, fin, tipo, fin.toEpochMilli() - ini.toEpochMilli(), bloques)

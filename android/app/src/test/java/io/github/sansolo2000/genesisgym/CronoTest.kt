@@ -82,9 +82,9 @@ class CronoTest {
         b = Crono.terminar(b, t("13:40:00"))
         assertEquals(listOf("10:00:00", "10:40:00", "manual", "40,0", "10,0", "30,0", ""), Crono.campos(b))
         assertEquals(b, Crono.terminar(b, t("13:50:00")))               // terminar otra vez no cambia nada
-        // Terminar antes de anotar nada: solo el total.
+        // Terminar antes de anotar nada: todo el tiempo es del bloque en curso (la elíptica, calentamiento).
         val c = Crono.terminar(Crono.iniciar(sesion, t("13:00:00")), t("13:03:00"))
-        assertEquals(listOf("10:00:00", "10:03:00", "manual", "3,0", "", "", ""), Crono.campos(c))
+        assertEquals(listOf("10:00:00", "10:03:00", "manual", "3,0", "3,0", "", ""), Crono.campos(c))
     }
 
     @Test fun abiertoSoloLlevaElInicio() {
@@ -94,6 +94,45 @@ class CronoTest {
         assertEquals("18:42", Crono.transcurrido(b, t("13:18:42")))
         assertEquals("1:02:05", Crono.transcurrido(b, t("14:02:05")))
         assertEquals("fuerza", Crono.bloqueActual(b))
+    }
+
+    @Test fun reiniciarSoloMientrasNoHayaSeriesAnotadas() {   // Coordinador, 14-oct (U-57)
+        val b = Crono.iniciar(sesion, t("13:00:00"))
+        assertTrue(Crono.puedeReiniciar(b))
+        assertFalse(Crono.puedeReiniciar(sesion))                      // sin iniciar: se ofrece "Iniciar rutina"
+        val r = Crono.reiniciar(b, t("13:20:00"))
+        assertEquals("10:20:00", Crono.campos(r)[0])
+        assertTrue(Crono.corriendo(r))
+        // Con la primera serie anotada ya no se puede reiniciar.
+        val conSerie = paso(r, 0, 0, "13:25:00")
+        assertFalse(Crono.puedeReiniciar(conSerie))
+        assertEquals(conSerie, Crono.reiniciar(conSerie, t("13:30:00")))
+    }
+
+    @Test fun cerrarLaSesionDetieneElCronometroComoManual() {   // O-26 (U-58)
+        val b = paso(Crono.iniciar(sesion, t("13:00:00")), 0, 0, "13:10:00")
+        val c = Gimnasio.cerrada(b, t("13:30:00"))
+        assertEquals("cerrada", (c["estado"] as kotlinx.serialization.json.JsonPrimitive).content)
+        // El calentamiento terminó a las 10:10; el resto es de fuerza, el bloque en curso al cerrar.
+        assertEquals(listOf("10:00:00", "10:30:00", "manual", "30,0", "10,0", "20,0", ""), Crono.campos(c))
+        assertFalse(Crono.corriendo(c))
+        assertFalse(Crono.puedeReiniciar(c))
+        // Sin cronómetro, cerrar no inventa nada.
+        assertEquals(List(7) { "" }, Crono.campos(Gimnasio.cerrada(sesion, t("13:30:00"))))
+    }
+
+    @Test fun conCronometroYSinSeriesNoCuentaComoRegistrada() {   // O-27
+        val soloCrono = Crono.iniciar(sesion, t("13:00:00"))
+        assertEquals(emptyList<JsonObject>(), Gimnasio.sesionesDeSemana(listOf(soloCrono), "2030-10-16"))
+        assertEquals(emptySet<String>(), Gimnasio.clavesRegistradas(listOf(soloCrono)))
+        val rutina = listOf(json("""{"id":"b","dia_semana":"miercoles"}"""))
+        assertEquals(listOf("b"), Gimnasio.pendientesDeSemana(rutina, listOf(soloCrono), "2030-10-16", null).map { it["id"].toString().trim('"') })
+        // Con la primera serie anotada empieza a contar.
+        val conSerie = paso(soloCrono, 1, 0, "13:15:00")
+        assertEquals(1, Gimnasio.sesionesDeSemana(listOf(conSerie), "2030-10-16").size)
+        assertEquals(setOf("2030-10-16_b"), Gimnasio.clavesRegistradas(listOf(conSerie)))
+        // Una sesión sin cronómetro sigue contando como antes.
+        assertEquals(setOf("2030-10-16_b"), Gimnasio.clavesRegistradas(listOf(sesion)))
     }
 
     @Test fun elCronometroEntraAlRespaldoComoParteDeLaSesion() {

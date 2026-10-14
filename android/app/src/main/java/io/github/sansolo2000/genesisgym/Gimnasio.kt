@@ -145,10 +145,20 @@ object Gimnasio {
     /** Lunes de la semana (lunes a domingo) que contiene [fecha]. */
     fun lunesDe(fecha: String): String = LocalDate.parse(fecha).let { it.minusDays((it.dayOfWeek.value - 1).toLong()) }.toString()
 
+    /** O-27 (Coordinador, 14-oct): una sesión con el cronómetro iniciado y 0 series anotadas todavía no cuenta como registrada (M-05, M-08). */
+    fun cuentaComoRegistrada(s: JsonObject): Boolean = !(Crono.iniciado(s) && seriesRegistradas(s) == 0)
+
+    /** Claves "fecha_sesionId" de las sesiones registradas, para el aviso de entrenamiento (M-08). */
+    fun clavesRegistradas(sesiones: List<JsonObject>): Set<String> = sesiones.filter { cuentaComoRegistrada(it) }
+        .mapNotNull { s -> s.txt("fecha")?.let { f -> s.txt("sesion_id")?.let { "${f}_$it" } } }.toSet()
+
+    /** O-26: cerrar la sesión con el cronómetro corriendo lo detiene como "manual" a la hora del cierre. */
+    fun cerrada(b: JsonObject, ahora: java.time.Instant): JsonObject = Crono.terminar(b, ahora).con("estado", JsonPrimitive("cerrada"))
+
     /** Sesiones registradas (cerradas o en curso) en la semana de [hoy], de la más antigua a la más reciente. */
     fun sesionesDeSemana(sesiones: List<JsonObject>, hoy: String): List<JsonObject> {
         val desde = lunesDe(hoy); val hasta = LocalDate.parse(desde).plusDays(6).toString()
-        return sesiones.filter { val f = it.txt("fecha") ?: ""; f in desde..hasta }.sortedBy { it.txt("fecha") }
+        return sesiones.filter { val f = it.txt("fecha") ?: ""; f in desde..hasta && cuentaComoRegistrada(it) }.sortedBy { it.txt("fecha") }
     }
 
     /** Sesiones de la rutina que todavía no tienen registro en la semana de [hoy], sin contar [excluir] (la del día). */
