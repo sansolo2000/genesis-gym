@@ -53,7 +53,7 @@ class DatosDiariosTest {
         assertEquals(Gimnasio.COLUMNAS.joinToString(";"), l[0])
         assertEquals(3, l.size); assertEquals(2, f.filas)
         assertTrue(l.drop(1).all { it.startsWith("2030-10-16;miercoles;B;") })
-        assertEquals(20, l[1].split(";").size)
+        assertEquals(27, l[1].split(";").size)   // 20 + 7 del cronómetro (M-09)
     }
 
     @Test fun hcDiarioUnaFilaSinSuenoNiFcEnReposo() {

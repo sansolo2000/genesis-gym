@@ -22,7 +22,11 @@ class GimnasioTest {
     @Test fun csv_identico_a_la_2_0() {
         val f = Json.parseToJsonElement(recurso("prueba-csv.json")).jsonObject
         val sesiones = f["sesiones"]!!.jsonArray.map { it.jsonObject }
-        assertEquals(f["csv"]!!.jsonPrimitive.content, Gimnasio.csv(sesiones))
+        // M-09: las 20 columnas de la 2.0 siguen iguales; al final van las 7 del cronómetro, vacías en sesiones sin "Iniciar".
+        val esperado = f["csv"]!!.jsonPrimitive.content.split("
+").mapIndexed { i, l -> if (i == 0) l + ";" + Crono.COLUMNAS.joinToString(";") else "$l;;;;;;;" }
+        assertEquals(esperado.joinToString("
+"), Gimnasio.csv(sesiones))
     }
 
     @Test fun borrador_identico_a_la_2_0() {

@@ -115,7 +115,7 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
         }
         inicioApertura = if (existente == null) System.currentTimeMillis() else null
         guardado = if (existente != null) "Guardado ✓" else "Sin guardar: se guarda al anotar la primera serie"
-        guardadoError = false; errorCierre = ""; confirmarBorrado = false; editarFecha = false; errorFecha = ""
+        guardadoError = false; errorCierre = ""; confirmarBorrado = false; editarFecha = false; errorFecha = ""; confirmarTerminar = false
         sesVista = "mapa"; verFicha = false; aviso = ""
         reloj.alAbrirSesion(claveSesion(), System.currentTimeMillis())   // la misma sesión conserva su descanso
         relojSerie.alAbrirSesion(claveSesion(), System.currentTimeMillis())
@@ -124,13 +124,28 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
     }
 
     fun guardar(nuevo: JsonObject) {
-        val b = nuevo.con("actualizado", JsonPrimitive(Gimnasio.ahoraIso()))
+        // M-09: con el cronómetro corriendo, cada serie anotada marca su bloque; la última de la sesión lo detiene sola.
+        val antes = borrador
+        val b = Crono.alGuardar(antes, nuevo, java.time.Instant.now()).con("actualizado", JsonPrimitive(Gimnasio.ahoraIso()))
+        if (Crono.corriendo(antes) && !Crono.corriendo(b)) Crono.resumen(b)?.let { aviso = "Cronómetro detenido: ${it.first}" }
         borrador = b
         try {
             base.put("sesiones/" + Gimnasio.docIdSesion(b.txt("fecha")!!, b.txt("sesion_id")!!), b)
             guardado = "Guardado ✓"; guardadoError = false
         } catch (e: Exception) { guardado = "No se pudo guardar. Vuelve a intentarlo."; guardadoError = true }
         refrescar()
+    }
+
+    // ---------- M-09: cronómetro ("Iniciar rutina") ----------
+    var confirmarTerminar by mutableStateOf(false)
+    /** Guarda la sesión con la hora de inicio, para que el cronómetro siga aunque se salga de la app. */
+    fun iniciarCrono() { val b = borrador ?: return; if (!Crono.iniciado(b)) guardar(Crono.iniciar(b, java.time.Instant.now())); confirmarTerminar = false }
+    fun terminarCrono() {
+        val b = borrador ?: return
+        confirmarTerminar = false
+        if (!Crono.corriendo(b)) return
+        val t = Crono.terminar(b, java.time.Instant.now())
+        guardar(t); Crono.resumen(t)?.let { aviso = "Cronómetro detenido: ${it.first}" }
     }
 
     // 0.11.2 (D-03): salir de la sesión ya no cancela el descanso; el aviso suena igual en 0.
@@ -441,6 +456,7 @@ private fun FilaSesion(g: Gym, s: JsonObject) {
             Text("${Gimnasio.fechaCorta(s.txt("fecha")!!)} · ${s.txt("sesion_nombre")}", fontWeight = FontWeight.SemiBold)
             Text("${Gimnasio.seriesRegistradas(s)}/${Gimnasio.seriesTotales(s)} series · RPE $rpe · $min · " + if (s.txt("estado") == "cerrada") "Cerrada" else "En curso",
                 style = MaterialTheme.typography.bodySmall)
+            Crono.resumen(s)?.let { (t, bl) -> Text("Cronómetro: $t" + (if (bl.isNotEmpty()) " · $bl" else ""), style = MaterialTheme.typography.bodySmall) }   // M-09
         }
     }
 }
@@ -456,6 +472,7 @@ internal fun CierreSesion(g: Gym) {
     Text((if (b.txt("estado") == "cerrada") "Cerrada" else "En curso") + " · " + g.guardado,
         color = if (g.guardadoError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
     Gris("${Gimnasio.seriesRegistradas(b)} de ${Gimnasio.seriesTotales(b)} series anotadas.")
+    Crono.resumen(b)?.let { (t, bl) -> Tarjeta { Sub("Cronómetro"); Text(t, fontWeight = FontWeight.SemiBold); if (bl.isNotEmpty()) Gris(bl) } }   // M-09
     (b["cambios_fecha"] as? kotlinx.serialization.json.JsonArray)?.let { c ->
         if (c.isNotEmpty()) Gris("Fecha corregida. Antes: " + c.joinToString(", ") { Gimnasio.fechaCorta((it as JsonObject).txt("de") ?: "") } + ".")
     }

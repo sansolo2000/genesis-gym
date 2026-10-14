@@ -111,16 +111,15 @@ object Gimnasio {
     }
 
     /**
-     * 0.6.0: bloque de un ejercicio de la sesión, deducido de sus series (la rutina no trae bloques):
-     * todas de calentamiento → "cal"; todas por tiempo → "elong" (elongación); el resto → "fuerza".
+     * M-09 (Coordinador, 14-oct): bloque de cada ejercicio de la sesión POR POSICIÓN (CONTEXTO-DATOS-DIARIOS v3.4 §1.3.1),
+     * la misma regla para el mapa y para el cronómetro: los ejercicios por tiempo antes del primero por repeticiones son
+     * calentamiento ("cal"); los por tiempo después del último por repeticiones, elongación ("elong"); el resto, fuerza.
+     * Sin ningún ejercicio por repeticiones, todos van en fuerza.
      */
-    fun bloqueDe(ej: JsonObject): String {
-        val se = ej.arr("series")
-        return when {
-            se.isNotEmpty() && se.all { it.txt("tipo") == "calentamiento" } -> "cal"
-            se.isNotEmpty() && se.all { it.txt("modo") == "tiempo" } -> "elong"
-            else -> "fuerza"
-        }
+    fun bloques(ejs: List<JsonObject>): List<String> {
+        fun porTiempo(ej: JsonObject) = ej.arr("series").let { se -> se.isNotEmpty() && se.all { it.txt("modo") == "tiempo" } }
+        val primero = ejs.indexOfFirst { !porTiempo(it) }; val ultimo = ejs.indexOfLast { !porTiempo(it) }
+        return ejs.indices.map { i -> if (primero < 0) "fuerza" else if (i < primero) "cal" else if (i > ultimo) "elong" else "fuerza" }
     }
     fun ejercicioListo(ej: JsonObject) = ej.arr("series").all { registrada(it) }
     /** Primer ejercicio con alguna serie sin anotar; -1 si todo está anotado. */
@@ -181,7 +180,7 @@ object Gimnasio {
     // ---------- CSV para el Evaluador (mismas 20 columnas y formato que la 2.0) ----------
     val COLUMNAS = listOf("fecha", "dia_semana", "sesion_id", "sesion_nombre", "rutina_id", "rutina_version", "estado_sesion", "ejercicio_id",
         "ejercicio_nombre", "serie_n", "serie_tipo", "carga_prescrita_kg", "carga_indicacion", "reps_prescritas", "carga_real_kg", "reps_reales",
-        "seg_reales", "rpe_sesion", "duracion_sesion_min", "nota_sesion")
+        "seg_reales", "rpe_sesion", "duracion_sesion_min", "nota_sesion") + Crono.COLUMNAS   // M-09: 7 columnas al final (v3.4 §1.3.1)
 
     private fun campo(v: JsonElement?): String {
         if (v == null || v is JsonNull) return ""
@@ -198,7 +197,8 @@ object Gimnasio {
                 val reps: JsonElement? = if (se.txt("modo") == "tiempo") JsonPrimitive("${jsNum(se["prescrito_seg"])} s") else se["prescrito_reps"]
                 filas.add(listOf(s["fecha"], s["dia_semana"], s["sesion_id"], s["sesion_nombre"], s["rutina_id"], s["rutina_version"], s["estado"],
                     e["ejercicio_id"], e["nombre"], se["n"], se["tipo"], se["carga_prescrita_kg"], se["carga_indicacion"], reps,
-                    se["carga_real_kg"], se["reps_reales"], se["seg_reales"], s["rpe_sesion"], s["duracion_min"], s["nota"]).joinToString(";") { campo(it) })
+                    se["carga_real_kg"], se["reps_reales"], se["seg_reales"], s["rpe_sesion"], s["duracion_min"], s["nota"]).joinToString(";") { campo(it) } +
+                    ";" + Crono.campos(s).joinToString(";"))
             }
         }
         return filas.joinToString("\r\n")

@@ -117,6 +117,7 @@ fun SesionNueva(g: Gym) {
                 Column(Modifier.fillMaxSize()) {
                     // 0.11.2 (D-04): si el descanso sigue corriendo fuera de su pantalla, se ve arriba y se vuelve a él con un toque.
                     if (g.descansoFin != null && g.sesVista != "descanso") BarraDescanso(g)
+                    if (Crono.corriendo(g.borrador)) BarraCrono(g)   // M-09: se ve en el mapa, la hoja, el descanso y el cierre
                     Box(Modifier.weight(1f)) {
                         when (g.sesVista) {
                             "hoja" -> Hoja(g)
@@ -155,10 +156,17 @@ private fun Mapa(g: Gym) {
                 Text("$listos de ${ejs.size} listos", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             }
             if (b.txt("estado") == "cerrada") Text("Sesión cerrada · puedes corregir valores y se guardan solos.", color = VERDE, fontSize = 13.sp)
+            // M-09: "Iniciar rutina" solo si el cronómetro no se usó y la sesión no está cerrada; después, su resumen.
+            if (!Crono.iniciado(b) && b.txt("estado") != "cerrada")
+                Button(onClick = { g.iniciarCrono() }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = VERDE, contentColor = FONDO)) { Text("Iniciar rutina", fontSize = 17.sp, fontWeight = FontWeight.Bold) }
+            Crono.resumen(b)?.let { (t, bl) -> Text("Cronómetro: $t" + (if (bl.isNotEmpty()) "
+$bl" else ""), color = VERDE, fontSize = 13.sp) }
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            val bl = Gimnasio.bloques(ejs)   // M-09: por posición, igual que el cronómetro
             for (bloque in listOf("cal", "fuerza", "elong")) {
-                val idx = ejs.indices.filter { Gimnasio.bloqueDe(ejs[it]) == bloque }
+                val idx = ejs.indices.filter { bl[it] == bloque }
                 if (idx.isEmpty()) continue
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -216,8 +224,9 @@ private fun Hoja(g: Gym) {
     if (ejs.isEmpty()) { g.sesVista = "mapa"; return }
     val i = g.idxEj.coerceIn(0, ejs.size - 1)
     val ej = ejs[i]
-    val bloque = Gimnasio.bloqueDe(ej)
-    val enBloque = ejs.indices.filter { Gimnasio.bloqueDe(ejs[it]) == bloque }
+    val bl = Gimnasio.bloques(ejs)
+    val bloque = bl[i]
+    val enBloque = ejs.indices.filter { bl[it] == bloque }
     val series = ej.arr("series")
     val actual = series.indexOfFirst { !Gimnasio.registrada(it) }
     val descanso = ej.num("descanso_seg")?.toInt() ?: 0
@@ -389,6 +398,27 @@ private fun FichaHoja(g: Gym, ej: JsonObject) {
 
 // ---------- Descanso ----------
 /** Barra del descanso en curso cuando Héctor pasó a otra pantalla con "Ir ahora", "‹ Mapa" o Atrás. */
+/** M-09: tiempo desde "Iniciar rutina" y el bloque en curso; "Terminar" pide confirmación. */
+@Composable
+private fun BarraCrono(g: Gym) {
+    val b = g.borrador ?: return
+    var ahora by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Crono.de(b)?.get("inicio")) { while (true) { ahora = System.currentTimeMillis(); delay(1000) } }
+    val t = Crono.transcurrido(b, java.time.Instant.ofEpochMilli(ahora)) ?: return
+    Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp).fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(10.dp))
+        .background(Color(0xFF15281F)).border(1.dp, VERDE, RoundedCornerShape(10.dp))
+        .semantics { contentDescription = "Cronómetro de la sesión: $t" }.padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(t, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = VERDE)
+        Text(Crono.bloqueActual(b)?.replaceFirstChar { it.uppercase() } ?: "", color = GRIS, fontSize = 13.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (!g.confirmarTerminar) TextButton(onClick = { g.confirmarTerminar = true }) { Text("Terminar", color = TEXTO) }
+        else {
+            TextButton(onClick = { g.terminarCrono() }) { Text("Sí, terminar", color = AMBAR, fontWeight = FontWeight.Bold) }
+            TextButton(onClick = { g.confirmarTerminar = false }) { Text("No", color = GRIS) }
+        }
+    }
+}
+
 @Composable
 private fun BarraDescanso(g: Gym) {
     val fin = g.descansoFin ?: return
