@@ -13,5 +13,5 @@ Este archivo no se llama `CREDITOS.md` porque al compilar se junta con `imagenes
 
 Validadas por Entrenamiento el 13-oct-2026.
 
-## free-exercise-db — carpeta `free-exercise-db/` (sin uso)
-- Las 4 fotos de estas 2 elongaciones (https://github.com/yuhonas/free-exercise-db, commit f00c92c7dcf1216a928a52c3706c7ce8e2f71ed5, licencia declarada Unlicense, procedencia no verificada) ya no las referencia el catálogo. Se conservan hasta que se decida retirarlas.
+## free-exercise-db (retiradas)
+- Las 4 fotos que tenían antes estas 2 elongaciones (https://github.com/yuhonas/free-exercise-db, licencia declarada Unlicense, procedencia no verificada) se borraron de esta carpeta con la aprobación de Héctor (O-18, 13-oct-2026). Ya no van en el APK.

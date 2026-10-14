@@ -43,6 +43,7 @@ class ImagenesExtraTest {
             srcs(o("estiramiento-espalda-alta-brazos-adelante")))
         aprobadas.forEach { (ruta, esperado) -> assertEquals(ruta, esperado, md5(File(carpeta, ruta))) }
         assertFalse(imagenes.values.flatMap { srcs(it as JsonObject) }.any { it.contains("free-exercise-db") })
+        assertFalse("O-18: las fotos de free-exercise-db se retiraron", File(carpeta, "free-exercise-db").exists())
     }
 
     @Test fun cadaImagenTraeCreditoYEtiquetas() {
