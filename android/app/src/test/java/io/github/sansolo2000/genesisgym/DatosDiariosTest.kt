@@ -219,6 +219,34 @@ class DatosDiariosTest {
         assertEquals(mapOf("hc-diario" to 2), DatosDiarios.versionesEnDrive(listOf("hc-hector-diario-2030-10-16-v2.csv"), "hector", d))
     }
 
+    @Test fun menosPermisosNoSubeUnVnDelHc() {   // §1.5.8 (v3.3)
+        val a = archivos()
+        val todos = DatosDiarios.PERMISOS.toSet()
+        val e = subido(a).let { s -> s.copy(tipos = s.tipos.mapValues { (t, v) -> if (t in DatosDiarios.PERMISOS_DE) v.copy(permisos = DatosDiarios.permisosDe(t, todos)) else v }) }
+        val hc = listOf(a[1], a[2])
+        // Sin FC en reposo: hc-diario no se sube y va a faltantes; hc-actividades (sus permisos siguen) sí.
+        val (ok, falt) = DatosDiarios.filtrarPermisos(hc, todos - "fc_reposo", e)
+        assertEquals(listOf("hc-actividades"), ok.map { it.tipo })
+        assertEquals(listOf("hc-diario" to "permisos-reducidos"), falt.map { it.tipo to it.motivo })
+        assertTrue(falt[0].detalle.contains("fc_reposo"))
+        // Con los mismos permisos o con más, se aplica la regla general.
+        assertEquals(2, DatosDiarios.filtrarPermisos(hc, todos, e).first.size)
+        val pocos = e.copy(tipos = e.tipos + ("hc-diario" to e.tipos["hc-diario"]!!.copy(permisos = setOf("peso"))))
+        assertEquals(2, DatosDiarios.filtrarPermisos(hc, setOf("peso", "sueno", "ejercicio", "distancia", "desnivel", "fc"), pocos).first.size)
+        // Sin subida anterior, o sin permisos guardados (estado de antes de la v3.3), no se compara.
+        assertEquals(2, DatosDiarios.filtrarPermisos(hc, emptySet(), null).first.size)
+        assertEquals(2, DatosDiarios.filtrarPermisos(hc, emptySet(), subido(a)).first.size)
+        // En el manifest: el hc-diario anterior sigue vigente y además está en faltantes; completo = false.
+        val gen = ZonedDateTime.of(2030, 10, 17, 13, 40, 0, 0, z)
+        val m = json(DatosDiarios.manifest("hector", d, 2, gen, "0.14.0", 25, "tardio", e.tipos, falt,
+            DatosDiarios.LecturaHc(gen, false, listOf("fc_reposo")), null))
+        assertEquals(5, (m["vigentes"] as JsonArray).size)
+        assertEquals("permisos-reducidos", (((m["faltantes"] as JsonArray)[0] as JsonObject)["motivo"] as JsonPrimitive).content)
+        assertEquals("false", (m["completo"] as JsonPrimitive).content)
+        // Los permisos guardados sobreviven al estado en preferencias.
+        assertEquals(e, DatosDiarios.estadoDesdeJson(DatosDiarios.estadoAJson(e)))
+    }
+
     @Test fun reporteDeApoyoEnElManifest() {
         val r = json("""{"fecha":"2030-10-16","version":2,"tardio":false,"enviado":{"version":2,"id":"x","en":"2030-10-16T23:00:00.000Z"}}""")
         val o = DatosDiarios.reporteApoyo(r)

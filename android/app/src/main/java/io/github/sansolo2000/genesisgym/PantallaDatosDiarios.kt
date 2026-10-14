@@ -37,6 +37,7 @@ class Dd(private val c: Context, private val base: BaseLocal, private val hc: Hc
     var carpetaNueva by mutableStateOf(false)
     var porSubir by mutableIntStateOf(0)
     var ayerAbierto by mutableStateOf(false)
+    var permisosReducidos by mutableStateOf(false)   // §1.5.8
 
     private val prefs get() = c.getSharedPreferences("datos-diarios", Context.MODE_PRIVATE)
     private fun previo(d: LocalDate) = DatosDiarios.estadoDesdeJson(prefs.getString(d.toString(), null))
@@ -70,7 +71,7 @@ class Dd(private val c: Context, private val base: BaseLocal, private val hc: Hc
         val ahora = ZonedDateTime.now(DatosDiarios.ZONA)
         val dias = DatosDiarios.ventana(ahora)
         val perfil = SaludCsv.slug(perfilNombre)
-        mensaje = null; carpetaNueva = false
+        mensaje = null; carpetaNueva = false; permisosReducidos = false
         val subidos = mutableListOf<LocalDate>()
         try {
             enviando = "Leyendo Health Connect…"
@@ -87,9 +88,14 @@ class Dd(private val c: Context, private val base: BaseLocal, private val hc: Hc
             for (d in dias) {
                 val p = previo(d)
                 val archivos = DatosDiarios.locales(ses, cin, com, d).toMutableList()
+                var faltantesDia = faltantes
                 crudo?.let { k ->
-                    if (faltantes.none { it.tipo == "hc-diario" }) archivos.add(DatosDiarios.hcDiario(d, k.fc, k.sueno, k.peso))
-                    if (faltantes.none { it.tipo == "hc-actividades" }) archivos.add(DatosDiarios.hcActividades(d, k.actividades))
+                    val hc = listOfNotNull(
+                        if (faltantes.none { it.tipo == "hc-diario" }) DatosDiarios.hcDiario(d, k.fc, k.sueno, k.peso) else null,
+                        if (faltantes.none { it.tipo == "hc-actividades" }) DatosDiarios.hcActividades(d, k.actividades) else null)
+                    val (ok, reducidos) = DatosDiarios.filtrarPermisos(hc, concedidos, p)
+                    archivos.addAll(ok); faltantesDia = faltantes + reducidos
+                    if (reducidos.isNotEmpty()) permisosReducidos = true
                 }
                 if (!DatosDiarios.hayQueSubir(archivos, p)) continue
                 enviando = "Subiendo ${Comidas.fechaLarga(d.toString())}…"
@@ -102,13 +108,14 @@ class Dd(private val c: Context, private val base: BaseLocal, private val hc: Hc
                     val v = maxOf(v0, (enDrive[a.tipo] ?: 0) + 1)
                     val n = DatosDiarios.nombre(a.tipo, perfil, d, v)
                     DriveApi.subirArchivo(token, sub, n, "text/csv", a.texto.toByteArray(Charsets.UTF_8))
-                    est = est.copy(tipos = est.tipos + (a.tipo to DatosDiarios.Subido(v, n, a.sha256, a.filas)), manifestPendiente = true)
+                    val permisos = if (a.tipo in DatosDiarios.PERMISOS_DE) DatosDiarios.permisosDe(a.tipo, concedidos) else null
+                    est = est.copy(tipos = est.tipos + (a.tipo to DatosDiarios.Subido(v, n, a.sha256, a.filas, permisos)), manifestPendiente = true)
                     guardar(d, est)
                 }
                 // El manifest va al final, después de los CSV (§1.4).
                 val mv = maxOf(est.version, enDrive["manifest"] ?: 0) + 1
                 val m = DatosDiarios.manifest(perfil, d, mv, ZonedDateTime.now(DatosDiarios.ZONA), BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE,
-                    DatosDiarios.motivo(p), est.tipos, faltantes, lectura, base.get("reportes_apoyo/$d"))
+                    DatosDiarios.motivo(p), est.tipos, faltantesDia, lectura, base.get("reportes_apoyo/$d"))
                 DriveApi.subirArchivo(token, sub, DatosDiarios.nombreManifest(perfil, d, mv), "application/json", m.toByteArray(Charsets.UTF_8))
                 guardar(d, est.copy(version = mv, manifestPendiente = false))
                 subidos.add(d)
@@ -142,6 +149,7 @@ fun SeccionDatosDiarios(dd: Dd, a: AccionesDd) {
             Text(if (dd.enviando.isNotEmpty()) dd.enviando else "Subir ahora", fontWeight = FontWeight.Bold)
         }
         dd.mensaje?.let { (tipo, m) -> Text(m, color = if (tipo == "err") Color(0xFFE57373) else VERDE, fontSize = 14.sp) }
+        if (dd.permisosReducidos) Text(DatosDiarios.AVISO_PERMISOS, color = AMBAR, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
         if (dd.carpetaNueva) Text("Se creó una carpeta datos-diarios nueva; muévela a Genesis Gym.", color = AMBAR, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
     }
 }

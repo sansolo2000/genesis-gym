@@ -131,20 +131,23 @@ object DatosDiarios {
         "﻿" + (listOf(columnas) + filas).joinToString("\r\n") { f -> f.joinToString(";") { campo(it) } } + "\r\n"
 
     // ---------- lo que ya se subió (por día y por tipo) ----------
-    data class Subido(val v: Int, val nombre: String, val sha256: String, val filas: Int)
+    /** [permisos]: en un hc-, los permisos de Health Connect con que se leyó ese archivo (§1.5.8); null si no se sabe. */
+    data class Subido(val v: Int, val nombre: String, val sha256: String, val filas: Int, val permisos: Set<String>? = null)
     /** [version]: la del último manifest subido. [manifestPendiente]: se subió un CSV y falta su manifest (p. ej. se cortó internet). */
     data class EstadoDia(val version: Int, val tipos: Map<String, Subido>, val manifestPendiente: Boolean)
 
     fun estadoAJson(e: EstadoDia): String = JsJson.stringify(Apoyo.objeto(
         "version" to JsonPrimitive(e.version), "manifest_pendiente" to JsonPrimitive(e.manifestPendiente),
         "tipos" to JsonObject(e.tipos.mapValues { (_, s) -> Apoyo.objeto("v" to JsonPrimitive(s.v), "nombre" to JsonPrimitive(s.nombre),
-            "sha256" to JsonPrimitive(s.sha256), "filas" to JsonPrimitive(s.filas)) })))
+            "sha256" to JsonPrimitive(s.sha256), "filas" to JsonPrimitive(s.filas),
+            "permisos" to (s.permisos?.let { p -> JsonArray(p.sorted().map { JsonPrimitive(it) }) } ?: JsonNull)) })))
 
     fun estadoDesdeJson(s: String?): EstadoDia? = if (s == null) null else runCatching {
         val o = Json.parseToJsonElement(s).jsonObject
         fun JsonObject.i(k: String) = (this[k] as JsonPrimitive).content.toInt()
         EstadoDia(o.i("version"), (o["tipos"] as JsonObject).mapValues { (_, e) -> val v = e as JsonObject
-            Subido(v.i("v"), (v["nombre"] as JsonPrimitive).content, (v["sha256"] as JsonPrimitive).content, v.i("filas")) },
+            Subido(v.i("v"), (v["nombre"] as JsonPrimitive).content, (v["sha256"] as JsonPrimitive).content, v.i("filas"),
+                (v["permisos"] as? JsonArray)?.map { (it as JsonPrimitive).content }?.toSet()) },
             (o["manifest_pendiente"] as JsonPrimitive).content == "true")
     }.getOrNull()
 
@@ -222,6 +225,27 @@ object DatosDiarios {
     // ---------- Health Connect: qué falta ----------
     /** Nombres de permisos del manifest, en el orden de §1.4. */
     val PERMISOS = listOf("fc_reposo", "sueno", "peso", "ejercicio", "distancia", "desnivel", "fc")
+
+    /** Los permisos que usa cada hc- (los demás no cambian su contenido). */
+    val PERMISOS_DE = mapOf("hc-diario" to setOf("fc_reposo", "sueno", "peso"), "hc-actividades" to setOf("ejercicio", "distancia", "desnivel", "fc"))
+    fun permisosDe(tipo: String, concedidos: Set<String>): Set<String> = concedidos intersect (PERMISOS_DE[tipo] ?: emptySet())
+
+    const val AVISO_PERMISOS = "Health Connect tiene menos permisos que antes; revisa los permisos de Génesis Gym."
+
+    /**
+     * §1.5.8 (v3.3): un hc- leído con menos permisos que los de la lectura que produjo su archivo vigente no se sube (no hay -vN):
+     * el anterior sigue vigente y el tipo va a faltantes con "permisos-reducidos". Devuelve (los hc- que sí se pueden subir, faltantes).
+     */
+    fun filtrarPermisos(hc: List<Archivo>, concedidos: Set<String>, previo: EstadoDia?): Pair<List<Archivo>, List<Faltante>> {
+        val (bloq, ok) = hc.partition { a ->
+            val antes = previo?.tipos?.get(a.tipo)?.permisos ?: return@partition false
+            !permisosDe(a.tipo, concedidos).containsAll(permisosDe(a.tipo, antes))
+        }
+        return ok to bloq.map { a ->
+            val faltan = permisosDe(a.tipo, previo!!.tipos[a.tipo]!!.permisos!!) - concedidos
+            Faltante(a.tipo, "permisos-reducidos", "Se leyó sin: ${faltan.sorted().joinToString(", ")}. Sigue vigente el archivo anterior.")
+        }
+    }
 
     /** Un archivo hc- que no se puede exportar (no se escribe y va a faltantes). Con permisos parciales sí se escribe, con columnas vacías. */
     fun faltantesHc(disponible: Boolean, error: String?, concedidos: Set<String>): List<Faltante> = when {
