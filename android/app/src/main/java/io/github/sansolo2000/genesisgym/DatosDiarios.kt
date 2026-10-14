@@ -98,6 +98,34 @@ object DatosDiarios {
         return Archivo("comidas", csv(COLUMNAS_COMIDAS, filas), filas.size)
     }
 
+    /**
+     * D-09: el programa de alimentación que cubre D (desde ≤ D ≤ hasta). Primero el activo; si no lo cubre, el guardado más
+     * reciente (importado_en) en programas_alimentacion/<id> que lo cubra. [guardados]: (programa, importado_en).
+     */
+    fun programaDe(d: LocalDate, activo: JsonObject?, guardados: List<Pair<JsonObject, String>>): JsonObject? {
+        fun cubre(p: JsonObject?): Boolean {
+            val i = p?.get("programa") as? JsonObject ?: return false
+            val desde = (i["desde"] as? JsonPrimitive)?.content ?: return false; val hasta = (i["hasta"] as? JsonPrimitive)?.content ?: return false
+            return d.toString() in desde..hasta
+        }
+        if (cubre(activo)) return activo
+        return guardados.filter { cubre(it.first) }.maxByOrNull { it.second }?.first
+    }
+
+    /**
+     * D-09: las comidas de D con el programa que lo cubre y sus intercambios. Si no hay programa que lo cubra, o los intercambios
+     * guardados son de otro programa (se perdieron al importar el siguiente), un día ya subido no se recalcula (null): queda vigente
+     * lo subido, para no subir un -vN con menos datos.
+     */
+    fun comidasDelDia(d: LocalDate, activo: JsonObject?, guardados: List<Pair<JsonObject, String>>, intercambios: JsonObject?,
+                      registros: List<Respaldo.Doc>, yaSubido: Boolean): Archivo? {
+        val p = programaDe(d, activo, guardados)
+        val id = (p?.get("programa") as? JsonObject)?.get("id")
+        val completo = p != null && (intercambios == null || intercambios["programa_id"] == id)
+        if (!completo && yaSubido) return null
+        return comidas(EstadoComidas(p, intercambios, registros), d)
+    }
+
     private fun campo(s: String): String = if (s.any { it == ';' || it == '"' || it == '\n' || it == '\r' }) "\"" + s.replace("\"", "\"\"") + "\"" else s
     fun csv(columnas: List<String>, filas: List<List<String>>): String =
         "﻿" + (listOf(columnas) + filas).joinToString("\r\n") { f -> f.joinToString(";") { campo(it) } } + "\r\n"
@@ -141,9 +169,9 @@ object DatosDiarios {
     /** Hay que subir algo si cambió un archivo o quedó un manifest sin subir. Tocar el botón dos veces no crea versiones. */
     fun hayQueSubir(archivos: List<Archivo>, previo: EstadoDia?): Boolean = cambios(archivos, previo).isNotEmpty() || previo?.manifestPendiente == true
 
-    /** Los 3 archivos que salen de la base del celular (sin Health Connect). */
-    fun locales(ses: List<JsonObject>, cin: List<Cintura.Registro>, com: EstadoComidas, d: LocalDate): List<Archivo> =
-        listOf(fuerza(ses, d), cintura(cin, d), comidas(com, d))
+    /** Los archivos que salen de la base del celular (sin Health Connect). [com] null = comidas no se recalcula (D-09). */
+    fun locales(ses: List<JsonObject>, cin: List<Cintura.Registro>, com: (LocalDate) -> Archivo?, d: LocalDate): List<Archivo> =
+        listOfNotNull(fuerza(ses, d), cintura(cin, d), com(d))
 
     /** "N días por subir": días de la ventana sin manifest, con un archivo local cambiado o con un manifest pendiente. */
     fun porSubir(dias: List<LocalDate>, locales: (LocalDate) -> List<Archivo>, previo: (LocalDate) -> EstadoDia?): Int = dias.count { d ->

@@ -19,7 +19,7 @@ import java.time.ZonedDateTime
 /** Datos diarios, entrega 1 (CONTEXTO-DATOS-DIARIOS v3 §11.8). Solo datos inventados. */
 class DatosDiariosTest {
     private val z = DatosDiarios.ZONA
-    private val d = LocalDate.parse("2026-10-14")
+    private val d = LocalDate.parse("2030-10-16")
     private val BOM = "﻿"
     private fun t(f: String, h: Int, m: Int = 0): Instant = ZonedDateTime.of(LocalDate.parse(f), LocalTime.of(h, m), z).toInstant()
     private fun json(s: String) = Json.parseToJsonElement(s).jsonObject
@@ -30,13 +30,13 @@ class DatosDiariosTest {
         "ejercicios":[{"ejercicio_id":"ejercicio-x","nombre":"Ejercicio X","series":[${(1..series).joinToString(",") { """{"n":$it,"tipo":"efectiva","carga_prescrita_kg":10,"prescrito_reps":"10","carga_real_kg":10,"reps_reales":10}""" }}]}]}""")
 
     @Test fun nombresDeLosArchivos() {
-        assertEquals("fuerza-hector-2026-10-14.csv", DatosDiarios.nombre("fuerza", "hector", d, 1))
-        assertEquals("hc-hector-diario-2026-10-14.csv", DatosDiarios.nombre("hc-diario", "hector", d, 1))
-        assertEquals("hc-hector-actividades-2026-10-14-v2.csv", DatosDiarios.nombre("hc-actividades", "hector", d, 2))
-        assertEquals("cintura-hector-2026-10-14.csv", DatosDiarios.nombre("cintura", "hector", d, 1))
-        assertEquals("comidas-hector-2026-10-14-v3.csv", DatosDiarios.nombre("comidas", "hector", d, 3))
-        assertEquals("manifest-hector-2026-10-14.json", DatosDiarios.nombreManifest("hector", d, 1))
-        assertEquals("manifest-hector-2026-10-14-v2.json", DatosDiarios.nombreManifest("hector", d, 2))
+        assertEquals("fuerza-hector-2030-10-16.csv", DatosDiarios.nombre("fuerza", "hector", d, 1))
+        assertEquals("hc-hector-diario-2030-10-16.csv", DatosDiarios.nombre("hc-diario", "hector", d, 1))
+        assertEquals("hc-hector-actividades-2030-10-16-v2.csv", DatosDiarios.nombre("hc-actividades", "hector", d, 2))
+        assertEquals("cintura-hector-2030-10-16.csv", DatosDiarios.nombre("cintura", "hector", d, 1))
+        assertEquals("comidas-hector-2030-10-16-v3.csv", DatosDiarios.nombre("comidas", "hector", d, 3))
+        assertEquals("manifest-hector-2030-10-16.json", DatosDiarios.nombreManifest("hector", d, 1))
+        assertEquals("manifest-hector-2030-10-16-v2.json", DatosDiarios.nombreManifest("hector", d, 2))
     }
 
     @Test fun ceroFilasDejaSoloLaCabecera() {
@@ -48,60 +48,96 @@ class DatosDiariosTest {
     }
 
     @Test fun fuerzaSoloConLasSesionesDeEseDia() {
-        val f = DatosDiarios.fuerza(listOf(sesion("2026-10-13", "A", 3), sesion("2026-10-14", "B", 2)), d)
+        val f = DatosDiarios.fuerza(listOf(sesion("2030-10-15", "A", 3), sesion("2030-10-16", "B", 2)), d)
         val l = lineas(f.texto)
         assertEquals(Gimnasio.COLUMNAS.joinToString(";"), l[0])
         assertEquals(3, l.size); assertEquals(2, f.filas)
-        assertTrue(l.drop(1).all { it.startsWith("2026-10-14;miercoles;B;") })
+        assertTrue(l.drop(1).all { it.startsWith("2030-10-16;miercoles;B;") })
         assertEquals(20, l[1].split(";").size)
     }
 
     @Test fun hcDiarioUnaFilaSinSuenoNiFcEnReposo() {
-        val pe = listOf(SaludCsv.Peso(t("2026-10-14", 6, 30), 80.25, "com.moving.movinglife"), SaludCsv.Peso(t("2026-10-13", 6, 30), 81.0, "com.moving.movinglife"))
+        val pe = listOf(SaludCsv.Peso(t("2030-10-16", 6, 30), 55.5, "com.moving.movinglife"), SaludCsv.Peso(t("2030-10-15", 6, 30), 56.0, "com.moving.movinglife"))
         val a = DatosDiarios.hcDiario(d, emptyList(), emptyList(), pe)
         assertEquals(1, a.filas)
-        assertEquals(listOf(SaludCsv.COLUMNAS_DIARIO.joinToString(";"), "2026-10-14;;;;;;;80,25;06:30;movinglife"), lineas(a.texto))
-        assertEquals(listOf(SaludCsv.COLUMNAS_DIARIO.joinToString(";"), "2026-10-14;;;;;;;;;"), lineas(DatosDiarios.hcDiario(d, emptyList(), emptyList(), emptyList()).texto))
+        assertEquals(listOf(SaludCsv.COLUMNAS_DIARIO.joinToString(";"), "2030-10-16;;;;;;;55,5;06:30;movinglife"), lineas(a.texto))
+        assertEquals(listOf(SaludCsv.COLUMNAS_DIARIO.joinToString(";"), "2030-10-16;;;;;;;;;"), lineas(DatosDiarios.hcDiario(d, emptyList(), emptyList(), emptyList()).texto))
     }
 
     @Test fun cinturaDelDia() {
-        val r = listOf(Cintura.Registro("2026-10-14", "07:10", 93.25, 2, listOf(93.2, 93.3), true, null),
-            Cintura.Registro("2026-10-16", "07:00", 93.0, 2, listOf(93.0, 93.0), true, null))
+        val r = listOf(Cintura.Registro("2030-10-16", "07:10", 70.25, 2, listOf(70.2, 70.3), true, null),
+            Cintura.Registro("2030-10-18", "07:00", 71.5, 2, listOf(71.5, 71.5), true, null))
         val c = DatosDiarios.cintura(r, d)
         assertEquals(1, c.filas)
-        assertEquals("2026-10-14;07:10;93,25;2;93,2;93,3;;si;", lineas(c.texto)[1])
+        assertEquals("2030-10-16;07:10;70,25;2;70,2;70,3;;si;", lineas(c.texto)[1])
     }
 
-    private val programa = json("""{"programa":{"id":"prog-prueba","nombre":"Prueba","desde":"2026-10-12","hasta":"2026-10-18"},
+    private val programa = json("""{"programa":{"id":"prog-prueba","nombre":"Prueba","desde":"2030-10-14","hasta":"2030-10-20"},
         "perfiles":[{"id":"persona-prueba"}],"preparaciones":{"avena":{"nombre":"Avena"},"pollo":{"nombre":"Pollo"}},
-        "dias":[{"fecha":"2026-10-14","comidas":[{"tipo":"desayuno","hora":"08:00","preparacion":"avena"},{"tipo":"almuerzo","hora":"13:30","preparacion":"pollo"}]}]}""")
-    private fun reg(tipo: String, campos: String) = Respaldo.Doc("comidas/2026-10-14_$tipo", json("""{"fecha":"2026-10-14","tipo":"$tipo",$campos}"""))
+        "dias":[{"fecha":"2030-10-16","comidas":[{"tipo":"desayuno","hora":"08:00","preparacion":"avena"},{"tipo":"almuerzo","hora":"13:30","preparacion":"pollo"}]}]}""")
+    private fun reg(tipo: String, campos: String) = Respaldo.Doc("comidas/2030-10-16_$tipo", json("""{"fecha":"2030-10-16","tipo":"$tipo",$campos}"""))
 
     @Test fun comidasCincoFilasConYSinMarca() {
         val e = EstadoComidas(programa, null, listOf(
-            reg("desayuno", """"estado":"indicado","version":2,"actualizado":"2026-10-14T11:05:00.000Z""""),
-            reg("almuerzo", """"estado":"no-comi","version":1,"actualizado":"2026-10-14T17:00:00.000Z""""),
-            reg("colacion_am", """"nota":"solo una nota","version":1,"actualizado":"2026-10-14T13:00:00.000Z""""),
-            reg("cena", """"estado":"otro","version":1,"actualizado":"2026-10-15T00:30:00.000Z"""")))
+            reg("desayuno", """"estado":"indicado","version":2,"actualizado":"2030-10-16T11:05:00.000Z""""),
+            reg("almuerzo", """"estado":"no-comi","version":1,"actualizado":"2030-10-16T17:00:00.000Z""""),
+            reg("colacion_am", """"nota":"solo una nota","version":1,"actualizado":"2030-10-16T13:00:00.000Z""""),
+            reg("cena", """"estado":"otro","version":1,"actualizado":"2030-10-17T00:30:00.000Z"""")))
         val a = DatosDiarios.comidas(e, d)
         assertEquals(5, a.filas)
         assertEquals(listOf(
             DatosDiarios.COLUMNAS_COMIDAS.joinToString(";"),
-            "2026-10-14;desayuno;08:00;avena;indicado;si;no;2;2026-10-14T11:05:00.000Z",
-            "2026-10-14;colacion_am;;;;no;;;",
-            "2026-10-14;almuerzo;13:30;pollo;no-comi;no;no;1;2026-10-14T17:00:00.000Z",
-            "2026-10-14;colacion_pm;;;;no;;;",
-            "2026-10-14;cena;;;otro;si;no;1;2026-10-15T00:30:00.000Z"), lineas(a.texto))
+            "2030-10-16;desayuno;08:00;avena;indicado;si;no;2;2030-10-16T11:05:00.000Z",
+            "2030-10-16;colacion_am;;;;no;;;",
+            "2030-10-16;almuerzo;13:30;pollo;no-comi;no;no;1;2030-10-16T17:00:00.000Z",
+            "2030-10-16;colacion_pm;;;;no;;;",
+            "2030-10-16;cena;;;otro;si;no;1;2030-10-17T00:30:00.000Z"), lineas(a.texto))
         // Sin programa: las 5 filas igual, sin hora ni preparación.
-        assertEquals("2026-10-14;desayuno;;;;no;;;", lineas(DatosDiarios.comidas(EstadoComidas(null), d).texto)[1])
+        assertEquals("2030-10-16;desayuno;;;;no;;;", lineas(DatosDiarios.comidas(EstadoComidas(null), d).texto)[1])
     }
 
     @Test fun comidasConIntercambio() {
-        val e = EstadoComidas(programa, null, listOf(reg("desayuno", """"estado":"indicado","version":1,"actualizado":"2026-10-14T11:05:00.000Z"""")))
-        e.intercambiar("2026-10-14_desayuno", "2026-10-14_almuerzo", "2026-10-14T12:00:00.000Z")
+        val e = EstadoComidas(programa, null, listOf(reg("desayuno", """"estado":"indicado","version":1,"actualizado":"2030-10-16T11:05:00.000Z"""")))
+        e.intercambiar("2030-10-16_desayuno", "2030-10-16_almuerzo", "2030-10-16T12:00:00.000Z")
         val l = lineas(DatosDiarios.comidas(e, d).texto)
-        assertEquals("2026-10-14;desayuno;08:00;pollo;indicado;si;si;2;2026-10-14T12:00:00.000Z", l[1])
-        assertEquals("2026-10-14;almuerzo;13:30;avena;;no;;;", l[3])   // sin marca: sin intercambio, versión ni momento
+        assertEquals("2030-10-16;desayuno;08:00;pollo;indicado;si;si;2;2030-10-16T12:00:00.000Z", l[1])
+        assertEquals("2030-10-16;almuerzo;13:30;avena;;no;;;", l[3])   // sin marca: sin intercambio, versión ni momento
+    }
+
+    private fun prog(id: String, desde: String, hasta: String, fecha: String) = json("""{"programa":{"id":"$id","nombre":"$id","desde":"$desde","hasta":"$hasta"},
+        "perfiles":[{"id":"persona-prueba"}],"preparaciones":{"avena":{"nombre":"Avena"},"pollo":{"nombre":"Pollo"}},
+        "dias":[{"fecha":"$fecha","comidas":[{"tipo":"desayuno","hora":"08:00","preparacion":"avena"},{"tipo":"almuerzo","hora":"13:30","preparacion":"pollo"}]}]}""")
+
+    @Test fun programaQueCubreElDia() {   // D-09
+        val viejo = prog("p1", "2030-10-14", "2030-10-20", "2030-10-16"); val nuevo = prog("p1b", "2030-10-14", "2030-10-20", "2030-10-16")
+        assertEquals(nuevo, DatosDiarios.programaDe(d, null, listOf(viejo to "2030-10-10T10:00:00.000Z", nuevo to "2030-10-12T10:00:00.000Z")))
+        assertEquals(viejo, DatosDiarios.programaDe(d, viejo, listOf(nuevo to "2030-10-12T10:00:00.000Z")))   // si el activo cubre el día, manda
+        assertNull(DatosDiarios.programaDe(LocalDate.parse("2030-10-30"), viejo, listOf(nuevo to "2030-10-12T10:00:00.000Z")))
+    }
+
+    @Test fun importarOtroProgramaNoSubeComidasConMenosDatos() {   // D-09 (QA): importar P1, subir, importar P2 y subir de nuevo
+        val p1 = prog("p1", "2030-10-14", "2030-10-20", "2030-10-16"); val p2 = prog("p2", "2030-10-21", "2030-10-27", "2030-10-23")
+        val e1 = EstadoComidas(p1, null, listOf(reg("desayuno", """"estado":"indicado","version":1,"actualizado":"2030-10-16T11:05:00.000Z"""")))
+        val inter1 = e1.intercambiar("2030-10-16_desayuno", "2030-10-16_almuerzo", "2030-10-16T12:00:00.000Z").first { it.ruta == "alimentacion/intercambios" }.data
+        val regs = e1.registros.map { (k, v) -> Respaldo.Doc("comidas/$k", v) }
+        // 1.ª subida, con P1 activo.
+        val a1 = DatosDiarios.comidasDelDia(d, p1, listOf(p1 to "2030-10-13T10:00:00.000Z"), inter1, regs, false)!!
+        assertEquals("2030-10-16;desayuno;08:00;pollo;indicado;si;si;2;2030-10-16T12:00:00.000Z", lineas(a1.texto)[1])
+        val est = DatosDiarios.EstadoDia(1, mapOf("comidas" to DatosDiarios.Subido(1, DatosDiarios.nombre("comidas", "hector", d, 1), a1.sha256, a1.filas)), false)
+        // Se importa P2: el día sigue usando P1 (guardado) y sus intercambios, así que no cambia y no hay -v2.
+        val guardados = listOf(p1 to "2030-10-13T10:00:00.000Z", p2 to "2030-10-20T10:00:00.000Z")
+        val a2 = DatosDiarios.comidasDelDia(d, p2, guardados, inter1, regs, true)!!
+        assertEquals(a1.texto, a2.texto)
+        assertTrue(DatosDiarios.cambios(listOf(a2), est).isEmpty())
+        // Un intercambio en P2 reemplaza los de P1: el día ya subido no se recalcula (queda vigente lo subido).
+        assertNull(DatosDiarios.comidasDelDia(d, p2, guardados, json("""{"programa_id":"p2","cambios":{}}"""), regs, true))
+        assertEquals(0, DatosDiarios.porSubir(listOf(d), { dd -> DatosDiarios.locales(emptyList(), emptyList(), { null }, dd) },
+            { DatosDiarios.EstadoDia(1, mapOf("fuerza" to DatosDiarios.Subido(1, "f", DatosDiarios.fuerza(emptyList(), d).sha256, 0),
+                "cintura" to DatosDiarios.Subido(1, "c", DatosDiarios.cintura(emptyList(), d).sha256, 0)), false) }))
+        // Ningún programa guardado cubre el día: ya subido, no se recalcula; sin subir, van las 5 filas sin hora ni preparación.
+        assertNull(DatosDiarios.comidasDelDia(d, p2, listOf(p2 to "2030-10-20T10:00:00.000Z"), null, regs, true))
+        assertEquals("2030-10-16;desayuno;;;indicado;si;no;2;2030-10-16T12:00:00.000Z",
+            lineas(DatosDiarios.comidasDelDia(d, p2, listOf(p2 to "2030-10-20T10:00:00.000Z"), null, regs, false)!!.texto)[1])
     }
 
     private fun archivos(fuerza: List<JsonObject> = emptyList()) = listOf(DatosDiarios.fuerza(fuerza, d), DatosDiarios.hcDiario(d, emptyList(), emptyList(), emptyList()),
@@ -114,7 +150,7 @@ class DatosDiariosTest {
         assertTrue(DatosDiarios.cambios(a, null).all { it.second == 1 })
         val e = subido(a)
         assertFalse(DatosDiarios.hayQueSubir(a, e))                          // nada cambió: no se sube nada
-        val b = archivos(listOf(sesion("2026-10-14", "B", 1)))              // una sesión cargada al día siguiente
+        val b = archivos(listOf(sesion("2030-10-16", "B", 1)))              // una sesión cargada al día siguiente
         val c = DatosDiarios.cambios(b, e)
         assertEquals(listOf("fuerza" to 2), c.map { it.first.tipo to it.second })
         assertTrue(DatosDiarios.hayQueSubir(a, e.copy(manifestPendiente = true)))   // se cortó antes del manifest
@@ -129,20 +165,20 @@ class DatosDiariosTest {
     }
 
     @Test fun manifestConFilasYSha256() {
-        val a = archivos(listOf(sesion("2026-10-14", "B", 2)))
+        val a = archivos(listOf(sesion("2030-10-16", "B", 2)))
         val e = subido(a)
-        val gen = ZonedDateTime.of(2026, 10, 15, 13, 40, 0, 0, z)
+        val gen = ZonedDateTime.of(2030, 10, 17, 13, 40, 0, 0, z)
         val m = json(DatosDiarios.manifest("hector", d, 1, gen, "0.14.0", 25, "manual", e.tipos, emptyList(),
             DatosDiarios.LecturaHc(gen, false, listOf("fc_reposo")), null))
         assertEquals("datos-diarios-manifest", (m["formato"] as JsonPrimitive).content)
         assertEquals("1.0", (m["version_formato"] as JsonPrimitive).content)
-        assertEquals("2026-10-14", (m["fecha"] as JsonPrimitive).content)
+        assertEquals("2030-10-16", (m["fecha"] as JsonPrimitive).content)
         assertEquals("America/Santiago", (m["zona_horaria"] as JsonPrimitive).content)
-        assertEquals("2026-10-15T13:40:00-03:00", (m["generado_en"] as JsonPrimitive).content)
+        assertEquals("2030-10-17T13:40:00-03:00", (m["generado_en"] as JsonPrimitive).content)
         val vig = (m["vigentes"] as JsonArray).map { it as JsonObject }
         assertEquals(DatosDiarios.TIPOS, vig.map { (it["tipo"] as JsonPrimitive).content })
         val fz = vig[0]
-        assertEquals("fuerza-hector-2026-10-14.csv", (fz["nombre"] as JsonPrimitive).content)
+        assertEquals("fuerza-hector-2030-10-16.csv", (fz["nombre"] as JsonPrimitive).content)
         assertEquals("2", (fz["filas"] as JsonPrimitive).content)
         assertEquals(JsJson.sha256(a[0].texto), (fz["sha256"] as JsonPrimitive).content)
         assertEquals("5", (vig[4]["filas"] as JsonPrimitive).content)
@@ -160,7 +196,7 @@ class DatosDiariosTest {
 
     @Test fun cadaTipoEstaEnVigentesOEnFaltantes() {
         val e = subido(archivos())
-        val gen = ZonedDateTime.of(2026, 10, 15, 13, 40, 0, 0, z)
+        val gen = ZonedDateTime.of(2030, 10, 17, 13, 40, 0, 0, z)
         fun tipos(m: JsonObject, k: String) = (m[k] as JsonArray).map { ((it as JsonObject)["tipo"] as JsonPrimitive).content }
         // hc-actividades nunca se exportó y no vino como faltante: igual queda en faltantes y el manifest no está completo.
         val m = json(DatosDiarios.manifest("hector", d, 1, gen, "0.14.0", 25, "manual", e.tipos - "hc-actividades", emptyList(),
@@ -175,31 +211,31 @@ class DatosDiariosTest {
     }
 
     @Test fun numeracionSigueDesdeDrive() {
-        val n = listOf("fuerza-hector-2026-10-14.csv", "fuerza-hector-2026-10-14-v3.csv", "comidas-hector-2026-10-14.csv",
-            "manifest-hector-2026-10-14-v2.json", "manifest-hector-2026-10-14.json", "fuerza-otra-2026-10-14-v9.csv", "fuerza-hector-2026-10-13-v7.csv", "nota.txt")
+        val n = listOf("fuerza-hector-2030-10-16.csv", "fuerza-hector-2030-10-16-v3.csv", "comidas-hector-2030-10-16.csv",
+            "manifest-hector-2030-10-16-v2.json", "manifest-hector-2030-10-16.json", "fuerza-otra-2030-10-16-v9.csv", "fuerza-hector-2030-10-15-v7.csv", "nota.txt")
         assertEquals(mapOf("fuerza" to 3, "comidas" to 1, "manifest" to 2), DatosDiarios.versionesEnDrive(n, "hector", d))
         assertEquals(emptyMap<String, Int>(), DatosDiarios.versionesEnDrive(emptyList(), "hector", d))
         // hc-diario no se confunde con hc-actividades ni con fuerza.
-        assertEquals(mapOf("hc-diario" to 2), DatosDiarios.versionesEnDrive(listOf("hc-hector-diario-2026-10-14-v2.csv"), "hector", d))
+        assertEquals(mapOf("hc-diario" to 2), DatosDiarios.versionesEnDrive(listOf("hc-hector-diario-2030-10-16-v2.csv"), "hector", d))
     }
 
     @Test fun reporteDeApoyoEnElManifest() {
-        val r = json("""{"fecha":"2026-10-14","version":2,"tardio":false,"enviado":{"version":2,"id":"x","en":"2026-10-14T23:00:00.000Z"}}""")
+        val r = json("""{"fecha":"2030-10-16","version":2,"tardio":false,"enviado":{"version":2,"id":"x","en":"2030-10-16T23:00:00.000Z"}}""")
         val o = DatosDiarios.reporteApoyo(r)
         assertEquals("guardado", (o["estado"] as JsonPrimitive).content)
         assertEquals("2", (o["version"] as JsonPrimitive).content)
         assertEquals("true", (o["enviado_drive"] as JsonPrimitive).content)
-        val sinEnviar = DatosDiarios.reporteApoyo(json("""{"fecha":"2026-10-14","version":3,"tardio":true,"enviado":{"version":2}}"""))
+        val sinEnviar = DatosDiarios.reporteApoyo(json("""{"fecha":"2030-10-16","version":3,"tardio":true,"enviado":{"version":2}}"""))
         assertEquals("false", (sinEnviar["enviado_drive"] as JsonPrimitive).content)
         assertEquals("true", (sinEnviar["tardio"] as JsonPrimitive).content)
     }
 
     @Test fun diaSinCerrarNoSeSube() {
-        val antes = ZonedDateTime.of(2026, 10, 15, 11, 59, 0, 0, z)
-        assertEquals((8..13).map { LocalDate.of(2026, 10, it) }, DatosDiarios.ventana(antes))
+        val antes = ZonedDateTime.of(2030, 10, 17, 11, 59, 0, 0, z)
+        assertEquals((10..15).map { LocalDate.of(2030, 10, it) }, DatosDiarios.ventana(antes))
         assertTrue(DatosDiarios.ayerAbierto(antes))
-        val despues = ZonedDateTime.of(2026, 10, 15, 12, 0, 0, 0, z)
-        assertEquals((8..14).map { LocalDate.of(2026, 10, it) }, DatosDiarios.ventana(despues))
+        val despues = ZonedDateTime.of(2030, 10, 17, 12, 0, 0, 0, z)
+        assertEquals((10..16).map { LocalDate.of(2030, 10, it) }, DatosDiarios.ventana(despues))
         assertFalse(DatosDiarios.ayerAbierto(despues))
     }
 
@@ -232,7 +268,7 @@ class DatosDiariosTest {
     }
 
     @Test fun diasPorSubir() {
-        val dias = listOf(LocalDate.parse("2026-10-13"), d)
+        val dias = listOf(LocalDate.parse("2030-10-15"), d)
         val a = archivos()
         val locales: (LocalDate) -> List<DatosDiarios.Archivo> = { listOf(a[0], a[3], a[4]) }
         assertEquals(2, DatosDiarios.porSubir(dias, locales) { null })
@@ -241,8 +277,8 @@ class DatosDiariosTest {
     }
 
     @Test fun carpetaDelDiaDentroDeDatosDiarios() {
-        assertEquals("name='2026-10-14' and mimeType='application/vnd.google-apps.folder' and trashed=false and 'abc123' in parents",
-            DriveTexto.consultaCarpetaEn("2026-10-14", "abc123"))
+        assertEquals("name='2030-10-16' and mimeType='application/vnd.google-apps.folder' and trashed=false and 'abc123' in parents",
+            DriveTexto.consultaCarpetaEn("2030-10-16", "abc123"))
         assertEquals(DriveTexto.consultaCarpeta("datos-diarios"), DriveTexto.consultaCarpetaEn("datos-diarios", null))
     }
 }

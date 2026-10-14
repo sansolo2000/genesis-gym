@@ -44,8 +44,15 @@ class Dd(private val c: Context, private val base: BaseLocal, private val hc: Hc
 
     private fun sesiones() = base.coleccion("sesiones").map { it.data }
     private fun cinturas() = base.coleccion(Cintura.COLECCION).mapNotNull { Cintura.desdeJson(it.data) }
-    private fun comidas() = EstadoComidas(base.get("alimentacion/programa_activo")?.get("programa") as? kotlinx.serialization.json.JsonObject,
-        base.get("alimentacion/intercambios"), base.coleccion("comidas"))
+    /** D-09: cada día con el programa que lo cubre (el activo o uno guardado en programas_alimentacion). */
+    private fun comidas(): (LocalDate) -> DatosDiarios.Archivo? {
+        fun prog(o: kotlinx.serialization.json.JsonObject?) = o?.get("programa") as? kotlinx.serialization.json.JsonObject
+        val activo = prog(base.get("alimentacion/programa_activo"))
+        val guardados = base.coleccion("programas_alimentacion").mapNotNull { d ->
+            prog(d.data)?.let { it to ((d.data["importado_en"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: "") } }
+        val inter = base.get("alimentacion/intercambios"); val regs = base.coleccion("comidas")
+        return { d -> DatosDiarios.comidasDelDia(d, activo, guardados, inter, regs, previo(d)?.tipos?.containsKey("comidas") == true) }
+    }
 
     /** Cuenta los días por subir sin leer Health Connect (eso se hace al tocar "Subir ahora"). */
     fun revisar() {
