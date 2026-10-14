@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -55,5 +56,15 @@ class ImagenesExtraTest {
         assertTrue(t(pecho, "credito").contains("CC BY-SA 4.0") && t(pecho, "credito").contains("Cancer Research UK"))
         assertEquals("https://creativecommons.org/licenses/by-sa/4.0/", t(pecho, "url_licencia"))
         assertTrue(t(o("estiramiento-espalda-alta-brazos-adelante"), "credito").contains("dominio público"))
+    }
+
+    @Test fun laFichaEnlazaLaLicenciaSoloSiEsUnaDireccionWeb() {
+        assertEquals("https://creativecommons.org/licenses/by-sa/4.0/", Imagenes.enlaceLicencia(o("estiramiento-pecho-codos-atras")))
+        assertNull(Imagenes.enlaceLicencia(o("estiramiento-espalda-alta-brazos-adelante")))   // dominio público: sin url_licencia
+        fun con(v: String) = JsonObject(mapOf("url_licencia" to JsonPrimitive(v)))
+        assertEquals("http://ejemplo.org/l", Imagenes.enlaceLicencia(con(" http://ejemplo.org/l ")))
+        assertNull(Imagenes.enlaceLicencia(con("")))
+        assertNull(Imagenes.enlaceLicencia(con("javascript:alert(1)")))
+        assertNull(Imagenes.enlaceLicencia(JsonObject(mapOf("url_licencia" to JsonPrimitive(4)))))
     }
 }
