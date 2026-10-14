@@ -121,7 +121,8 @@ object DatosDiarios {
                       registros: List<Respaldo.Doc>, yaSubido: Boolean): Archivo? {
         val p = programaDe(d, activo, guardados)
         val id = (p?.get("programa") as? JsonObject)?.get("id")
-        val completo = p != null && (intercambios == null || intercambios["programa_id"] == id)
+        // D-10: con el programa activo se recalcula siempre (EstadoComidas ya ignora intercambios de otro programa).
+        val completo = p != null && (p === activo || intercambios == null || intercambios["programa_id"] == id)
         if (!completo && yaSubido) return null
         return comidas(EstadoComidas(p, intercambios, registros), d)
     }

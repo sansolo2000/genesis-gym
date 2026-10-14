@@ -140,6 +140,20 @@ class DatosDiariosTest {
             lineas(DatosDiarios.comidasDelDia(d, p2, listOf(p2 to "2030-10-20T10:00:00.000Z"), null, regs, false)!!.texto)[1])
     }
 
+    @Test fun programaNuevoSinIntercambiosResubeUnaMarcaTardia() {   // D-10 (QA)
+        val p1 = prog("p1", "2030-10-07", "2030-10-13", "2030-10-09"); val p2 = prog("p2", "2030-10-14", "2030-10-20", "2030-10-16")
+        val inter1 = json("""{"programa_id":"p1","cambios":{}}""")   // de un intercambio hecho en P1: sigue guardado tras importar P2
+        val guardados = listOf(p1 to "2030-10-06T10:00:00.000Z", p2 to "2030-10-13T10:00:00.000Z")
+        val antes = listOf(reg("desayuno", """"estado":"indicado","version":1,"actualizado":"2030-10-16T11:05:00.000Z""""))
+        val a1 = DatosDiarios.comidasDelDia(d, p2, guardados, inter1, antes, false)!!
+        val est = DatosDiarios.EstadoDia(1, mapOf("comidas" to DatosDiarios.Subido(1, DatosDiarios.nombre("comidas", "hector", d, 1), a1.sha256, a1.filas)), false)
+        // Marca tardía del almuerzo de ese día, después de la 1.ª subida.
+        val despues = antes + reg("almuerzo", """"estado":"otro","version":1,"actualizado":"2030-10-17T13:00:00.000Z"""")
+        val a2 = DatosDiarios.comidasDelDia(d, p2, guardados, inter1, despues, true)!!
+        assertEquals("2030-10-16;almuerzo;13:30;pollo;otro;si;no;1;2030-10-17T13:00:00.000Z", lineas(a2.texto)[3])
+        assertEquals(listOf("comidas" to 2), DatosDiarios.cambios(listOf(a2), est).map { it.first.tipo to it.second })
+    }
+
     private fun archivos(fuerza: List<JsonObject> = emptyList()) = listOf(DatosDiarios.fuerza(fuerza, d), DatosDiarios.hcDiario(d, emptyList(), emptyList(), emptyList()),
         DatosDiarios.hcActividades(d, emptyList()), DatosDiarios.cintura(emptyList(), d), DatosDiarios.comidas(EstadoComidas(null), d))
     private fun subido(a: List<DatosDiarios.Archivo>, v: Int = 1) = DatosDiarios.EstadoDia(1, a.associate { it.tipo to DatosDiarios.Subido(v, DatosDiarios.nombre(it.tipo, "hector", d, v), it.sha256, it.filas) }, false)
