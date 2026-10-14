@@ -107,9 +107,10 @@ class GimnasioTest {
         val ef = """{"tipo":"efectiva","modo":"rango","carga_real_kg":null,"reps_reales":null,"seg_reales":null}"""
         val efHecha = """{"tipo":"efectiva","modo":"rango","carga_real_kg":20,"reps_reales":12,"seg_reales":null}"""
         val estir = """{"tipo":"efectiva","modo":"tiempo","carga_real_kg":null,"reps_reales":null,"seg_reales":null}"""
-        assertEquals("cal", Gimnasio.bloqueDe(ej(cal)))
-        assertEquals("fuerza", Gimnasio.bloqueDe(ej(cal.replace("tiempo", "reps"), ef)))
-        assertEquals("elong", Gimnasio.bloqueDe(ej(estir, estir)))
+        // M-09: bloques por posición (tiempo antes del primero por repeticiones = cal; tiempo después del último = elong).
+        assertEquals(listOf("cal", "fuerza", "elong"), Gimnasio.bloques(listOf(ej(cal), ej(cal.replace("tiempo", "reps"), ef), ej(estir, estir))))
+        assertEquals(listOf("fuerza", "fuerza"), Gimnasio.bloques(listOf(ej(cal), ej(estir))))   // solo por tiempo: todo fuerza
+        assertEquals(listOf("fuerza"), Gimnasio.bloques(listOf(ej(cal.replace("tiempo", "reps")))))   // calentamiento por reps: fuerza
         val b = Json.parseToJsonElement("""{"ejercicios":[{"series":[$efHecha]},{"series":[$efHecha,$ef]}]}""").jsonObject
         assertEquals(1, Gimnasio.primerPendiente(b))
         assertTrue(Gimnasio.ejercicioListo(b.arr("ejercicios")[0]))
