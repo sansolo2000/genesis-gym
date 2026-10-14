@@ -35,13 +35,13 @@ class SaludCsvTest {
     @Test fun diario_siete_filas_y_vacio_si_falta() {
         val fc = listOf(SaludCsv.Fc(t("2026-10-18", 8), 58, g), SaludCsv.Fc(t("2026-10-18", 20), 57, g))
         val su = listOf(SaludCsv.Sueno(t("2026-10-17", 23), t("2026-10-18", 6), emptyList(), g))
-        val pe = listOf(SaludCsv.Peso(t("2026-10-21", 6, 30), 78.45, "com.moving.movinglife"), SaludCsv.Peso(t("2026-10-21", 21), 79.1, "com.moving.movinglife"))
+        val pe = listOf(SaludCsv.Peso(t("2026-10-21", 6, 30), 55.45, "com.moving.movinglife"), SaludCsv.Peso(t("2026-10-21", 21), 56.1, "com.moving.movinglife"))
         val f = SaludCsv.diario(sab, fc, su, pe, z)
         assertEquals(7, f.size)
         assertEquals(57L, f[1].fc)                       // el último del día
         assertEquals(420L, f[1].noche?.total)            // asignado al día en que despierta
         assertEquals("Garmin Connect", f[1].origen)
-        assertEquals(78.45, f[4].peso!!.kg, 0.0)         // el primero del día (en ayunas)
+        assertEquals(55.45, f[4].peso!!.kg, 0.0)         // el primero del día (en ayunas)
         assertNull(f[0].fc); assertNull(f[0].noche)
         val csv = SaludCsv.csvDiario(f, z)
         assertTrue(csv.startsWith("﻿fecha;fc_reposo_lpm;"))
@@ -49,7 +49,7 @@ class SaludCsvTest {
         assertEquals(9, lineas.size)                     // cabecera + 7 + final vacío
         assertEquals("2026-10-17;;;;;;;;;", lineas[1])
         assertEquals("2026-10-18;57;420;;;;;;;Garmin Connect", lineas[2])
-        assertEquals("2026-10-21;;;;;;;78,45;06:30;movinglife", lineas[5])
+        assertEquals("2026-10-21;;;;;;;55,45;06:30;movinglife", lineas[5])
     }
 
     @Test fun actividades_solo_de_la_semana() {
