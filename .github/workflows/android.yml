@@ -1,8 +1,11 @@
 # Génesis Gym N (app nativa de Android) — compilación en la nube.
 # Lo mantiene Desarrollador 3. Solo mira la carpeta android/: la 2.0 (PWA de la raíz) y GitHub Pages no se tocan.
 #
-# - Cada cambio en android/: corre las pruebas y compila. Si existen los secretos de firma, genera el APK firmado
+# - Cada cambio en android/ en main: corre las pruebas y compila. Si existen los secretos de firma, genera el APK firmado
 #   y lo deja como archivo de la ejecución (no se publica).
+# - A-07 (Coordinador, 14-oct): un push a una rama android/** corre las pruebas y una compilación SIN firmar.
+#   En las ramas no se lee ningún secreto, no se firma y no se crea Release ni etiqueta: eso solo pasa en main.
+#   Así ningún código llega a main sin un run en verde.
 # - Un commit cuyo mensaje empieza con "publicar android-v<versión>" (lo hace Desarrollador 3 solo con aprobación
 #   de Héctor): además publica el APK como Release de GitHub y crea la etiqueta android-v<versión>.
 #   (Esta sesión no puede subir etiquetas directamente: la política de red las rechaza.)
@@ -14,7 +17,7 @@ name: Android (Génesis Gym N)
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'android/**']
     paths: ['android/**', '.github/workflows/android.yml']
   workflow_dispatch:
 
@@ -49,8 +52,10 @@ jobs:
           set -o pipefail
           ./gradlew --no-daemon testDebugUnitTest 2>&1 | tee -a gradle.log
 
+      # A-07: solo en main se mira si hay llave. En una rama este paso no corre, "hay" queda vacío y se compila sin firmar.
       - name: ¿Hay llave de firma?
         id: llave
+        if: github.ref == 'refs/heads/main'
         env:
           B64: ${{ secrets.GG_KEYSTORE_BASE64 }}
         run: |
@@ -60,13 +65,13 @@ jobs:
           fi
 
       - name: Compilar (sin firma, solo para comprobar)
-        if: steps.llave.outputs.hay == 'no'
+        if: steps.llave.outputs.hay != 'si'
         run: |
           set -o pipefail
           ./gradlew --no-daemon assembleDebug 2>&1 | tee -a gradle.log
 
       - name: Compilar APK firmado
-        if: steps.llave.outputs.hay == 'si'
+        if: github.ref == 'refs/heads/main' && steps.llave.outputs.hay == 'si'
         env:
           B64: ${{ secrets.GG_KEYSTORE_BASE64 }}
           GG_KEYSTORE_PASSWORD: ${{ secrets.GG_KEYSTORE_PASSWORD }}
@@ -108,7 +113,7 @@ jobs:
           done
 
       - name: Guardar APK de la ejecución
-        if: steps.llave.outputs.hay == 'si'
+        if: github.ref == 'refs/heads/main' && steps.llave.outputs.hay == 'si'
         uses: actions/upload-artifact@v4
         with:
           name: genesis-gym-n-${{ env.VERSION }}
@@ -116,7 +121,7 @@ jobs:
           retention-days: 30
 
       - name: Publicar Release (solo si el commit dice "publicar android-v<versión>")
-        if: steps.llave.outputs.hay == 'si' && github.event_name == 'push' && startsWith(github.event.head_commit.message, 'publicar android-v')
+        if: github.ref == 'refs/heads/main' && steps.llave.outputs.hay == 'si' && github.event_name == 'push' && startsWith(github.event.head_commit.message, 'publicar android-v')
         env:
           GH_TOKEN: ${{ github.token }}
           MENSAJE: ${{ github.event.head_commit.message }}
