@@ -71,10 +71,14 @@ class RecordatoriosTest {
         val cfg = Recordatorios.Config(tareas = true, reporte = true, horaReporte = "21:00")
         val r = Recordatorios.calcular(cfg, EstadoComidas(programa()), sesiones, emptySet(), ahora)
         assertEquals(8, r.size)   // 7 reportes + 1 tarea
+        // M-10: una notificación por tipo; la tarea y el reporte de las 21:00 van por separado.
         val avisos = Recordatorios.juntar(r)
-        assertEquals(7, avisos.size)
-        assertEquals("2 avisos · 21:00", avisos[0].titulo)
-        assertEquals("comidas", avisos[0].vista)
+        assertEquals(8, avisos.size)
+        val a21 = avisos.filter { it.cuando == avisos[0].cuando }
+        assertEquals(setOf(Recordatorios.TAREA, Recordatorios.REPORTE), a21.map { it.tipo }.toSet())
+        assertEquals("comidas", a21.single { it.tipo == Recordatorios.TAREA }.vista)
+        assertEquals("reporte", a21.single { it.tipo == Recordatorios.REPORTE }.vista)
+        assertEquals(listOf(avisos[0].cuando.toLocalDate().toString()), a21.single { it.tipo == Recordatorios.REPORTE }.claves)
     }
 
     @Test fun horas_validas() {

@@ -22,11 +22,14 @@ object Recordatorios {
         val entrenamiento: Boolean = false,
         val horaEntrenamiento: String = "",
         val reporte: Boolean = false,
-        val horaReporte: String = "21:00"
+        val horaReporte: String = "21:00",
+        /** M-10: aviso de fin de descanso y de series por tiempo (antes siempre sonaba). */
+        val descanso: Boolean = true
     )
 
     // ---------- M-04 (12-oct): Avisos y sonido dentro del respaldo (documento config/avisos) ----------
-    data class Respaldados(val config: Config, val sonido: String?, val alarma: Boolean, val volumen: Int)
+    /** M-10: [tipos] trae la configuración de cada tipo de alerta; vacío en un respaldo anterior (se usa el sonido único de antes). */
+    data class Respaldados(val config: Config, val sonido: String?, val alarma: Boolean, val volumen: Int, val tipos: Map<String, Alertas.Tipo> = emptyMap())
 
     fun avisosAJson(r: Respaldados): JsonObject = kotlinx.serialization.json.buildJsonObject {
         put("comidas", JsonPrimitive(r.config.comidas)); put("minutos_antes", JsonPrimitive(r.config.minutosAntes))
@@ -35,6 +38,8 @@ object Recordatorios {
         put("hora_reporte", JsonPrimitive(r.config.horaReporte))
         put("sonido", r.sonido?.let { JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull)
         put("sonido_alarma", JsonPrimitive(r.alarma)); put("volumen", JsonPrimitive(r.volumen))
+        put("descanso", JsonPrimitive(r.config.descanso))
+        if (r.tipos.isNotEmpty()) put("tipos", Alertas.aJson(r.tipos))
     }
 
     /** Lee config/avisos; si falta un campo o viene mal, usa el valor por defecto de Avisos. */
@@ -43,10 +48,12 @@ object Recordatorios {
         fun i(k: String, d: Int) = (o[k] as? JsonPrimitive)?.takeIf { !it.isString }?.content?.toDoubleOrNull()?.toInt() ?: d
         fun s(k: String) = (o[k] as? JsonPrimitive)?.takeIf { it.isString }?.content
         val d = Config()
+        val sonido = s("sonido"); val alarma = b("sonido_alarma", false); val volumen = i("volumen", 70).coerceIn(0, 100)
         return Respaldados(
             Config(b("comidas", d.comidas), i("minutos_antes", d.minutosAntes).coerceIn(0, 120), b("tareas", d.tareas), b("entrenamiento", d.entrenamiento),
-                s("hora_entrenamiento") ?: d.horaEntrenamiento, b("reporte", d.reporte), s("hora_reporte")?.takeIf { horaValida(it) } ?: d.horaReporte),
-            s("sonido"), b("sonido_alarma", false), i("volumen", 70).coerceIn(0, 100)
+                s("hora_entrenamiento") ?: d.horaEntrenamiento, b("reporte", d.reporte), s("hora_reporte")?.takeIf { horaValida(it) } ?: d.horaReporte,
+                b("descanso", d.descanso)),
+            sonido, alarma, volumen, Alertas.desdeJson(o["tipos"] as? JsonObject, Alertas.inicial(sonido, volumen, alarma))
         )
     }
 
@@ -58,10 +65,11 @@ object Recordatorios {
     fun horaReporteAAplicar(nueva: String?, anterior: String?): String? =
         nueva?.takeIf { horaValida(it) && it != anterior }
 
-    data class Recordatorio(val cuando: ZonedDateTime, val categoria: String, val titulo: String, val texto: String, val vista: String)
+    /** [clave]: lo que hace que el aviso ya no haga falta (M-10, al posponer): comida "AAAA-MM-DD_tipo"; entrenamiento y reporte "AAAA-MM-DD". */
+    data class Recordatorio(val cuando: ZonedDateTime, val categoria: String, val titulo: String, val texto: String, val vista: String, val clave: String = "")
 
-    /** Un aviso del celular: los recordatorios del mismo minuto se juntan en una sola notificación. */
-    data class Aviso(val cuando: ZonedDateTime, val titulo: String, val texto: String, val vista: String)
+    /** Un aviso del celular: los recordatorios del mismo minuto y del mismo tipo se juntan en una sola notificación (M-10: uno por tipo). */
+    data class Aviso(val cuando: ZonedDateTime, val titulo: String, val texto: String, val vista: String, val tipo: String = "", val claves: List<String> = emptyList())
 
     const val COMIDA = "comida"; const val TAREA = "tarea"; const val ENTRENAMIENTO = "entrenamiento"; const val REPORTE = "reporte"
     const val TEXTO_REPORTE = "Un minuto para tu reporte y cierras el día."
@@ -94,7 +102,7 @@ object Recordatorios {
                 val pr = comidas.preparaciones()[(c["preparacion"] as? JsonPrimitive)?.content ?: ""] as? JsonObject
                 val nombre = (pr?.get("nombre") as? JsonPrimitive)?.content ?: (c["preparacion"] as? JsonPrimitive)?.content ?: ""
                 val cons = (c["conservacion"] as? JsonPrimitive)?.takeIf { it.isString && it.content.isNotEmpty() }?.content
-                lista.add(Recordatorio(cuando, COMIDA, "${Comidas.ETQ[t]} · $h", nombre + (cons?.let { " · desde el $it" } ?: ""), "comidas"))
+                lista.add(Recordatorio(cuando, COMIDA, "${Comidas.ETQ[t]} · $h", nombre + (cons?.let { " · desde el $it" } ?: ""), "comidas", Comidas.clave(f, t)))
             }
             if (cfg.tareas && dia != null) for (t in (dia["tareas"] as? JsonArray) ?: emptyList()) {
                 t as? JsonObject ?: continue
@@ -111,18 +119,20 @@ object Recordatorios {
                 fun hechaEnLaSemana(id: String) = registradas.any { it.length > 11 && it.substring(0, 10) in lunes..f && it.substring(11) == id }
                 if (cuando != null && !yaEntreno) for ((ds, id, nombre) in sesionesRutina)
                     if (ds == Gimnasio.diaDe(f) && !hechaEnLaSemana(id))
-                        lista.add(Recordatorio(cuando, ENTRENAMIENTO, "Entrenamiento · ${cfg.horaEntrenamiento.trim()}", nombre, "hoy"))
+                        lista.add(Recordatorio(cuando, ENTRENAMIENTO, "Entrenamiento · ${cfg.horaEntrenamiento.trim()}", nombre, "hoy", f))
             }
             // Módulo Apoyo (contrato v2 §3.6): no avisa si el reporte de ese día ya está guardado; el texto viene del programa.
-            if (cfg.reporte && f !in reportados) en(cfg.horaReporte)?.let { lista.add(Recordatorio(it, REPORTE, "Reporte del día · ${cfg.horaReporte.trim()}", textoReporte, "reporte")) }
+            if (cfg.reporte && f !in reportados) en(cfg.horaReporte)?.let { lista.add(Recordatorio(it, REPORTE, "Reporte del día · ${cfg.horaReporte.trim()}", textoReporte, "reporte", f)) }
         }
         return lista.filter { it.cuando.isAfter(ahora) }.sortedBy { it.cuando.toInstant() }
     }
 
-    fun juntar(lista: List<Recordatorio>): List<Aviso> = lista.groupBy { it.cuando.toInstant() }.values.map { g ->
-        if (g.size == 1) Aviso(g[0].cuando, g[0].titulo, g[0].texto, g[0].vista)
+    /** M-10: se juntan solo los del mismo minuto y del mismo tipo; dos tipos a la misma hora son dos notificaciones. */
+    fun juntar(lista: List<Recordatorio>): List<Aviso> = lista.groupBy { it.cuando.toInstant() to it.categoria }.values.map { g ->
+        val claves = g.map { it.clave }.filter { it.isNotEmpty() }
+        if (g.size == 1) Aviso(g[0].cuando, g[0].titulo, g[0].texto, g[0].vista, g[0].categoria, claves)
         else Aviso(g[0].cuando, "${g.size} avisos · ${g[0].cuando.format(DateTimeFormatter.ofPattern("HH:mm"))}",
-            g.joinToString("\n") { "${it.titulo}: ${it.texto}" }, if (g.any { it.vista == "comidas" }) "comidas" else if (g.any { it.vista == "reporte" }) "reporte" else "hoy")
+            g.joinToString("\n") { "${it.titulo}: ${it.texto}" }, g[0].vista, g[0].categoria, claves)
     }
 
     private val formato = DateTimeFormatter.ofPattern("EEE d HH:mm", java.util.Locale.forLanguageTag("es-CL"))

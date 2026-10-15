@@ -10,6 +10,11 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <!-- Para volver a programar los avisos al encender el celular. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- M-10: la alerta suena hasta Detener o Posponer (servicio en primer plano, máximo 2 min) y vibra según cada tipo.
+         Son permisos normales: Android los da al instalar, sin preguntar. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <!-- E2: Health Connect, SOLO LECTURA y solo estos 4 tipos. Héctor elige cuáles concede. -->
     <uses-permission android:name="android.permission.health.READ_WEIGHT" />
@@ -64,6 +69,9 @@
         <receiver android:name=".AlarmaReceiver" android:exported="false" />
         <!-- E5: avisos reales (comidas, tareas, entrenamiento y reporte) -->
         <receiver android:name=".RecordatorioReceiver" android:exported="false" />
+        <!-- M-10: alerta que suena hasta Detener o Posponer, y los botones de su notificación -->
+        <service android:name=".AlertaServicio" android:exported="false" android:foregroundServiceType="mediaPlayback" />
+        <receiver android:name=".AccionAlerta" android:exported="false" />
         <!-- E5: carpeta temporal para la foto de la cámara -->
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -15,6 +15,14 @@ class AvisosRespaldoTest {
         assertEquals(r, Recordatorios.avisosDesdeJson(Recordatorios.avisosAJson(r)))
     }
 
+    @Test fun idaYVueltaConLosTiposDeAlerta() {   // M-10
+        val tipos = mapOf(
+            Recordatorios.COMIDA to Alertas.Tipo("content://media/internal/audio/media/7", 60, true, true, 5),
+            Alertas.DESCANSO to Alertas.Tipo(null, 100, false, false, 10))
+        val r = Recordatorios.Respaldados(Recordatorios.Config(comidas = true, descanso = false), null, false, 70, tipos)
+        assertEquals(r, Recordatorios.avisosDesdeJson(Recordatorios.avisosAJson(r)))
+    }
+
     @Test fun sinSonidoElegidoQuedaNulo() {
         val r = Recordatorios.Respaldados(Recordatorios.Config(), null, false, 70)
         assertEquals(r, Recordatorios.avisosDesdeJson(Recordatorios.avisosAJson(r)))
