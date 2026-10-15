@@ -109,6 +109,14 @@ class CronoTest {
         assertEquals(conSerie, Crono.reiniciar(conSerie, t("13:30:00")))
     }
 
+    @Test fun detenidoConCeroSeriesNoSeReinicia() {   // D-14 (QA, emulador): una vez detenido no se reabre
+        val terminado = Crono.terminar(Crono.iniciar(sesion, t("13:00:00")), t("13:05:00"))
+        assertFalse(Crono.corriendo(terminado))
+        assertFalse(Crono.puedeReiniciar(terminado))
+        assertEquals(terminado, Crono.reiniciar(terminado, t("13:10:00")))
+        assertEquals(listOf("10:00:00", "10:05:00", "manual"), Crono.campos(terminado).take(3))
+    }
+
     @Test fun cerrarLaSesionDetieneElCronometroComoManual() {   // O-26 (U-58)
         val b = paso(Crono.iniciar(sesion, t("13:00:00")), 0, 0, "13:10:00")
         val c = Gimnasio.cerrada(b, t("13:30:00"))

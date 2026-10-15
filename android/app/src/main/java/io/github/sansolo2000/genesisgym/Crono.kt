@@ -42,7 +42,8 @@ object Crono {
         if (iniciado(b)) b else b.con("crono", Apoyo.objeto("inicio" to JsonPrimitive(iso(ahora)), "fin" to JsonNull, "fin_tipo" to JsonNull, "ultima" to JsonObject(emptyMap())))
 
     /** Coordinador (14-oct): mientras no haya ninguna serie anotada, "Reiniciar cronómetro" vuelve a partir desde ahora. */
-    fun puedeReiniciar(b: JsonObject?): Boolean = b != null && iniciado(b) && Gimnasio.seriesRegistradas(b) == 0 && b.txt("estado") != "cerrada"
+    /** D-14 (QA, 14-oct): solo mientras el cronómetro corre; una vez detenido (Terminar o cierre) no se reabre. */
+    fun puedeReiniciar(b: JsonObject?): Boolean = b != null && corriendo(b) && Gimnasio.seriesRegistradas(b) == 0 && b.txt("estado") != "cerrada"
     fun reiniciar(b: JsonObject, ahora: Instant): JsonObject =
         if (!puedeReiniciar(b)) b else b.con("crono", Apoyo.objeto("inicio" to JsonPrimitive(iso(ahora)), "fin" to JsonNull, "fin_tipo" to JsonNull, "ultima" to JsonObject(emptyMap())))
 
