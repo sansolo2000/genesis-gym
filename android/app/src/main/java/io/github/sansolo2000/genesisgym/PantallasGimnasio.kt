@@ -87,6 +87,8 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
     val descansoDe: Pair<Int, Int>? get() = reloj.de
     /** M-01: temporizador de una serie por tiempo; suena en 0 aunque se salga de la app. El ✓ lo marca Héctor. */
     var alSerie: (Long?, String) -> Unit = { _, _ -> }
+    /** O-33 (M-10): abrir la sesión calla la alerta de entrenamiento que esté sonando. */
+    var alAbrirSesion: () -> Unit = {}
     val relojSerie = RelojDescanso { f, t -> alSerie(f, t) }
     /** M-04: la actividad aplica Avisos y sonido del respaldo restaurado. */
     var alRestaurar: () -> Unit = {}
@@ -122,6 +124,7 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
         relojSerie.alAbrirSesion(claveSesion(), System.currentTimeMillis())
         idxEj = Gimnasio.primerPendiente(borrador!!).coerceAtLeast(0)
         vista = "sesion"
+        alAbrirSesion()
     }
 
     fun guardar(nuevo: JsonObject) {

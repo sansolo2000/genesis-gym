@@ -40,6 +40,7 @@ object Programador {
     private const val CODIGO_POSPUESTO = 2600
     const val EXTRA_TITULO = "titulo"; const val EXTRA_TEXTO = "texto"; const val EXTRA_VISTA = "vista"
     const val EXTRA_TIPO = "tipo"; const val EXTRA_CLAVES = "claves"; const val EXTRA_POSPUESTO = "pospuesto"; const val EXTRA_ID = "id"
+    const val EXTRA_DETENER = "detener_alerta"
     const val DURACION_MS = 8000L
 
     private fun prefs(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -173,7 +174,8 @@ object Programador {
         val t = datos.getStringExtra(EXTRA_TIPO) ?: Recordatorios.COMIDA
         val titulo = datos.getStringExtra(EXTRA_TITULO) ?: "Génesis Gym N"; val texto = datos.getStringExtra(EXTRA_TEXTO) ?: ""
         val vista = datos.getStringExtra(EXTRA_VISTA) ?: "hoy"
-        val abrir = PendingIntent.getActivity(c, id, Intent(c, MainActivity::class.java).putExtra(EXTRA_VISTA, vista)
+        // O-33: tocar la notificación de una alerta que insiste abre la app y cuenta como Detener.
+        val abrir = PendingIntent.getActivity(c, id, Intent(c, MainActivity::class.java).putExtra(EXTRA_VISTA, vista).putExtra(EXTRA_DETENER, Alertas.tocarDetiene(t))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val publica = Notification.Builder(c, canal(t)).setSmallIcon(android.R.drawable.ic_popup_reminder).setContentTitle("Génesis Gym N").setContentText("Tienes un aviso").build()
@@ -257,8 +259,11 @@ object Programador {
     /** Al llegar un aviso pospuesto: ¿sigue haciendo falta? (la comida no se marcó, el entrenamiento o el reporte no se registró). */
     fun vigente(c: Context, t: String, claves: List<String>): Boolean {
         val base = BaseLocal(c)
-        return Alertas.vigente(t, claves,
+        val hechas = (base.get("alimentacion/tareas_hechas")?.get("hechas") as? kotlinx.serialization.json.JsonArray)
+            ?.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }?.toSet() ?: emptySet()
+        return Alertas.vigente(t, Alertas.activo(config(c), t), claves,
             comidaMarcada = { k -> base.get("comidas/$k")?.txt("estado")?.isNotEmpty() == true },
+            tareaHecha = { k -> k in hechas },
             entrenoRegistrado = { f -> Gimnasio.clavesRegistradas(base.coleccion("sesiones").map { it.data }).any { it.startsWith("${f}_") } },
             reporteGuardado = { f -> base.get("reportes_apoyo/$f") != null })
     }

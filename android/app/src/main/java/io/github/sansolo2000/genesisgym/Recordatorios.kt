@@ -104,11 +104,12 @@ object Recordatorios {
                 val cons = (c["conservacion"] as? JsonPrimitive)?.takeIf { it.isString && it.content.isNotEmpty() }?.content
                 lista.add(Recordatorio(cuando, COMIDA, "${Comidas.ETQ[t]} · $h", nombre + (cons?.let { " · desde el $it" } ?: ""), "comidas", Comidas.clave(f, t)))
             }
-            if (cfg.tareas && dia != null) for (t in (dia["tareas"] as? JsonArray) ?: emptyList()) {
-                t as? JsonObject ?: continue
-                val h = (t["hora"] as? JsonPrimitive)?.content ?: continue
-                val cuando = en(h) ?: continue
-                lista.add(Recordatorio(cuando, TAREA, "Tarea de cocina · $h", (t["texto"] as? JsonPrimitive)?.content ?: "", "comidas"))
+            if (cfg.tareas && dia != null) ((dia["tareas"] as? JsonArray) ?: emptyList()).forEachIndexed { i, t ->
+                t as? JsonObject ?: return@forEachIndexed
+                val h = (t["hora"] as? JsonPrimitive)?.content ?: return@forEachIndexed
+                val cuando = en(h) ?: return@forEachIndexed
+                // O-34: la clave es la misma que marca la tarea en Cocinar ("AAAA-MM-DD_HH:MM_n").
+                lista.add(Recordatorio(cuando, TAREA, "Tarea de cocina · $h", (t["texto"] as? JsonPrimitive)?.content ?: "", "comidas", "${f}_${h}_$i"))
             }
             if (cfg.entrenamiento) {
                 val cuando = en(cfg.horaEntrenamiento)

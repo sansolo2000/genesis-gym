@@ -24,6 +24,39 @@ class AlertaServicio : Service() {
             private set
 
         fun sonar(c: Context, datos: Intent, id: Int): Intent = Intent(datos).setClass(c, AlertaServicio::class.java).setAction(SONAR).putExtra(Programador.EXTRA_ID, id)
+
+        private fun canalesQueInsisten() = Alertas.TIPOS.filter { Alertas.insiste(it) }.map { Programador.canal(it) }.toSet()
+
+        /** "Detener" (o tocar la notificación, O-33): calla y quita todas las alertas, también las que quedaron después del tope. */
+        fun detenerTodas(c: Context) {
+            actual?.detenerTodo()
+            val nm = c.getSystemService(NotificationManager::class.java)
+            val canales = canalesQueInsisten()
+            for (n in nm.activeNotifications) if (n.notification.channelId in canales) nm.cancel(n.id)
+            Programador.detener(); Programador.dejarDeVibrar(c)
+        }
+
+        /** O-33: marcar la comida o la tarea, abrir la sesión o guardar el reporte calla la alerta de ese tipo. */
+        fun callarTipo(c: Context, tipo: String) {
+            actual?.quitarTipo(tipo)
+            val nm = c.getSystemService(NotificationManager::class.java)
+            for (n in nm.activeNotifications) if (n.notification.channelId == Programador.canal(tipo) && n.id != actual?.idEnPrimerPlano()) nm.cancel(n.id)
+        }
+    }
+
+    fun idEnPrimerPlano(): Int? = idPrimerPlano
+
+    /** Quita las alertas de un tipo. Si era la que sonaba, se calla y se cierra el servicio; si sonaba otra, sigue. */
+    fun quitarTipo(t: String) {
+        val nm = getSystemService(NotificationManager::class.java)
+        val ids = activas.filterValues { it == t }.keys.toList()
+        if (ids.isEmpty() && tipoSonando != t) return
+        for (id in ids) if (id != idPrimerPlano) { nm.cancel(id); activas.remove(id) }
+        if (tipoSonando == t) {
+            callar()
+            for (id in ids) activas.remove(id)
+            detenerServicio(quitarNotificacion = ids.contains(idPrimerPlano))
+        }
     }
 
     private val activas = LinkedHashMap<Int, String>()   // id de la notificación → tipo
@@ -108,11 +141,7 @@ class AccionAlerta : BroadcastReceiver() {
                 Programador.posponer(c, intent)
                 AlertaServicio.actual?.posponer(id) ?: nm.cancel(id)
             }
-            else -> {
-                // Al detener una se detienen todas: también las que quedaron después del tope, sin servicio.
-                AlertaServicio.actual?.detenerTodo()
-                for (n in nm.activeNotifications) if (Alertas.TIPOS.filter { Alertas.insiste(it) }.any { n.notification.channelId == Programador.canal(it) }) nm.cancel(n.id)
-            }
+            else -> AlertaServicio.detenerTodas(c)   // al detener una se detienen todas
         }
         Programador.detener(); Programador.dejarDeVibrar(c)
     }

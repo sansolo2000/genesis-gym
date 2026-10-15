@@ -1,7 +1,9 @@
 package io.github.sansolo2000.genesisgym
 
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -73,12 +75,53 @@ class AlertasTest {
 
     @Test fun posponerYVigencia() {
         assertEquals(1_000L + 10 * 60_000L, Alertas.posponerHasta(1_000L, 10))
-        val marcadas = setOf("2030-10-16_desayuno")
-        fun v(tipo: String, claves: List<String>) = Alertas.vigente(tipo, claves, { it in marcadas }, { it == "2030-10-16" }, { it == "2030-10-15" })
+        val marcadas = setOf("2030-10-16_desayuno"); val tareas = setOf("2030-10-16_10:00_0")
+        fun v(tipo: String, claves: List<String>, activo: Boolean = true) =
+            Alertas.vigente(tipo, activo, claves, { it in marcadas }, { it in tareas }, { it == "2030-10-16" }, { it == "2030-10-15" })
         assertFalse(v(Recordatorios.COMIDA, listOf("2030-10-16_desayuno")))              // ya se marcó: no vuelve a sonar
         assertTrue(v(Recordatorios.COMIDA, listOf("2030-10-16_desayuno", "2030-10-16_colacion_am")))   // falta una
         assertFalse(v(Recordatorios.ENTRENAMIENTO, listOf("2030-10-16")))
         assertTrue(v(Recordatorios.REPORTE, listOf("2030-10-16")))
-        assertTrue(v(Recordatorios.TAREA, emptyList()))
+        // O-34: una tarea pospuesta ya hecha no suena; una pendiente sí.
+        assertFalse(v(Recordatorios.TAREA, listOf("2030-10-16_10:00_0")))
+        assertTrue(v(Recordatorios.TAREA, listOf("2030-10-16_18:00_1")))
+        // O-34: un pospuesto de un tipo que se apagó en Avisos no suena.
+        assertFalse(v(Recordatorios.REPORTE, listOf("2030-10-16"), activo = false))
+        assertFalse(v(Recordatorios.TAREA, emptyList(), activo = false))
+    }
+
+    @Test fun tipoActivoSegunAvisos() {   // O-34
+        val cfg = Recordatorios.Config(comidas = true, tareas = false, entrenamiento = true, reporte = false, descanso = false)
+        assertTrue(Alertas.activo(cfg, Recordatorios.COMIDA)); assertFalse(Alertas.activo(cfg, Recordatorios.TAREA))
+        assertTrue(Alertas.activo(cfg, Recordatorios.ENTRENAMIENTO)); assertFalse(Alertas.activo(cfg, Recordatorios.REPORTE))
+        assertFalse(Alertas.activo(cfg, Alertas.DESCANSO))
+    }
+
+    @Test fun queCallaUnaAlerta() {   // O-33
+        assertTrue(Alertas.tocarDetiene(Recordatorios.COMIDA))       // tocar la notificación cuenta como Detener
+        assertFalse(Alertas.tocarDetiene(Alertas.DESCANSO))          // el descanso no insiste
+        assertEquals(Recordatorios.COMIDA, Alertas.tipoQueCalla(Alertas.COMIDA_MARCADA))
+        assertEquals(Recordatorios.TAREA, Alertas.tipoQueCalla(Alertas.TAREA_HECHA))
+        assertEquals(Recordatorios.ENTRENAMIENTO, Alertas.tipoQueCalla(Alertas.SESION_ABIERTA))
+        assertEquals(Recordatorios.REPORTE, Alertas.tipoQueCalla(Alertas.REPORTE_GUARDADO))
+        assertNull(Alertas.tipoQueCalla("otro"))
+    }
+
+    @Test fun probarDicePorQueNoSuena() {   // riesgo de QA
+        assertTrue(Alertas.porQueNoSuena(base, Alertas.TIMBRE_SILENCIO, Alertas.FILTRO_TODO, null)!!.contains("silencio"))
+        assertTrue(Alertas.porQueNoSuena(base, Alertas.TIMBRE_VIBRAR, Alertas.FILTRO_TODO, null)!!.contains("vibración"))
+        assertTrue(Alertas.porQueNoSuena(base, Alertas.TIMBRE_NORMAL, Alertas.FILTRO_PRIORIDAD, true)!!.contains("No molestar"))
+        assertNotNull(Alertas.porQueNoSuena(base.copy(enSilencio = true), Alertas.TIMBRE_NORMAL, Alertas.FILTRO_PRIORIDAD, false))
+        assertTrue(Alertas.porQueNoSuena(base.copy(volumen = 0), Alertas.TIMBRE_NORMAL, Alertas.FILTRO_TODO, null)!!.contains("0 %"))
+        assertNull(Alertas.porQueNoSuena(base, Alertas.TIMBRE_NORMAL, Alertas.FILTRO_TODO, null))
+        assertNull(Alertas.porQueNoSuena(base.copy(enSilencio = true), Alertas.TIMBRE_SILENCIO, Alertas.FILTRO_TODO, null))
+    }
+
+    @Test fun laTareaTieneLaClaveDeCocinar() {   // O-34: misma clave que marca la tarea en Cocinar
+        val prog = Json.parseToJsonElement("""{"programa":{"id":"p","nombre":"p","desde":"2030-10-14","hasta":"2030-10-20"},"perfiles":[{"id":"x"}],
+            "preparaciones":{},"dias":[{"fecha":"2030-10-16","comidas":[],"tareas":[{"hora":"10:00","texto":"Remojar"},{"hora":"18:00","texto":"Cocinar"}]}]}""").jsonObject
+        val ahora = java.time.ZonedDateTime.of(2030, 10, 16, 8, 0, 0, 0, Gimnasio.ZONA)
+        val r = Recordatorios.calcular(Recordatorios.Config(tareas = true), EstadoComidas(prog), emptyList(), emptySet(), ahora, dias = 1)
+        assertEquals(listOf("2030-10-16_10:00_0", "2030-10-16_18:00_1"), r.map { it.clave })
     }
 }

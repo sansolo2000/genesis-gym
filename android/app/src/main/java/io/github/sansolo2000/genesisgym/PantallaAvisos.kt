@@ -74,6 +74,7 @@ fun PantallaAvisos(c: Context, a: AccionesAvisos, tick: Int, eleccion: Int, uriE
     var horaRep by remember { mutableStateOf(inicial.horaReporte) }
     val tipos = remember { mutableStateMapOf<String, Alertas.Tipo>().apply { for (t in Alertas.TIPOS) put(t, Programador.tipo(c, t)) } }
     var eligiendo by remember { mutableStateOf<String?>(null) }
+    val probar = remember { mutableStateMapOf<String, String>() }
     androidx.compose.runtime.LaunchedEffect(eleccion) {
         val t = eligiendo
         if (eleccion > 0 && t != null) { tipos[t] = tipos.getValue(t).copy(sonido = uriElegida?.toString()); eligiendo = null }
@@ -137,9 +138,15 @@ fun PantallaAvisos(c: Context, a: AccionesAvisos, tick: Int, eleccion: Int, uriE
                 Opciones(Alertas.POSPONER, v.posponerMin, { m -> "$m min" }) { tipos[tp] = v.copy(posponerMin = it) }
             } else Text("Suena una vez, al llegar a 0.", style = MaterialTheme.typography.bodySmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { Programador.tocar(c, tp, v) }) { Text("Probar") }
-                OutlinedButton(onClick = { Programador.detener(); Programador.dejarDeVibrar(c) }) { Text("Detener") }
+                OutlinedButton(onClick = {
+                    // Riesgo de QA: si no va a sonar, se dice por qué (silencio, vibración, No molestar o volumen en 0).
+                    val e = Programador.estado(c)
+                    probar[tp] = Alertas.porQueNoSuena(v, e.timbre, e.filtro, e.alarmasPermitidas) ?: ""
+                    Programador.tocar(c, tp, v)
+                }) { Text("Probar") }
+                OutlinedButton(onClick = { Programador.detener(); Programador.dejarDeVibrar(c); probar[tp] = "" }) { Text("Detener") }
             }
+            probar[tp]?.takeIf { it.isNotEmpty() }?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         }
 
         HorizontalDivider()

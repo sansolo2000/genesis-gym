@@ -70,6 +70,8 @@ class Apo(val base: BaseLocal, private val comidas: () -> EstadoComidas?, privat
     var faltaPermiso by mutableStateOf(false)
     var aviso by mutableStateOf("")
     var enviarAuto: () -> Unit = {}
+    /** O-33 (M-10): guardar el reporte calla la alerta del reporte que esté sonando. */
+    var alGuardarReporte: () -> Unit = {}
 
     // Lo que se está editando del día elegido
     val resp = mutableStateMapOf<String, Any?>()
@@ -158,6 +160,7 @@ class Apo(val base: BaseLocal, private val comidas: () -> EstadoComidas?, privat
             base.put(d.ruta, d.data)
             resultado = estado.mensajesAlGuardar(doc)
             alCambiar()
+            alGuardarReporte()
             enviarAuto()
         } catch (e: Exception) { errores = listOf("No se pudo guardar: ${e.javaClass.simpleName}") }
         tick++

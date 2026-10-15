@@ -417,6 +417,10 @@ class MainActivity : ComponentActivity() {
         window.decorView.setBackgroundColor(android.graphics.Color.parseColor("#111315"))
         com.enviarAuto = { enviarAutomatico() }
         apo.enviarAuto = { enviarAutomaticoApoyo() }
+        // O-33 (M-10): hacer en la app lo que pide una alerta la calla.
+        com.alHacer = { e -> Alertas.tipoQueCalla(e)?.let { runCatching { AlertaServicio.callarTipo(this, it) } } }
+        apo.alGuardarReporte = { runCatching { AlertaServicio.callarTipo(this, Recordatorios.REPORTE) } }
+        gym.alAbrirSesion = { runCatching { AlertaServicio.callarTipo(this, Recordatorios.ENTRENAMIENTO) } }
         gym.alDescanso = { fin, texto -> runCatching { if (fin == null) Programador.cancelarDescanso(this) else Programador.programarDescanso(this, fin, texto) } }
         gym.alSerie = { fin, texto -> runCatching { if (fin == null) Programador.cancelarSerie(this) else Programador.programarSerie(this, fin, texto) } }
         gym.alRestaurar = { runCatching { Programador.restaurarDesde(this, base) }; refresco++ }
@@ -426,6 +430,7 @@ class MainActivity : ComponentActivity() {
         apo.alActivar = { nueva, anterior -> runCatching { Programador.horaReporteDesdeApoyo(this, nueva, anterior) }; refresco++ }
         runCatching { Programador.reprogramar(this) }
         intent?.getStringExtra(Programador.EXTRA_VISTA)?.let { abrirVista(it) }
+        if (intent?.getBooleanExtra(Programador.EXTRA_DETENER, false) == true) runCatching { AlertaServicio.detenerTodas(this) }   // O-33
 
         setContent {
             // 0.7.0: el tema oscuro del mockup en toda la app (pedido de Héctor, 11-oct)
@@ -492,6 +497,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         intent.getStringExtra(Programador.EXTRA_VISTA)?.let { abrirVista(it) }
+        if (intent.getBooleanExtra(Programador.EXTRA_DETENER, false)) runCatching { AlertaServicio.detenerTodas(this) }   // O-33
     }
 
     override fun onPause() {

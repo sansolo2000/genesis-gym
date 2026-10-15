@@ -66,6 +66,27 @@ object Alertas {
         else "No molestar está activo y no deja pasar las alarmas: las alertas con \"sonar en silencio\" no van a sonar. " +
             "Para que suenen, en Ajustes → Notificaciones → No molestar activa \"Alarmas\"."
 
+    /** Riesgo de QA (14-oct): "Probar" dice por qué no suena. null si suena. */
+    fun porQueNoSuena(t: Tipo, timbre: Int, filtro: Int, alarmasPermitidas: Boolean?): String? = when {
+        t.enSilencio && !noMolestarDejaAlarmas(filtro, alarmasPermitidas) -> avisoNoMolestar(filtro, alarmasPermitidas)
+        !t.enSilencio && timbre == TIMBRE_SILENCIO -> "No suena porque el celular está en silencio y \"Sonar aunque esté en silencio / No molestar\" está apagado."
+        !t.enSilencio && timbre == TIMBRE_VIBRAR -> "No suena porque el celular está en vibración y \"Sonar aunque esté en silencio / No molestar\" está apagado."
+        !t.enSilencio && filtro != FILTRO_TODO -> "No suena porque No molestar está activo y \"Sonar aunque esté en silencio / No molestar\" está apagado."
+        t.volumen == 0 -> "No se escucha porque el volumen de esta alerta está en 0 %."
+        else -> null
+    }
+
+    // ---------- O-33 (Coordinador, 14-oct): qué calla una alerta que suena ----------
+    /** Tocar la notificación de una alerta que insiste cuenta como Detener. */
+    fun tocarDetiene(tipo: String): Boolean = insiste(tipo)
+    const val COMIDA_MARCADA = "comida_marcada"; const val TAREA_HECHA = "tarea_hecha"; const val SESION_ABIERTA = "sesion_abierta"; const val REPORTE_GUARDADO = "reporte_guardado"
+    /** Lo que se hace en la app y la alerta que calla: marcar la comida o la tarea, abrir la sesión, guardar el reporte. */
+    fun tipoQueCalla(evento: String): String? = when (evento) {
+        COMIDA_MARCADA -> Recordatorios.COMIDA; TAREA_HECHA -> Recordatorios.TAREA
+        SESION_ABIERTA -> Recordatorios.ENTRENAMIENTO; REPORTE_GUARDADO -> Recordatorios.REPORTE
+        else -> null
+    }
+
     // ---------- respaldo (dentro de config/avisos) ----------
     fun aJson(m: Map<String, Tipo>): JsonObject = JsonObject(TIPOS.filter { it in m }.associateWith { k ->
         val t = m.getValue(k)
@@ -88,16 +109,25 @@ object Alertas {
 
     // ---------- posponer: no se repite lo que ya se hizo ----------
     /**
-     * Al llegar un aviso pospuesto: sigue vigente si al menos una de sus claves sigue pendiente.
-     * Claves: comida "AAAA-MM-DD_tipo", entrenamiento y reporte "AAAA-MM-DD"; una tarea siempre está vigente.
+     * Al llegar un aviso pospuesto: sigue vigente si el tipo sigue activo (O-34) y al menos una de sus claves sigue pendiente.
+     * Claves: comida "AAAA-MM-DD_tipo", tarea "AAAA-MM-DD_HH:MM_n" (la de Cocinar), entrenamiento y reporte "AAAA-MM-DD".
      */
-    fun vigente(tipo: String, claves: List<String>, comidaMarcada: (String) -> Boolean, entrenoRegistrado: (String) -> Boolean, reporteGuardado: (String) -> Boolean): Boolean {
+    fun vigente(tipo: String, activo: Boolean, claves: List<String>, comidaMarcada: (String) -> Boolean, tareaHecha: (String) -> Boolean,
+                entrenoRegistrado: (String) -> Boolean, reporteGuardado: (String) -> Boolean): Boolean {
+        if (!activo) return false
         if (claves.isEmpty()) return true
         return claves.any { k -> when (tipo) {
             Recordatorios.COMIDA -> !comidaMarcada(k)
+            Recordatorios.TAREA -> !tareaHecha(k)
             Recordatorios.ENTRENAMIENTO -> !entrenoRegistrado(k)
             Recordatorios.REPORTE -> !reporteGuardado(k)
             else -> true
         } }
+    }
+
+    /** ¿El tipo está activo en Avisos? */
+    fun activo(cfg: Recordatorios.Config, tipo: String): Boolean = when (tipo) {
+        Recordatorios.COMIDA -> cfg.comidas; Recordatorios.TAREA -> cfg.tareas; Recordatorios.ENTRENAMIENTO -> cfg.entrenamiento
+        Recordatorios.REPORTE -> cfg.reporte; DESCANSO -> cfg.descanso; else -> false
     }
 }

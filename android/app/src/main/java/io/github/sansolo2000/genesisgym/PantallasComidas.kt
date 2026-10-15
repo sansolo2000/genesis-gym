@@ -89,6 +89,8 @@ class Com(val base: BaseLocal, private val alCambiar: () -> Unit) {
     var ocultarComprados by mutableStateOf(false)
     /** La actividad intenta enviar lo pendiente sin preguntar (si Google ya dio el permiso). */
     var enviarAuto: () -> Unit = {}
+    /** O-33 (M-10): marcar una comida o una tarea calla la alerta de ese tipo que esté sonando (evento de Alertas). */
+    var alHacer: (String) -> Unit = {}
 
     init { cargar() }
 
@@ -115,7 +117,7 @@ class Com(val base: BaseLocal, private val alCambiar: () -> Unit) {
         if (docs.isNotEmpty()) alCambiar()
     }
 
-    fun marcar(t: String, e: String) = escribir(estado.marcar(dia, t, e, Gimnasio.ahoraIso()))
+    fun marcar(t: String, e: String) { escribir(estado.marcar(dia, t, e, Gimnasio.ahoraIso())); alHacer(Alertas.COMIDA_MARCADA) }
     /** Marca o desmarca una tarea de cocina. Se guarda en alimentacion/tareas_hechas (entra en el respaldo; la 2.0 lo conserva sin usarlo). */
     fun alternarTarea(clave: String) {
         val nuevo = if (clave in tareasHechas) tareasHechas - clave else tareasHechas + clave
@@ -124,6 +126,7 @@ class Com(val base: BaseLocal, private val alCambiar: () -> Unit) {
             base.put("alimentacion/tareas_hechas", Comidas.objeto("programa_id" to idProg,
                 "hechas" to JsonArray(nuevo.sorted().map { JsonPrimitive(it) }), "actualizado" to JsonPrimitive(Gimnasio.ahoraIso())))
             tareasHechas = nuevo
+            if (clave in nuevo) alHacer(Alertas.TAREA_HECHA)
         } catch (e: Exception) { mensaje = "err" to "No se pudo guardar la tarea: ${e.javaClass.simpleName}" }
     }
 
