@@ -23,7 +23,7 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 
 /**
- * QA-T14 (módulo Medicamentos, claude/Vademecum.md §12 y claude/PLAN-PRUEBAS-3.0.md §6). Lo mantiene QA.
+ * QA-T17 (módulo Medicamentos, claude/Vademecum.md §12 y claude/PLAN-PRUEBAS-3.0.md §6). Lo mantiene QA.
  * Solo datos inventados: ni el catálogo real ni medicamentos de nadie. Fechas de 2030.
  */
 class QaMedicamentosTest {
@@ -49,7 +49,7 @@ class QaMedicamentosTest {
     }
 
     /** §12: tratamientos distintos para Héctor y Majo, cada uno con sus alertas. */
-    @Test fun qa_t14a_hector_y_majo_cada_uno_con_sus_tomas() {
+    @Test fun qa_t17a_hector_y_majo_cada_uno_con_sus_tomas() {
         val h = trat(veces("09:00"), id = "qa-h"); val m = trat(veces("10:00"), persona = M.MAJO, id = "qa-m")
         assertTrue(M.validar(h, cfg).isEmpty()); assertTrue(M.validar(m, cfg).isEmpty())
         val p = AvisosMedicamentos.calcular(listOf(h, m), emptyMap(), en("2030-03-05T08:00"))
@@ -58,7 +58,7 @@ class QaMedicamentosTest {
     }
 
     /** §12: coincidencias parciales, sin mayúsculas ni tildes, por id, y sin devolver todo el catálogo. */
-    @Test fun qa_t14b_buscador_parcial_y_acotado() {
+    @Test fun qa_t17b_buscador_parcial_y_acotado() {
         val muchos = (1..5000).map { M.Med("QA GENERICO $it mg", listOf("77${"%05d".format(it)}")) }
         val cat = M.Catalogo(listOf(qa1, qa2, entera) + muchos)
         assertEquals(2, cat.buscar("qafe").first.size)
@@ -71,7 +71,7 @@ class QaMedicamentosTest {
     }
 
     /** §12: la dosis rechaza cantidades inválidas; fraccionable solo en cuartos y mitades; no fraccionable solo enteros. */
-    @Test fun qa_t14c_dosis() {
+    @Test fun qa_t17c_dosis() {
         for (malo in listOf(null, 0.0, -0.5)) assertNotNull("$malo", M.validarDosis(cfg, malo, "comprimido", "Sí"))
         for (ok in listOf(0.25, 0.5, 0.75, 1.0, 2.5)) assertNull("$ok", M.validarDosis(cfg, ok, "comprimido", "Sí"))
         for (malo in listOf(0.3, 0.1, 1.2)) assertNotNull("$malo", M.validarDosis(cfg, malo, "comprimido", "Sí"))
@@ -80,7 +80,7 @@ class QaMedicamentosTest {
     }
 
     /** §12: "veces al día" e "intervalo de horas" no se usan juntas; los horarios sugeridos se editan. */
-    @Test fun qa_t14d_modalidades_excluyentes_y_horarios_editables() {
+    @Test fun qa_t17d_modalidades_excluyentes_y_horarios_editables() {
         assertFalse(M.validarFrecuencia(M.Frecuencia(M.VECES_DIA, veces = 1, intervaloHoras = 6, horarios = listOf("09:00")), cfg).isEmpty())
         assertFalse(M.validarFrecuencia(M.Frecuencia(M.INTERVALO_HORAS, veces = 1, intervaloHoras = 6, horarios = listOf("09:00")), cfg).isEmpty())
         assertEquals(listOf("07:00", "15:00", "23:00"), M.sugerir(cfg, M.VECES_DIA, 3))
@@ -91,7 +91,7 @@ class QaMedicamentosTest {
     }
 
     /** §12: la primera alerta es el siguiente horario válido (lo que de verdad se programa, no solo lo que se muestra). */
-    @Test fun qa_t14e_primera_alerta_programada() {
+    @Test fun qa_t17e_primera_alerta_programada() {
         val t = trat(veces("07:00", "15:00", "23:00"))
         val p = AvisosMedicamentos.calcular(listOf(t), emptyMap(), en("2030-03-05T14:00"))
         assertEquals(ms("2030-03-05T15:00"), p.first().ms)
@@ -102,7 +102,7 @@ class QaMedicamentosTest {
     }
 
     /** §12: sin respuesta se repite cada 10 min hasta 2 h; confirmar u omitir cierra; posponer abre otra cadena. */
-    @Test fun qa_t14f_cadena_de_alertas_programada() {
+    @Test fun qa_t17f_cadena_de_alertas_programada() {
         val t = trat(veces("09:00"))
         val k = M.clave(t.id, LocalDateTime.parse("2030-03-05T09:00"))
         fun proximo(ahora: String, regs: Map<String, List<M.Registro>> = emptyMap()) =
@@ -122,7 +122,7 @@ class QaMedicamentosTest {
     }
 
     /** §12: los tratamientos vencidos o sin alertas no programan nada. */
-    @Test fun qa_t14g_vencidos_y_apagados_no_programan() {
+    @Test fun qa_t17g_vencidos_y_apagados_no_programan() {
         val vencido = trat(veces("09:00", "21:00"), dur = M.Duracion(M.DUR_DIAS, dias = 2))   // 4 y 5 de marzo
         assertEquals(LocalDate.parse("2030-03-05"), vencido.fin)
         assertTrue(AvisosMedicamentos.calcular(listOf(vencido), emptyMap(), en("2030-03-06T08:00")).isEmpty())
@@ -131,7 +131,7 @@ class QaMedicamentosTest {
     }
 
     /** §12: editar no altera el historial; el registro guarda la versión que regía. */
-    @Test fun qa_t14h_editar_no_altera_el_historial() {
+    @Test fun qa_t17h_editar_no_altera_el_historial() {
         val v1 = trat(veces("09:00"))
         val r = registro(v1, "2030-03-05T09:00", M.CONFIRMADA, "2030-03-05T09:02")
         val antes = JsJson.stringify(r.data)
@@ -143,7 +143,7 @@ class QaMedicamentosTest {
     }
 
     /** §12: la toma de las 09:00 sigue a las 09:00 locales al cambiar de zona (lo que se programa). */
-    @Test fun qa_t14i_zona_horaria_en_lo_programado() {
+    @Test fun qa_t17i_zona_horaria_en_lo_programado() {
         val t = trat(veces("09:00"))
         val scl = AvisosMedicamentos.calcular(listOf(t), emptyMap(), en("2030-03-05T06:00")).first()
         val mad = AvisosMedicamentos.calcular(listOf(t), emptyMap(), en("2030-03-05T06:00", MAD)).first()
@@ -153,7 +153,7 @@ class QaMedicamentosTest {
     }
 
     /** §12: la información sale en el respaldo (exportable) y vuelve igual. */
-    @Test fun qa_t14j_tratamiento_e_historial_en_el_respaldo() {
+    @Test fun qa_t17j_tratamiento_e_historial_en_el_respaldo() {
         val t = trat(M.Frecuencia(M.EVENTOS, eventos = listOf(M.Toma("desayuno", "07:00"))), persona = M.MAJO, med = qa2)
         val r = registro(t, "2030-03-05T07:00", M.POSTERGADA, "2030-03-05T07:03", 15)
         val docs = listOf(Respaldo.Doc(M.rutaTratamiento(t.id), M.tratamientoAJson(t)), Respaldo.Doc(r.ruta, r.data))
@@ -166,7 +166,7 @@ class QaMedicamentosTest {
     }
 
     /** M-10 sigue igual con el tipo nuevo: tope de 2 min, Posponer 5/10/15, orden de los demás tipos y el Descanso suena una vez. */
-    @Test fun qa_t14k_m10_no_cambia() {
+    @Test fun qa_t17k_m10_no_cambia() {
         assertEquals(120_000L, Alertas.TOPE_MS)
         assertEquals(listOf(5, 10, 15), Alertas.POSPONER)
         assertEquals(listOf(Recordatorios.ENTRENAMIENTO, Recordatorios.COMIDA, Recordatorios.TAREA, Recordatorios.REPORTE), Alertas.PRIORIDAD.filter { it != Alertas.MEDICAMENTO })
@@ -184,7 +184,7 @@ class QaMedicamentosTest {
      * Se activa con la corrección.
      */
     @Ignore("D-15: se activa con la corrección")
-    @Test fun qa_t14l_editar_no_corta_la_cadena_que_esta_sonando() {
+    @Test fun qa_t17l_editar_no_corta_la_cadena_que_esta_sonando() {
         val v1 = trat(veces("09:00"))
         val v2 = M.guardar(v1.copy(cantidad = 2.0), v1, en("2030-03-05T09:05").toInstant())
         val p = AvisosMedicamentos.calcular(listOf(v2), emptyMap(), en("2030-03-05T09:06"))
