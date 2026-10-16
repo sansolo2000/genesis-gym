@@ -344,19 +344,56 @@ object Medicamentos {
      * [primera]: O-36 (Héctor, 16-oct), con una cantidad de días: la primera toma real. Los días son de calendario desde ella:
      * 10 días × 3 tomas al día son 30 tomas, y si la primera es a las 15:00 la última puede caer a las 07:00 del día 11.
      */
-    data class Duracion(val tipo: String, val dias: Int? = null, val fin: LocalDate? = null, val primera: LocalDateTime? = null)
+    /**
+     * [extra]: O-36 (Héctor, 16-oct), tomas omitidas o "sin respuesta" desde la primera; no cuentan y alargan el tratamiento.
+     * Sale del historial al leer el tratamiento ([conHistorial]); no se guarda.
+     */
+    data class Duracion(val tipo: String, val dias: Int? = null, val fin: LocalDate? = null, val primera: LocalDateTime? = null, val extra: Int = 0)
 
-    /** O-36: hasta cuándo hay tomas con una cantidad de días (exclusivo): la primera toma + N días. null si no aplica. */
+    /** O-36: el fin del período base (exclusivo): la primera toma + N días. null si no aplica. */
     fun limite(d: Duracion): LocalDateTime? = if (d.tipo == DUR_DIAS && d.dias != null && d.primera != null) d.primera.plusDays(d.dias.toLong()) else null
 
-    /**
-     * Fecha de término (inclusive). Con una cantidad de días, el día de la última toma posible desde la primera toma (O-36);
-     * un tratamiento guardado antes de la 0.18 (sin primera toma) cuenta desde la fecha de inicio: 7 días desde el lunes terminan el domingo.
-     */
+    /** Fecha de término (inclusive). Un tratamiento sin primera toma (0.17.0) cuenta desde la fecha de inicio: 7 días desde el lunes terminan el domingo. */
     fun fechaFin(inicio: LocalDate, d: Duracion): LocalDate? = when (d.tipo) {
-        DUR_DIAS -> limite(d)?.minusMinutes(1)?.toLocalDate() ?: d.dias?.let { inicio.plusDays(it - 1L) }
+        DUR_DIAS -> d.dias?.let { inicio.plusDays(it - 1L) }
         DUR_FECHA -> d.fin
         else -> null
+    }
+
+    /** Las horas locales de las tomas de [t] desde su primera toma, sin límite de duración, hasta juntar [n] (o hasta [maxDias] días). */
+    private fun tomasDesdePrimera(t: Tratamiento, n: Int, hasta: LocalDateTime? = null, maxDias: Long = 4000): List<LocalDateTime> {
+        val p = t.duracion.primera ?: return emptyList()
+        val libre = t.copy(duracion = Duracion(DUR_INDEFINIDA), terminadoEn = null, anteriores = emptyList())
+        val l = mutableListOf<LocalDateTime>()
+        var desde = ZonedDateTime.of(p, ZoneOffset.UTC).minusMinutes(1)   // en UTC: solo importa la hora local de cada toma
+        val tope = desde.plusDays(maxDias)
+        while (l.size < n && desde < tope && (hasta == null || desde.toLocalDateTime() < hasta)) {
+            val h = desde.plusDays(62)
+            for (oc in ocurrencias(libre, desde, h, ZoneOffset.UTC)) { if (hasta != null && oc.local >= hasta) return l; l.add(oc.local); if (l.size >= n) break }
+            desde = h
+        }
+        return l
+    }
+
+    /** O-36: cantidad de tomas del tratamiento (N días × tomas al día, en días de calendario desde la primera). */
+    fun tomasTotales(t: Tratamiento): Int? {
+        val lim = limite(t.duracion) ?: return null
+        return tomasDesdePrimera(t, Int.MAX_VALUE, lim).size
+    }
+
+    /** O-36: la última toma: la del lugar tomas totales + omitidas o "sin respuesta" (cada una agrega una al final). */
+    fun corte(t: Tratamiento): LocalDateTime? {
+        val n = tomasTotales(t) ?: return null
+        if (n == 0) return null
+        return tomasDesdePrimera(t, n + t.duracion.extra).lastOrNull()
+    }
+
+    /** O-36: [extra] según el historial: tomas de este tratamiento desde la primera cuya última respuesta es omitida o "sin respuesta". */
+    fun conHistorial(t: Tratamiento, registros: List<Registro>): Tratamiento {
+        val p = t.duracion.primera ?: return t
+        val fallidas = registros.filter { it.tratamientoId == t.id && it.programada >= p }.groupBy { it.programada }.values
+            .mapNotNull { ultima(it) }.count { it.estado == OMITIDA || it.estado == SIN_RESPUESTA }
+        return t.copy(duracion = t.duracion.copy(extra = fallidas))
     }
 
     fun validarDuracion(inicio: LocalDate, d: Duracion): List<String> = when (d.tipo) {
@@ -396,7 +433,9 @@ object Medicamentos {
         val terminado: Instant? get() = terminadoEn?.let { runCatching { Instant.parse(it) }.getOrNull() }
         /** Genera alertas: con alertas activas, sin archivar y sin suspender. */
         val avisa: Boolean get() = alertas && !archivado && !suspendido
-        val fin: LocalDate? get() = fechaFin(inicio, duracion)
+        /** O-36: con una cantidad de días, la última toma (se alarga con las omitidas o "sin respuesta"). */
+        val ultima: LocalDateTime? by lazy { corte(this) }
+        val fin: LocalDate? get() = ultima?.toLocalDate() ?: fechaFin(inicio, duracion)
         fun vencido(hoy: LocalDate): Boolean = terminadoEn != null || (fin?.let { it < hoy } ?: false)
         val dosisTexto: String get() = "${numeroTexto(cantidad)} $unidad"
     }
@@ -467,18 +506,14 @@ object Medicamentos {
                 d = d.plusDays(1)
             }
         }
-        val lim = limite(t.duracion); val term = t.terminado
-        return locales.filter { lim == null || it.first < lim }.map { (l, ev) -> Ocurrencia(l, ZonedDateTime.of(l, zona), ev) }
+        val pri = t.duracion.primera; val ult = if (pri != null) t.ultima else null; val term = t.terminado
+        return locales.filter { (pri == null || it.first >= pri) && (ult == null || it.first <= ult) }.map { (l, ev) -> Ocurrencia(l, ZonedDateTime.of(l, zona), ev) }
             .filter { it.cuando.isAfter(desde) && !it.cuando.isAfter(hasta) && (term == null || it.cuando.toInstant().isBefore(term)) }
             .sortedWith(compareBy<Ocurrencia>({ it.cuando.toInstant() }, { it.local }))
     }
 
     /** O-36: con una cantidad de días, la última toma del período (null si no aplica). */
-    fun ultimaToma(t: Tratamiento, zona: ZoneId): Ocurrencia? {
-        val p = t.duracion.primera ?: return null
-        val lim = limite(t.duracion) ?: return null
-        return ocurrencias(t.copy(terminadoEn = null), ZonedDateTime.of(p, zona).minusMinutes(1), ZonedDateTime.of(lim, zona), zona).lastOrNull()
-    }
+    fun ultimaToma(t: Tratamiento, zona: ZoneId): Ocurrencia? = t.ultima?.let { Ocurrencia(it, ZonedDateTime.of(it, zona), null) }
 
     /** §6: la primera administración es el próximo horario válido posterior a [ahora] (hoy, mañana o la próxima fecha que corresponda). */
     fun proxima(t: Tratamiento, ahora: ZonedDateTime): Ocurrencia? {

@@ -381,6 +381,19 @@ class MedicamentosTest {
         assertEquals(LocalDateTime.parse("2030-03-06T09:00"), uno.duracion.primera)
         assertEquals(10, todas(uno).size); assertEquals(LocalDateTime.parse("2030-03-15T09:00"), M.ultimaToma(uno, SCL)!!.local)
         assertFalse(uno.vencido(LocalDate.parse("2030-03-15")))
+        // Omitidas o "sin respuesta" no cuentan: agregan tomas al final (Héctor, 16-oct).
+        val oc1 = todas(uno)
+        fun reg(o: M.Ocurrencia, e: String, seg: Long = 0) =
+            M.registroDesde(M.rutaRegistro(uno.id, o.local, e, seg), M.registro(uno, o, e, o.cuando.toInstant().plusSeconds(seg), if (e == M.POSTERGADA) 15 else null, "alerta"))!!
+        val regs = listOf(reg(oc1[0], M.OMITIDA), reg(oc1[1], M.SIN_RESPUESTA), reg(oc1[2], M.CONFIRMADA))
+        val largo = M.conHistorial(uno, regs)
+        assertEquals(2, largo.duracion.extra)
+        assertEquals(12, todas(largo).size)
+        assertEquals(LocalDateTime.parse("2030-03-17T09:00"), largo.ultima)
+        // Una pospuesta que después se confirma cuenta como tomada; una pospuesta y luego omitida, no.
+        assertEquals(2, M.conHistorial(uno, regs + reg(oc1[3], M.POSTERGADA) + reg(oc1[3], M.CONFIRMADA, 3600)).duracion.extra)
+        assertEquals(3, M.conHistorial(uno, regs + reg(oc1[3], M.POSTERGADA) + reg(oc1[3], M.OMITIDA, 3600)).duracion.extra)
+        assertEquals(0, M.tratamientoDesdeJson(M.tratamientoAJson(largo))!!.duracion.extra)   // no se guarda: sale del historial
         // 3 al día × 10 días = 30; si la primera es a las 15:00, la última es a las 07:00 del día 11.
         val tres = nuevo(veces("07:00", "15:00", "23:00"), 10, "2030-03-05T14:00")
         val oc = todas(tres)

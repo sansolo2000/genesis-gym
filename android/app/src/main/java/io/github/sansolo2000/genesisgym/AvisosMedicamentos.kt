@@ -39,8 +39,16 @@ object AvisosMedicamentos {
     fun zona(): ZoneId = ZoneId.systemDefault()
 
     // ---------- datos de la base ----------
-    fun tratamientos(base: BaseLocal): List<Medicamentos.Tratamiento> =
-        base.coleccion(Medicamentos.COLECCION).filter { it.ruta.startsWith("${Medicamentos.COLECCION}/t_") }.mapNotNull { Medicamentos.tratamientoDesdeJson(it.data) }
+    /** Con las omitidas y "sin respuesta" del historial, que alargan un tratamiento por cantidad de días (O-36). */
+    fun tratamientos(base: BaseLocal): List<Medicamentos.Tratamiento> {
+        val docs = base.coleccion(Medicamentos.COLECCION)
+        val regs = docs.filter { it.ruta.startsWith("${Medicamentos.COLECCION}/a_") }.mapNotNull { Medicamentos.registroDesde(it.ruta, it.data) }
+        return docs.filter { it.ruta.startsWith("${Medicamentos.COLECCION}/t_") }.mapNotNull { Medicamentos.tratamientoDesdeJson(it.data) }
+            .map { Medicamentos.conHistorial(it, regs) }
+    }
+
+    fun tratamiento(base: BaseLocal, id: String): Medicamentos.Tratamiento? =
+        Medicamentos.tratamientoDesdeJson(base.get(Medicamentos.rutaTratamiento(id)))?.let { Medicamentos.conHistorial(it, registros(base)) }
 
     fun registros(base: BaseLocal): List<Medicamentos.Registro> =
         base.coleccion(Medicamentos.COLECCION).filter { it.ruta.startsWith("${Medicamentos.COLECCION}/a_") }.mapNotNull { Medicamentos.registroDesde(it.ruta, it.data) }
@@ -124,7 +132,7 @@ object AvisosMedicamentos {
     fun reprogramar(c: Context): Int {
         val base = BaseLocal(c)
         val ahora = ZonedDateTime.now(zona())
-        val trats = tratamientos(base)
+        var trats = tratamientos(base)
         var regs = porClave(registros(base))
         val nuevos = mutableListOf<Respaldo.Doc>()
         fun cerrar(t: Medicamentos.Tratamiento, oc: Medicamentos.Ocurrencia) {
@@ -140,7 +148,7 @@ object AvisosMedicamentos {
             if (!t.avisa || u.postergadaHasta?.let { Medicamentos.enSuspension(t, it) } == true) continue
             cerrar(t, Medicamentos.Ocurrencia(u.programada, ZonedDateTime.of(u.programada, ahora.zone), u.evento))
         }
-        if (nuevos.isNotEmpty()) { base.ponerVarios(nuevos); regs = porClave(registros(base)) }
+        if (nuevos.isNotEmpty()) { base.ponerVarios(nuevos); regs = porClave(registros(base)); trats = tratamientos(base) }   // O-36: las nuevas "sin respuesta" alargan
         val lista = calcular(trats, regs, ahora)
         val am = c.getSystemService(AlarmManager::class.java)
         val ahoraSet = lista.map { "${it.tratamientoId}|${it.local}" }.toSet()
@@ -160,7 +168,7 @@ object AvisosMedicamentos {
      */
     fun responder(c: Context, tratamientoId: String, local: LocalDateTime, evento: String?, estado: String, postergacionMin: Int?, origen: String): Boolean {
         val base = BaseLocal(c)
-        val t = Medicamentos.tratamientoDesdeJson(base.get(Medicamentos.rutaTratamiento(tratamientoId))) ?: return false
+        val t = tratamiento(base, tratamientoId) ?: return false
         val ahora = Instant.now()
         val oc = Medicamentos.Ocurrencia(local, ZonedDateTime.of(local, zona()), evento)
         base.put(Medicamentos.rutaRegistro(t.id, local, estado, ahora.toEpochMilli()),
@@ -232,7 +240,7 @@ class MedicamentoReceiver : BroadcastReceiver() {
         val r = goAsync()
         try {
             val base = BaseLocal(c)
-            val t = Medicamentos.tratamientoDesdeJson(base.get(Medicamentos.rutaTratamiento(tid)))
+            val t = AvisosMedicamentos.tratamiento(base, tid)
             if (t == null || !t.avisa) { AvisosMedicamentos.quitarNotificacion(c, tid, local); r.finish(); return }
             val propios = AvisosMedicamentos.registros(base).filter { it.tratamientoId == tid && it.programada == local }
             val ahora = System.currentTimeMillis()
