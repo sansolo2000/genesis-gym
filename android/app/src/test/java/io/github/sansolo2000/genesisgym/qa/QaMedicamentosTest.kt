@@ -13,7 +13,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Ignore
 import org.junit.Test
 import java.io.File
 import java.time.Instant
@@ -179,11 +178,10 @@ class QaMedicamentosTest {
     }
 
     /**
-     * D-15 (mayor): editar un tratamiento (o "Terminar hoy") mientras la toma de las 09:00 está en sus 2 horas corta la cadena:
-     * no vuelve a avisar y nunca queda "sin respuesta". CONTEXTO-MODULO-MEDICAMENTOS §8 dice que sigue su cadena.
-     * Se activa con la corrección.
+     * D-15 (mayor): editar un tratamiento (o "Terminar hoy") mientras la toma de las 09:00 está en sus 2 horas cortaba la cadena:
+     * no volvía a avisar y nunca quedaba "sin respuesta". CONTEXTO-MODULO-MEDICAMENTOS §8 dice que sigue su cadena.
+     * Corregido en 77dd852 (versiones_anteriores); QA la activó el 15-oct.
      */
-    @Ignore("D-15: se activa con la corrección")
     @Test fun qa_t17l_editar_no_corta_la_cadena_que_esta_sonando() {
         val v1 = trat(veces("09:00"))
         val v2 = M.guardar(v1.copy(cantidad = 2.0), v1, en("2030-03-05T09:05").toInstant())
