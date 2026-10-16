@@ -35,7 +35,7 @@ class MedicamentosTest {
 
     // Corren desde android/app; el archivo de configuración es el que va en el APK.
     private val archivoConfig = listOf(File("src/main/assets/medicamentos/config-medicamentos.json"), File("android/app/src/main/assets/medicamentos/config-medicamentos.json")).first { it.isFile }
-    private val cfg: Medicamentos.Config = M.configDeArchivo(Json.parseToJsonElement(archivoConfig.readText()).jsonObject).let { (c, e) -> assertTrue(e.toString(), e.isEmpty()); c!! }
+    private val cfg: M.Config = M.configDeArchivo(Json.parseToJsonElement(archivoConfig.readText()).jsonObject).let { (c: M.Config?, e: List<String>) -> assertTrue(e.toString(), e.isEmpty()); c!! }
 
     private fun med(nombre: String, ids: List<String>, unidad: String? = "comprimido", fracc: String? = "Sí") = M.Med(nombre, ids, "COMPRIMIDOS", unidad, null, fracc)
     private val ficticina1 = med("FICTICINA 10 mg comprimidos", listOf("9000001"))
@@ -50,7 +50,7 @@ class MedicamentosTest {
         med("COMPUESTO ÁCIDO", listOf("9000060"))
     ))
 
-    private fun trat(f: Medicamentos.Frecuencia, inicio: String = "2030-03-04", dur: Medicamentos.Duracion = Medicamentos.Duracion(M.DUR_INDEFINIDA),
+    private fun trat(f: M.Frecuencia, inicio: String = "2030-03-04", dur: M.Duracion = M.Duracion(M.DUR_INDEFINIDA),
                      persona: String = M.HECTOR, alertas: Boolean = true, vigente: String = "2030-01-01T00:00:00.000Z") =
         M.Tratamiento("tq1", persona, ficticina1, 1.0, "comprimido", f, LocalDate.parse(inicio), dur, alertas, 1, vigente, vigente)
 
@@ -277,7 +277,7 @@ class MedicamentosTest {
         val t = trat(veces("09:00"), inicio = "2030-03-05")
         val oc = M.ocurrencias(t, en("2030-03-05T00:00"), en("2030-03-05T23:59"), SCL).single()
         val t0 = oc.cuando.toInstant()
-        fun reg(estado: String, minutosDespues: Long, pos: Int? = null): Medicamentos.Registro {
+        fun reg(estado: String, minutosDespues: Long, pos: Int? = null): M.Registro {
             val r = t0.plusSeconds(minutosDespues * 60)
             return M.registroDesde(M.rutaRegistro(t.id, oc.local, estado, r.toEpochMilli()), M.registro(t, oc, estado, r, pos, "alerta"))!!
         }
@@ -429,6 +429,6 @@ class MedicamentosTest {
         val base = Alertas.inicial(null, 70, false)
         val m = Alertas.desdeJson(Alertas.aJson(mapOf(Alertas.MEDICAMENTO to base.copy(volumen = 40))), base)
         assertEquals(40, m.getValue(Alertas.MEDICAMENTO).volumen)
-        assertTrue(Medicamentos.COLECCION in Respaldo.COLECCIONES)
+        assertTrue(M.COLECCION in Respaldo.COLECCIONES)
     }
 }

@@ -29,7 +29,9 @@ class QaRespaldoTest {
         d("reportes_apoyo/2026-10-14", "formato" to "reporte-diario"),
         d("resumenes_apoyo/2026-10-16", "formato" to "resumen-semanal"),
         // 0.13.0 (M-07, cintura): editado por Desarrollador 3 con autorización de Héctor (13-oct); QA lo revisa.
-        d("cintura/2026-10-16_0705", "fecha" to "2026-10-16")
+        d("cintura/2026-10-16_0705", "fecha" to "2026-10-16"),
+        // Medicamentos: editado por Desarrollador 3 con autorización de Héctor (15-oct); QA lo revisa.
+        d("medicamentos/t_qa-1", "persona" to "hector")
     )
 
     @Test fun qa_t01_ida_y_vuelta_con_todas_las_colecciones() {
