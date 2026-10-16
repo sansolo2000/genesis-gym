@@ -371,6 +371,66 @@ class MedicamentosTest {
         assertNull(M.tratamientoAJson(t)["archivado"])   // sin archivar, el documento no cambia
     }
 
+    /** O-36 (Héctor, 16-oct): con una cantidad de días, días de calendario desde la primera toma real. */
+    @Test fun duracionPorTomasDesdeLaPrimera() {
+        fun nuevo(f: M.Frecuencia, dias: Int, ahora: String) =
+            M.guardar(trat(f, inicio = "2030-03-05", dur = M.Duracion(M.DUR_DIAS, dias = dias)), null, en(ahora).toInstant(), SCL)
+        fun todas(t: M.Tratamiento) = M.ocurrencias(t, en("2030-03-01T00:00"), en("2030-05-01T00:00"), SCL)
+        // 10 días × 1 = 10 tomas; la primera es mañana porque hoy ya pasó.
+        val uno = nuevo(veces("09:00"), 10, "2030-03-05T10:00")
+        assertEquals(LocalDateTime.parse("2030-03-06T09:00"), uno.duracion.primera)
+        assertEquals(10, todas(uno).size); assertEquals(LocalDateTime.parse("2030-03-15T09:00"), M.ultimaToma(uno, SCL)!!.local)
+        assertFalse(uno.vencido(LocalDate.parse("2030-03-15")))
+        // 3 al día × 10 días = 30; si la primera es a las 15:00, la última es a las 07:00 del día 11.
+        val tres = nuevo(veces("07:00", "15:00", "23:00"), 10, "2030-03-05T14:00")
+        val oc = todas(tres)
+        assertEquals(30, oc.size)
+        assertEquals("2030-03-05T15:00", oc.first().local.toString()); assertEquals("2030-03-15T07:00", oc.last().local.toString())
+        assertEquals(LocalDate.parse("2030-03-15"), tres.fin)
+        assertEquals("2030-03-15T07:00", M.ultimaToma(tres, SCL)!!.local.toString())
+        // Cada 2 días × 10 días = 5 tomas.
+        assertEquals(5, todas(nuevo(M.Frecuencia(M.INTERVALO_DIAS, intervaloDias = 2, horarios = listOf("09:00")), 10, "2030-03-05T08:00")).size)
+        // Al editar se sigue contando desde la misma primera toma.
+        val ed = M.guardar(tres.copy(cantidad = 0.5), tres, en("2030-03-07T10:00").toInstant(), SCL)
+        assertEquals(tres.duracion.primera, ed.duracion.primera)
+        assertEquals(ed, M.tratamientoDesdeJson(Json.parseToJsonElement(JsJson.stringify(M.tratamientoAJson(ed))).jsonObject))
+        // Un tratamiento sin primera toma guardada (0.17.0) sigue contando desde la fecha de inicio.
+        assertEquals(LocalDate.parse("2030-03-14"), M.fechaFin(LocalDate.parse("2030-03-05"), M.Duracion(M.DUR_DIAS, dias = 10)))
+        // La fecha de término se mantiene igual que antes.
+        assertEquals(LocalDate.parse("2030-03-20"), M.fechaFin(LocalDate.parse("2030-03-05"), M.Duracion(M.DUR_FECHA, fin = LocalDate.parse("2030-03-20"))))
+    }
+
+    /** O-36: "Terminar" corta desde ahora; la toma que ya sonaba sigue su cadena (D-15). */
+    @Test fun terminarCortaDesdeAhora() {
+        val t = M.guardar(trat(veces("07:00", "15:00", "23:00"), inicio = "2030-03-05"), null, Instant.parse("2030-03-01T12:00:00Z"))
+        val fin = M.terminar(t, en("2030-03-05T15:05").toInstant(), SCL)
+        assertTrue(fin.vencido(LocalDate.parse("2030-03-05")))
+        assertTrue(M.ocurrencias(fin, en("2030-03-05T15:05"), en("2030-03-10T00:00"), SCL).isEmpty())   // no suena la de las 23:00
+        assertNull(M.proxima(fin, en("2030-03-05T15:06")))
+        assertEquals(listOf("2030-03-05T15:00"), M.cadenasAbiertas(fin, en("2030-03-05T15:10"), emptyMap()).map { it.first.local.toString() })
+        // Al editarlo no se reabre.
+        assertNotNull(M.guardar(fin.copy(cantidad = 2.0, terminadoEn = null), fin, en("2030-03-05T16:00").toInstant(), SCL).terminadoEn)
+        assertEquals(fin, M.tratamientoDesdeJson(Json.parseToJsonElement(JsJson.stringify(M.tratamientoAJson(fin))).jsonObject))
+    }
+
+    /** O-36: "Suspender" pausa las alertas; esas tomas no suenan ni quedan "sin respuesta". */
+    @Test fun suspenderYReanudar() {
+        val t = trat(veces("09:00", "21:00"), inicio = "2030-03-05")
+        val s = M.suspender(t, en("2030-03-05T08:00").toInstant())
+        assertTrue(s.suspendido); assertFalse(s.avisa)
+        assertTrue(AvisosMedicamentos.calcular(listOf(s), emptyMap(), en("2030-03-05T08:30")).isEmpty())
+        assertTrue(M.cadenasAbiertas(s, en("2030-03-05T09:30"), emptyMap()).isEmpty())
+        val r = M.reanudar(s, en("2030-03-05T12:00").toInstant())
+        assertFalse(r.suspendido); assertTrue(r.avisa)
+        assertTrue(M.enSuspension(r, en("2030-03-05T09:00").toInstant()))
+        assertTrue(M.cerradasSinRespuesta(r, en("2030-03-05T12:00"), emptySet()).isEmpty())   // la de las 09:00 no queda "sin respuesta"
+        assertEquals("2030-03-05T21:00", AvisosMedicamentos.calcular(listOf(r), emptyMap(), en("2030-03-05T12:00")).first().local.toString())
+        assertEquals(r, M.tratamientoDesdeJson(Json.parseToJsonElement(JsJson.stringify(M.tratamientoAJson(r))).jsonObject))
+        // Editar no quita la suspensión.
+        assertTrue(M.guardar(s.copy(cantidad = 2.0, suspensiones = emptyList()), s, en("2030-03-05T10:00").toInstant(), SCL).suspendido)
+        assertEquals("Pospuesta", M.ESTADOS[M.POSTERGADA])
+    }
+
     /** O-38 (Héctor, 16-oct): responder un medicamento calla solo su alerta. */
     @Test fun responderCallaSoloSuAlerta() {
         val med = Alertas.MEDICAMENTO; val com = Recordatorios.COMIDA; val ent = Recordatorios.ENTRENAMIENTO

@@ -214,18 +214,28 @@ class Medi(private val c: Context, private val base: BaseLocal, private val alCa
         val p = Medicamentos.proxima(g, ahora())
         mensaje = "ok" to ((if (anterior == null) "Tratamiento guardado." else "Cambios guardados (versión ${g.version}); rigen desde ahora y el historial no cambia.") +
             (p?.let { " Primera administración: ${it.local.toLocalDate()} a las ${it.local.toLocalTime()}." } ?: if (g.frecuencia.segunNecesidad) " Según necesidad: sin alertas." else " No quedan administraciones en el período.") +
+            (Medicamentos.ultimaToma(g, AvisosMedicamentos.zona())?.let { u -> " Con ${g.duracion.dias} días desde la primera toma, la última es el ${u.local.toLocalDate()} a las ${u.local.toLocalTime()}." } ?: "") +
             (if (!g.alertas) " Alertas apagadas." else ""))
         vista = "lista"; cargar(); alCambiar()
     }
 
-    fun terminarHoy(t: Medicamentos.Tratamiento) {
-        val fin = maxOf(hoy(), t.inicio)
-        val g = Medicamentos.guardar(t.copy(duracion = Medicamentos.Duracion(Medicamentos.DUR_FECHA, fin = fin)), t, Instant.now())
-        base.put(Medicamentos.rutaTratamiento(g.id), Medicamentos.tratamientoAJson(g))
+    private fun guardarDirecto(t: Medicamentos.Tratamiento, texto: String) {
+        base.put(Medicamentos.rutaTratamiento(t.id), Medicamentos.tratamientoAJson(t))
         runCatching { AvisosMedicamentos.reprogramar(c) }
-        mensaje = "ok" to "El tratamiento termina el $fin. No se generan más alertas después de esa fecha."
-        cargar(); alCambiar()
+        mensaje = "ok" to texto
+        confirmar = null; cargar(); alCambiar()
     }
+
+    /** O-36 (Héctor, 16-oct): "Terminar" lo cierra para siempre desde ahora; no suenan las tomas que quedaban. */
+    fun terminar(t: Medicamentos.Tratamiento) = guardarDirecto(Medicamentos.terminar(t, Instant.now()),
+        "Tratamiento terminado: no se generan más tomas ni alertas. Si una toma estaba sonando, sigue hasta que la respondas.")
+
+    /** O-36: "Suspender" pausa las alertas; esas tomas no quedan "sin respuesta". "Reanudar" las vuelve a activar. */
+    fun suspender(t: Medicamentos.Tratamiento) {
+        AvisosMedicamentos.quitarNotificaciones(c, t.id)
+        guardarDirecto(Medicamentos.suspender(t, Instant.now()), "Tratamiento suspendido: no avisa hasta que toques Reanudar.")
+    }
+    fun reanudar(t: Medicamentos.Tratamiento) = guardarDirecto(Medicamentos.reanudar(t, Instant.now()), "Tratamiento reanudado: vuelve a avisar desde la próxima toma.")
 
     // ---------- O-40 (Héctor, 16-oct): archivar y borrar ----------
     var confirmar by mutableStateOf<Pair<String, String>?>(null)   // (tratamiento, "archivar" | "borrar")
@@ -323,7 +333,8 @@ private fun Lista(m: Medi) {
     if (tomas.isEmpty()) Gris("No hay tomas programadas para hoy.")
     for ((tr, oc) in tomas) {
         val u = Medicamentos.ultima(porClave[Medicamentos.clave(tr.id, oc.local)] ?: emptyList())
-        val estado = u?.let { Medicamentos.ESTADOS[it.estado] } ?: if (oc.cuando.isAfter(ahora)) "Pendiente" else "Sin responder"
+        val estado = u?.let { Medicamentos.ESTADOS[it.estado] } ?: if (Medicamentos.enSuspension(tr, oc.cuando.toInstant())) "Suspendida"
+            else if (oc.cuando.isAfter(ahora)) "Pendiente" else "Sin responder"
         Column(Modifier.fillMaxWidth()) {
             Text("${oc.local.toLocalTime()} · ${Medicamentos.PERSONAS[tr.persona]} · ${tr.med.nombre} · ${tr.dosisTexto}", fontWeight = FontWeight.SemiBold)
             Gris(estado + (oc.evento?.let { e -> " · " + (cfg?.evento(e)?.nombre ?: e) } ?: ""))
@@ -344,23 +355,32 @@ private fun Lista(m: Medi) {
                 Text(tr.med.nombre, fontWeight = FontWeight.SemiBold)
                 Gris("${Medicamentos.PERSONAS[tr.persona]} · ids ${tr.med.ids.joinToString(", ")}")
                 Text("${tr.dosisTexto} · ${Medicamentos.resumen(tr.frecuencia, cfg)}")
-                Gris("Desde ${tr.inicio} · " + (tr.fin?.let { "hasta $it" } ?: "indefinido") + (if (vencido) " · TERMINADO" else "") +
+                Gris("Desde ${tr.inicio} · " + (Medicamentos.ultimaToma(tr, ahora.zone)?.let { "última toma ${it.local.toLocalDate()} ${it.local.toLocalTime()}" }
+                    ?: tr.fin?.let { "hasta $it" } ?: "indefinido") + (if (vencido) " · TERMINADO" else if (tr.suspendido) " · SUSPENDIDO" else "") +
                     " · alertas " + (if (tr.alertas) "activas" else "apagadas") + " · versión ${tr.version}")
                 if (!vencido) Medicamentos.proxima(tr, ahora)?.let { Gris("Próxima: ${it.local.toLocalDate()} ${it.local.toLocalTime()}") }
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     OutlinedButton(onClick = { m.editar(tr) }) { Text("Editar") }
                     OutlinedButton(onClick = { m.historialDe = tr.id; m.vista = "historial" }) { Text("Historial") }
                     if (!vencido) OutlinedButton(onClick = { m.registrarAhora(tr) }) { Text("Registrar toma ahora") }
-                    if (!vencido) OutlinedButton(onClick = { m.terminarHoy(tr) }) { Text("Terminar hoy") }
+                    if (!vencido && tr.suspendido) OutlinedButton(onClick = { m.reanudar(tr) }) { Text("Reanudar") }
+                    else if (!vencido) OutlinedButton(onClick = { m.suspender(tr) }) { Text("Suspender") }
+                    if (!vencido) OutlinedButton(onClick = { m.confirmar = tr.id to "terminar" }) { Text("Terminar") }
                     OutlinedButton(onClick = { m.confirmar = tr.id to "archivar" }) { Text("Archivar") }
                     if (Medicamentos.puedeBorrar(tr, m.registros)) OutlinedButton(onClick = { m.confirmar = tr.id to "borrar" }) { Text("Borrar") }
                 }
                 if (m.confirmar?.first == tr.id) {
-                    val borrar = m.confirmar?.second == "borrar"
-                    Nota(if (borrar) "¿Borrar este tratamiento? No tiene historial y no se puede deshacer."
-                        else "¿Archivar este tratamiento? Deja de avisar y se oculta de la lista; su historial se conserva.", borrar)
+                    val accion = m.confirmar?.second
+                    val borrar = accion == "borrar"
+                    Nota(when (accion) {
+                        "borrar" -> "¿Borrar este tratamiento? No tiene historial y no se puede deshacer."
+                        "terminar" -> "¿Terminar este tratamiento? Se cierra para siempre desde ahora: no suenan las tomas que quedan. El historial se conserva."
+                        else -> "¿Archivar este tratamiento? Deja de avisar y se oculta de la lista; su historial se conserva."
+                    }, borrar || accion == "terminar")
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { if (borrar) m.borrar(tr) else m.archivar(tr) }) { Text(if (borrar) "Sí, borrar" else "Sí, archivar") }
+                        Button(onClick = { when (accion) { "borrar" -> m.borrar(tr); "terminar" -> m.terminar(tr); else -> m.archivar(tr) } }) {
+                            Text(when (accion) { "borrar" -> "Sí, borrar"; "terminar" -> "Sí, terminar"; else -> "Sí, archivar" })
+                        }
                         OutlinedButton(onClick = { m.confirmar = null }) { Text("Cancelar") }
                     }
                 }
@@ -472,8 +492,7 @@ private fun Formulario(m: Medi) {
     when (m.fDur) {
         Medicamentos.DUR_DIAS -> {
             Numero(m.fDurDias, "Cantidad de días") { m.fDurDias = it }
-            val ini = runCatching { LocalDate.parse(m.fInicio.trim()) }.getOrNull(); val n = m.fDurDias.toIntOrNull()
-            if (ini != null && n != null && n > 0) Gris("Termina el ${Medicamentos.fechaFin(ini, Medicamentos.Duracion(Medicamentos.DUR_DIAS, n))}.")
+            Gris("Se cuenta desde la primera toma, en días de calendario: por ejemplo, 10 días × 3 tomas al día son 30 tomas. Al guardar se muestra la fecha de la última.")
         }
         Medicamentos.DUR_FECHA -> OutlinedTextField(value = m.fDurFin, onValueChange = { m.fDurFin = it.take(10) }, singleLine = true,
             label = { Text("Fecha de término (AAAA-MM-DD)") }, modifier = Modifier.fillMaxWidth())
