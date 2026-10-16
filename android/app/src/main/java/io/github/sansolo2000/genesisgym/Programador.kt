@@ -152,7 +152,7 @@ object Programador {
 
     fun crearCanal(c: Context) {
         val nm = c.getSystemService(NotificationManager::class.java)
-        for (t in Alertas.TIPOS) if (nm.getNotificationChannel(canal(t)) == null)
+        for (t in Alertas.TODOS) if (nm.getNotificationChannel(canal(t)) == null)
             nm.createNotificationChannel(NotificationChannel(canal(t), Alertas.NOMBRE[t], NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "El tono, el volumen y la vibración se eligen en Avisos, dentro de la app."
                 setSound(null, null)
@@ -172,6 +172,7 @@ object Programador {
     fun construir(c: Context, datos: Intent, id: Int): Notification {
         crearCanal(c)
         val t = datos.getStringExtra(EXTRA_TIPO) ?: Recordatorios.COMIDA
+        if (t == Alertas.MEDICAMENTO) return AvisosMedicamentos.construir(c, datos, id)   // Confirmar, Posponer… y Omitir
         val titulo = datos.getStringExtra(EXTRA_TITULO) ?: "Génesis Gym N"; val texto = datos.getStringExtra(EXTRA_TEXTO) ?: ""
         val vista = datos.getStringExtra(EXTRA_VISTA) ?: "hoy"
         // O-33: tocar la notificación de una alerta que insiste abre la app y cuenta como Detener.
@@ -273,7 +274,7 @@ object Programador {
     fun respaldarEn(c: Context, base: BaseLocal) {
         val s = sonido(c)
         base.put("config/avisos", Recordatorios.avisosAJson(Recordatorios.Respaldados(config(c), s.uri?.toString(), s.alarma, s.volumen,
-            Alertas.TIPOS.associateWith { tipo(c, it) })))
+            Alertas.TODOS.associateWith { tipo(c, it) })))
     }
 
     /** Después de restaurar: si el respaldo trae config/avisos, la aplica y vuelve a programar los avisos. */

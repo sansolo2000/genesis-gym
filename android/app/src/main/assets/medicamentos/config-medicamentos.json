@@ -1,0 +1,86 @@
+{
+  "formato": "config-medicamentos",
+  "config_horarios": {
+    "version": 1,
+    "nota": "Sugerencias editables de la app. No son recomendaciones médicas: la receta o la indicación médica prevalece.",
+    "hora_por_defecto": "09:00",
+    "sugerencias": [
+      { "tipo_frecuencia": "veces_al_dia", "administraciones": 1, "horarios": ["09:00"] },
+      { "tipo_frecuencia": "veces_al_dia", "administraciones": 2, "horarios": ["09:00", "21:00"] },
+      { "tipo_frecuencia": "veces_al_dia", "administraciones": 3, "horarios": ["07:00", "15:00", "23:00"] },
+      { "tipo_frecuencia": "veces_al_dia", "administraciones": 4, "horarios": ["06:00", "12:00", "18:00", "00:00"] },
+      { "tipo_frecuencia": "veces_al_dia", "administraciones": 6, "horarios": ["06:00", "10:00", "14:00", "18:00", "22:00", "02:00"] },
+      { "tipo_frecuencia": "intervalo_horas", "intervalo_horas": 4, "administraciones": 6, "horarios": ["06:00", "10:00", "14:00", "18:00", "22:00", "02:00"] },
+      { "tipo_frecuencia": "intervalo_horas", "intervalo_horas": 6, "administraciones": 4, "horarios": ["06:00", "12:00", "18:00", "00:00"] },
+      { "tipo_frecuencia": "intervalo_horas", "intervalo_horas": 8, "administraciones": 3, "horarios": ["07:00", "15:00", "23:00"] },
+      { "tipo_frecuencia": "intervalo_horas", "intervalo_horas": 12, "administraciones": 2, "horarios": ["09:00", "21:00"] },
+      { "tipo_frecuencia": "intervalo_horas", "intervalo_horas": 24, "administraciones": 1, "horarios": ["09:00"] },
+      { "tipo_frecuencia": "intervalo_dias", "administraciones": 1, "horarios": ["09:00"] },
+      { "tipo_frecuencia": "dias_semana", "administraciones": 1, "horarios": ["09:00"] },
+      { "tipo_frecuencia": "ciclos", "administraciones": 1, "horarios": ["09:00"] }
+    ],
+    "eventos": [
+      { "id": "desayuno", "nombre": "Con el desayuno", "hora_sugerida": "07:00" },
+      { "id": "antes_comer", "nombre": "Antes de comer", "hora_sugerida": "13:00" },
+      { "id": "despues_comer", "nombre": "Después de comer", "hora_sugerida": "14:00" },
+      { "id": "antes_dormir", "nombre": "Antes de dormir", "hora_sugerida": "22:30" },
+      { "id": "segun_necesidad", "nombre": "Según necesidad", "hora_sugerida": null }
+    ]
+  },
+  "config_dosis": {
+    "version": 1,
+    "nota": "Paso mínimo de la cantidad según el campo fraccionable del catálogo y la unidad elegida. Nunca se infiere del nombre del medicamento.",
+    "paso_por_fraccionable": {
+      "Sí": 0.25,
+      "No": 1,
+      "Sí (volumen)": 0.1,
+      "Sí (longitud)": 0.5,
+      "No aplica": 1,
+      "Depende": 0.5,
+      "sin_dato": 0.25
+    },
+    "unidades": [
+      { "id": "comprimido", "nombre": "comprimido" },
+      { "id": "cápsula", "nombre": "cápsula" },
+      { "id": "pastilla", "nombre": "pastilla" },
+      { "id": "mL", "nombre": "mL", "paso": 0.1 },
+      { "id": "gota", "nombre": "gota", "paso": 1 },
+      { "id": "UI", "nombre": "UI", "paso": 0.5 },
+      { "id": "mg", "nombre": "mg" },
+      { "id": "g", "nombre": "g" },
+      { "id": "cucharada", "nombre": "cucharada", "paso": 0.5 },
+      { "id": "sobre", "nombre": "sobre" },
+      { "id": "aplicación", "nombre": "aplicación", "paso": 1 },
+      { "id": "inhalación", "nombre": "inhalación (puff)", "paso": 1 },
+      { "id": "pulverización", "nombre": "pulverización", "paso": 1 },
+      { "id": "parche", "nombre": "parche", "paso": 1 },
+      { "id": "unidosis", "nombre": "unidosis", "paso": 1 },
+      { "id": "aplicador", "nombre": "aplicador lleno", "paso": 1 },
+      { "id": "cm", "nombre": "cm", "paso": 0.5 },
+      { "id": "unidad", "nombre": "unidad", "paso": 1 }
+    ],
+    "unidades_por_catalogo": {
+      "comprimido": ["comprimido"],
+      "cápsula": ["cápsula"],
+      "pastilla": ["pastilla"],
+      "mL": ["mL"],
+      "mL, UI (insulina) o mg": ["mL", "UI", "mg"],
+      "aplicación (capa fina)": ["aplicación"],
+      "aplicación": ["aplicación"],
+      "gota por ojo": ["gota"],
+      "gota por oído": ["gota"],
+      "gota": ["gota"],
+      "inhalación (puff)": ["inhalación"],
+      "unidad": ["unidad"],
+      "sobre, o medida (g / cucharada)": ["sobre", "g", "cucharada"],
+      "pulverización o gota por fosa nasal": ["pulverización", "gota"],
+      "parche": ["parche"],
+      "pulverización o aplicación": ["pulverización", "aplicación"],
+      "mL, gotas o unidosis": ["mL", "gota", "unidosis"],
+      "cm de cinta por ojo": ["cm"],
+      "mL (enjuague) o aplicación": ["mL", "aplicación"],
+      "aplicador lleno": ["aplicador"],
+      "enema / unidad, o mL": ["unidad", "mL"]
+    }
+  }
+}

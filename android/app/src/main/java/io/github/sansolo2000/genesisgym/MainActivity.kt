@@ -141,11 +141,15 @@ class MainActivity : ComponentActivity() {
     private fun aplicarPlan(r: Plan.Revision): String = try {
         val idAlimAntes = (com.estado.programa?.get("programa") as? kotlinx.serialization.json.JsonObject)?.get("id")
         val horaApoyoAntes = apo.horaReporteDe(apo.estado.programa)
+        // Medicamentos: el catálogo va a un archivo aparte (no a la base ni al respaldo), antes de guardar el resto.
+        r.nuevas.firstOrNull { it.clave == "medicamentos" }?.contenido?.let { AvisosMedicamentos.guardarCatalogo(this, it) }
         base.ponerVarios(r.nuevas.flatMap { it.docs })
         val claves = r.nuevas.map { it.clave }.toSet()
         if ("alimentacion" in claves) com.trasImportarPlan(idAlimAntes)
         if ("apoyo" in claves) apo.trasImportarPlan(horaApoyoAntes)
+        if ("medicamentos" in claves) { med.olvidarCatalogo(); med.cargar() }
         runCatching { Programador.reprogramar(this) }
+        runCatching { AvisosMedicamentos.reprogramar(this) }
         val omitidas = r.partes.filter { it.estado == "igual" }
         "Plan importado: " + r.nuevas.joinToString(", ") { it.nombre.lowercase() } + "." +
             (if (omitidas.isNotEmpty()) " Ya estaban activas: " + omitidas.joinToString(", ") { it.nombre.lowercase() } + "." else "")
@@ -180,6 +184,9 @@ class MainActivity : ComponentActivity() {
             }, { m -> apo.enviando = ""; apo.mensaje = "err" to "No se pudo enviar a Drive: $m" })
         }
     }
+
+    // Módulo Medicamentos: tratamientos de Héctor y Majo, alertas e historial.
+    private val med: Medi by lazy { Medi(this, base) {} }
 
     // E6: Health Connect para el Evaluador (pestaña Salud).
     private val hc by lazy { Hc(this) }
@@ -423,13 +430,15 @@ class MainActivity : ComponentActivity() {
         gym.alAbrirSesion = { runCatching { AlertaServicio.callarTipo(this, Recordatorios.ENTRENAMIENTO) } }
         gym.alDescanso = { fin, texto -> runCatching { if (fin == null) Programador.cancelarDescanso(this) else Programador.programarDescanso(this, fin, texto) } }
         gym.alSerie = { fin, texto -> runCatching { if (fin == null) Programador.cancelarSerie(this) else Programador.programarSerie(this, fin, texto) } }
-        gym.alRestaurar = { runCatching { Programador.restaurarDesde(this, base) }; refresco++ }
+        gym.alRestaurar = { runCatching { Programador.restaurarDesde(this, base) }; runCatching { AvisosMedicamentos.reprogramar(this) }; refresco++ }
         gym.fraseHoy = { Frases.deHoy(apo.estado.programa) }
-        gym.revisarPlan = { t -> Plan.revisar(t, gym.rutinaActiva(), com.estado.programa, apo.estado.programa, gym.perfil(), Gimnasio.ahoraIso()) }
+        gym.revisarPlan = { t -> Plan.revisar(t, gym.rutinaActiva(), com.estado.programa, apo.estado.programa, gym.perfil(), Gimnasio.ahoraIso(),
+            runCatching { AvisosMedicamentos.huellaActiva(this, base) }.getOrNull()) }
         gym.aplicarPlan = { r -> aplicarPlan(r) }
         apo.alActivar = { nueva, anterior -> runCatching { Programador.horaReporteDesdeApoyo(this, nueva, anterior) }; refresco++ }
         runCatching { Programador.reprogramar(this) }
-        intent?.getStringExtra(Programador.EXTRA_VISTA)?.let { abrirVista(it) }
+        runCatching { AvisosMedicamentos.reprogramar(this) }
+        intent?.let { abrirDesde(it) }
         if (intent?.getBooleanExtra(Programador.EXTRA_DETENER, false) == true) runCatching { AlertaServicio.detenerTodas(this) }   // O-33
 
         setContent {
@@ -443,6 +452,7 @@ class MainActivity : ComponentActivity() {
                     BackHandler(enabled = gym.vista == "reporte" && (apo.vista == "resumen" || apo.verImport)) {
                         if (apo.vista == "resumen") apo.vista = "reporte" else { apo.verImport = false; apo.importacion = null }
                     }
+                    BackHandler(enabled = gym.vista == "medicamentos" && med.vista != "lista") { med.vista = "lista"; med.errores = emptyList() }
                     BackHandler(enabled = gym.vista == "sesion") {
                         when {
                             gym.ficha != null -> gym.ficha = null
@@ -453,9 +463,10 @@ class MainActivity : ComponentActivity() {
                     }
                     Column(modifier = Modifier.safeDrawingPadding()) {
                         if (gym.vista != "sesion") Row(modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf("hoy" to "Hoy", "comidas" to "Comidas", "reporte" to "Reporte", "salud" to "Salud", "rutina" to "Rutina", "historial" to "Historial", "importar" to "Importar", "avisos" to "Avisos", "pruebas" to "Pruebas").forEach { (v, t) ->
+                            listOf("hoy" to "Hoy", "comidas" to "Comidas", "reporte" to "Reporte", "salud" to "Salud", "medicamentos" to "Medicamentos", "rutina" to "Rutina", "historial" to "Historial", "importar" to "Importar", "avisos" to "Avisos", "pruebas" to "Pruebas").forEach { (v, t) ->
                                 val activa = gym.vista == v || (v == "hoy" && gym.vista == "sesion")
-                                val ir = { if (v == "comidas" && gym.vista != "comidas") com.cargar(); if (v == "reporte" && gym.vista != "reporte") apo.refrescar(); if (v == "salud" && gym.vista != "salud") { dd.revisar(); if (hc.disponible()) lifecycleScope.launch { hc.refrescarPermisos() } }; gym.ir(v) }
+                                val ir = { if (v == "comidas" && gym.vista != "comidas") com.cargar(); if (v == "reporte" && gym.vista != "reporte") apo.refrescar(); if (v == "salud" && gym.vista != "salud") { dd.revisar(); if (hc.disponible()) lifecycleScope.launch { hc.refrescarPermisos() } }
+                                    if (v == "medicamentos" && gym.vista != "medicamentos") med.cargar(); gym.ir(v) }
                                 Pestana(t, activa, ir)
                             }
                         }
@@ -468,6 +479,7 @@ class MainActivity : ComponentActivity() {
                         if (gym.vista == "comidas") PantallaComidas(com, accionesComidas)
                         else if (gym.vista == "reporte") PantallaApoyo(apo, accionesApoyo)
                         else if (gym.vista == "salud") PantallaSaludE6(hc, accionesHc, cin, accionesCintura, dd, accionesDd)
+                        else if (gym.vista == "medicamentos") PantallaMedicamentos(med)
                         else if (gym.vista == "avisos") PantallaAvisos(this@MainActivity, accionesAvisos, refresco, eleccionSonido, uriSonido)
                         else if (gym.vista != "pruebas") PantallaGimnasio(gym, accionesGym)
                         else {
@@ -494,15 +506,24 @@ class MainActivity : ComponentActivity() {
         if (v == "sesion" && gym.borrador == null) gym.ir("hoy") else gym.ir(v)
     }
 
+    /** Desde una notificación: abre su vista; la de un medicamento abre la toma para responderla (Posponer…). */
+    private fun abrirDesde(i: Intent) {
+        val v = i.getStringExtra(Programador.EXTRA_VISTA) ?: return
+        abrirVista(v)
+        if (v == "medicamentos") med.abrirRespuesta(i.getStringExtra(AvisosMedicamentos.EXTRA_TRATAMIENTO), i.getStringExtra(AvisosMedicamentos.EXTRA_LOCAL),
+            i.getStringExtra(AvisosMedicamentos.EXTRA_EVENTO))
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        intent.getStringExtra(Programador.EXTRA_VISTA)?.let { abrirVista(it) }
+        abrirDesde(intent)
         if (intent.getBooleanExtra(Programador.EXTRA_DETENER, false)) runCatching { AlertaServicio.detenerTodas(this) }   // O-33
     }
 
     override fun onPause() {
         super.onPause()
         runCatching { Programador.reprogramar(this) }   // al salir, los avisos quedan al día con lo marcado
+        runCatching { AvisosMedicamentos.reprogramar(this) }
     }
 
     override fun onResume() {

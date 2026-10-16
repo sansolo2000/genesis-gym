@@ -72,6 +72,9 @@
         <!-- M-10: alerta que suena hasta Detener o Posponer, y los botones de su notificación -->
         <service android:name=".AlertaServicio" android:exported="false" android:foregroundServiceType="mediaPlayback" />
         <receiver android:name=".AccionAlerta" android:exported="false" />
+        <!-- Medicamentos: alarma de cada toma (se repite cada 10 min hasta 2 h) y los botones Confirmar y Omitir -->
+        <receiver android:name=".MedicamentoReceiver" android:exported="false" />
+        <receiver android:name=".AccionMedicamento" android:exported="false" />
         <!-- E5: carpeta temporal para la foto de la cámara -->
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -86,6 +89,9 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
                 <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+                <!-- Medicamentos: la hora local configurada se mantiene si cambia la zona horaria o la hora -->
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
             </intent-filter>
         </receiver>
     </application>

@@ -103,13 +103,14 @@ class AlertaServicio : Service() {
         h.removeCallbacks(tope)
     }
 
-    /** "Detener": calla y quita todas las notificaciones de alertas. */
+    /** "Detener": calla y quita todas las notificaciones de alertas, salvo las de Medicamentos (esperan Confirmar, Posponer u Omitir). */
     fun detenerTodo() {
         callar()
         val nm = getSystemService(NotificationManager::class.java)
-        for (id in activas.keys) nm.cancel(id)
+        for ((id, t) in activas) if (!Alertas.esperaRespuesta(t)) nm.cancel(id)
+        val quedaPrimerPlano = idPrimerPlano?.let { activas[it] }?.let { Alertas.esperaRespuesta(it) } == true
         activas.clear()
-        detenerServicio(quitarNotificacion = true)
+        detenerServicio(quitarNotificacion = !quedaPrimerPlano)
     }
 
     /** "Posponer" de una notificación: calla todo y quita solo esa notificación. */

@@ -72,7 +72,7 @@ fun PantallaAvisos(c: Context, a: AccionesAvisos, tick: Int, eleccion: Int, uriE
     var descanso by remember { mutableStateOf(inicial.descanso) }
     var reporte by remember { mutableStateOf(inicial.reporte) }
     var horaRep by remember { mutableStateOf(inicial.horaReporte) }
-    val tipos = remember { mutableStateMapOf<String, Alertas.Tipo>().apply { for (t in Alertas.TIPOS) put(t, Programador.tipo(c, t)) } }
+    val tipos = remember { mutableStateMapOf<String, Alertas.Tipo>().apply { for (t in Alertas.TODOS) put(t, Programador.tipo(c, t)) } }
     var eligiendo by remember { mutableStateOf<String?>(null) }
     val probar = remember { mutableStateMapOf<String, String>() }
     androidx.compose.runtime.LaunchedEffect(eleccion) {
@@ -105,7 +105,7 @@ fun PantallaAvisos(c: Context, a: AccionesAvisos, tick: Int, eleccion: Int, uriE
         }
         OutlinedButton(onClick = { a.abrirSonidoCelular() }) { Text("Abrir volumen del celular") }
 
-        for (tp in Alertas.TIPOS) {
+        for (tp in Alertas.TODOS) {
             HorizontalDivider(); Text(Alertas.NOMBRE[tp] ?: tp, style = MaterialTheme.typography.titleMedium)
             when (tp) {
                 Recordatorios.COMIDA -> {
@@ -124,6 +124,7 @@ fun PantallaAvisos(c: Context, a: AccionesAvisos, tick: Int, eleccion: Int, uriE
                     if (reporte) OutlinedTextField(value = horaRep, onValueChange = { horaRep = it.take(5) }, singleLine = true,
                         label = { Text("Hora del reporte (HH:MM)") }, isError = !Recordatorios.horaValida(horaRep), modifier = Modifier.fillMaxWidth())
                 }
+                Alertas.MEDICAMENTO -> Text("Se activan en cada tratamiento, en la pestaña Medicamentos.", style = MaterialTheme.typography.bodySmall)
             }
             val v = tipos.getValue(tp)
             Text("Tono: " + Programador.nombreTono(c, v), style = MaterialTheme.typography.bodyMedium)
@@ -133,7 +134,9 @@ fun PantallaAvisos(c: Context, a: AccionesAvisos, tick: Int, eleccion: Int, uriE
             Interruptor("Vibrar", v.vibrar) { tipos[tp] = v.copy(vibrar = it) }
             Interruptor("Sonar aunque esté en silencio / No molestar", v.enSilencio) { tipos[tp] = v.copy(enSilencio = it) }
             if (!v.enSilencio) Text("Apagado: no suena si el celular está en silencio, en vibración o en No molestar.", style = MaterialTheme.typography.bodySmall)
-            if (Alertas.insiste(tp)) {
+            if (Alertas.esperaRespuesta(tp)) Text("Cada aviso suena hasta que respondas (como máximo ${Alertas.TOPE_MS / 60000} minutos). Sin respuesta se repite cada " +
+                "${Medicamentos.REPETIR_MIN} minutos durante ${Medicamentos.VENTANA_MIN / 60} horas. Posponer (15, 30, 60 o 90 min) se elige en cada aviso.")
+            else if (Alertas.insiste(tp)) {
                 Text("Suena hasta que toques Detener o Posponer (como máximo ${Alertas.TOPE_MS / 60000} minutos). Posponer:")
                 Opciones(Alertas.POSPONER, v.posponerMin, { m -> "$m min" }) { tipos[tp] = v.copy(posponerMin = it) }
             } else Text("Suena una vez, al llegar a 0.", style = MaterialTheme.typography.bodySmall)

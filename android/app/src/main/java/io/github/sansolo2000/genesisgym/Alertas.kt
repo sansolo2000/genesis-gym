@@ -13,11 +13,19 @@ import kotlinx.serialization.json.JsonPrimitive
  */
 object Alertas {
     const val DESCANSO = "descanso"
+    /** Módulo Medicamentos (15-oct): tipo nuevo. Se activa por tratamiento y espera Confirmar, Posponer u Omitir. */
+    const val MEDICAMENTO = "medicamento"
+    /** Los 5 tipos de M-10. */
     val TIPOS = listOf(Recordatorios.COMIDA, Recordatorios.TAREA, Recordatorios.ENTRENAMIENTO, DESCANSO, Recordatorios.REPORTE)
+    /** Todos los tipos con su configuración en Avisos: los de M-10 y Medicamentos. */
+    val TODOS = TIPOS + MEDICAMENTO
     val NOMBRE = mapOf(Recordatorios.COMIDA to "Comidas", Recordatorios.TAREA to "Tareas de cocina", Recordatorios.ENTRENAMIENTO to "Entrenamientos",
-        DESCANSO to "Descanso en entrenamiento", Recordatorios.REPORTE to "Reporte diario")
-    /** Decisión del Coordinador (14-oct): Entrenamiento > Comidas > Tareas > Reporte. El Descanso no compite: suena una vez. */
-    val PRIORIDAD = listOf(Recordatorios.ENTRENAMIENTO, Recordatorios.COMIDA, Recordatorios.TAREA, Recordatorios.REPORTE)
+        DESCANSO to "Descanso en entrenamiento", Recordatorios.REPORTE to "Reporte diario", MEDICAMENTO to "Medicamentos")
+    /**
+     * Decisión del Coordinador (14-oct): Entrenamiento > Comidas > Tareas > Reporte. El Descanso no compite: suena una vez.
+     * Medicamentos primero: propuesta de Desarrollador 3 (15-oct), PENDIENTE de la decisión de Héctor.
+     */
+    val PRIORIDAD = listOf(MEDICAMENTO, Recordatorios.ENTRENAMIENTO, Recordatorios.COMIDA, Recordatorios.TAREA, Recordatorios.REPORTE)
     /** Decisión de Héctor (14-oct): después de 2 minutos se calla y la notificación queda con Detener y Posponer. */
     const val TOPE_MS = 120_000L
     val POSPONER = listOf(5, 10, 15)
@@ -31,6 +39,9 @@ object Alertas {
 
     /** Suena hasta Detener o Posponer (todos menos el Descanso). */
     fun insiste(tipo: String): Boolean = tipo != DESCANSO
+
+    /** Medicamentos: su notificación queda hasta Confirmar, Posponer u Omitir; "Detener" de otra alerta la calla pero no la quita. */
+    fun esperaRespuesta(tipo: String): Boolean = tipo == MEDICAMENTO
 
     /** De los tipos que suenan a la vez, el que se escucha. */
     fun ganador(tipos: Collection<String>): String? = PRIORIDAD.firstOrNull { it in tipos } ?: tipos.firstOrNull()
@@ -88,7 +99,7 @@ object Alertas {
     }
 
     // ---------- respaldo (dentro de config/avisos) ----------
-    fun aJson(m: Map<String, Tipo>): JsonObject = JsonObject(TIPOS.filter { it in m }.associateWith { k ->
+    fun aJson(m: Map<String, Tipo>): JsonObject = JsonObject(TODOS.filter { it in m }.associateWith { k ->
         val t = m.getValue(k)
         Apoyo.objeto("sonido" to (t.sonido?.let { JsonPrimitive(it) } ?: JsonNull), "volumen" to JsonPrimitive(t.volumen), "vibrar" to JsonPrimitive(t.vibrar),
             "en_silencio" to JsonPrimitive(t.enSilencio), "posponer_min" to JsonPrimitive(t.posponerMin))
@@ -97,7 +108,7 @@ object Alertas {
     /** Lee los tipos del respaldo; un tipo que falta no aparece (queda su valor del celular) y un campo malo usa su valor por defecto. */
     fun desdeJson(o: JsonObject?, base: Tipo): Map<String, Tipo> {
         if (o == null) return emptyMap()
-        return TIPOS.mapNotNull { k ->
+        return TODOS.mapNotNull { k ->
             val t = o[k] as? JsonObject ?: return@mapNotNull null
             fun b(c: String, d: Boolean) = (t[c] as? JsonPrimitive)?.takeIf { !it.isString }?.content?.toBooleanStrictOrNull() ?: d
             fun i(c: String) = (t[c] as? JsonPrimitive)?.takeIf { !it.isString }?.content?.toDoubleOrNull()?.toInt()
@@ -128,6 +139,8 @@ object Alertas {
     /** ¿El tipo está activo en Avisos? */
     fun activo(cfg: Recordatorios.Config, tipo: String): Boolean = when (tipo) {
         Recordatorios.COMIDA -> cfg.comidas; Recordatorios.TAREA -> cfg.tareas; Recordatorios.ENTRENAMIENTO -> cfg.entrenamiento
-        Recordatorios.REPORTE -> cfg.reporte; DESCANSO -> cfg.descanso; else -> false
+        Recordatorios.REPORTE -> cfg.reporte; DESCANSO -> cfg.descanso
+        MEDICAMENTO -> true   // se activa en cada tratamiento
+        else -> false
     }
 }

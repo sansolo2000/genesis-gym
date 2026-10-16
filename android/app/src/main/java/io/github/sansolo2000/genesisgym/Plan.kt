@@ -13,6 +13,8 @@ import kotlinx.serialization.json.JsonObject
  *  - Cada parte pasa por el mismo validador que su importación por separado (los contratos no cambian).
  *  - Todo o nada: si una parte tiene errores, no se importa ninguna.
  *  - La parte idéntica a la activa se omite ("ya está activa").
+ *  - Módulo Medicamentos (15-oct): el sobre puede traer además la sección opcional "medicamentos" (catálogo y configuración,
+ *    CONTEXTO-MODULO-MEDICAMENTOS §5). Un plan sin ella se revisa igual que antes.
  * Lógica pura, sin Android, para probarla con JUnit.
  */
 object Plan {
@@ -44,7 +46,7 @@ object Plan {
      */
     fun revisar(
         texto: String, rutinaActiva: JsonObject?, alimentacionActiva: JsonObject?, apoyoActivo: JsonObject?,
-        perfilCelular: String?, ahoraIso: String
+        perfilCelular: String?, ahoraIso: String, huellaMedicamentos: String? = null
     ): Revision {
         if (texto.isBlank()) return Revision(listOf("El archivo llegó vacío al celular."), emptyList(), emptyList())
         val sobre = try { Json.parseToJsonElement(texto.removePrefix("﻿")) as? JsonObject } catch (e: Exception) { null }
@@ -58,14 +60,29 @@ object Plan {
             av.add("Este plan es para \"$perfil\" y este celular es de \"$perfilCelular\". Revisa que sea el archivo correcto.")
         val faltan = listOf("rutina", "alimentacion", "apoyo").filter { sobre.obj(it) == null }
         if (faltan.isNotEmpty()) err.add("Faltan partes en el sobre: ${faltan.joinToString(", ")}.")
+        if (sobre["medicamentos"] != null && sobre.obj("medicamentos") == null) err.add("medicamentos: debe ser un objeto.")
         if (err.isNotEmpty()) return Revision(err, av, emptyList())
 
-        val partes = listOf(
+        val partes = listOfNotNull(
             parteRutina(sobre.obj("rutina")!!, rutinaActiva, ahoraIso),
             parteAlimentacion(sobre.obj("alimentacion")!!, alimentacionActiva, ahoraIso),
-            parteApoyo(sobre.obj("apoyo")!!, apoyoActivo, ahoraIso)
+            parteApoyo(sobre.obj("apoyo")!!, apoyoActivo, ahoraIso),
+            sobre.obj("medicamentos")?.let { parteMedicamentos(it, huellaMedicamentos, ahoraIso) }
         )
         return Revision(emptyList(), av, partes)
+    }
+
+    /** [activa]: huella de la sección importada antes (null si no hay o falta el catálogo en el celular). El catálogo lo guarda la actividad en un archivo. */
+    private fun parteMedicamentos(o: JsonObject, activa: String?, ahora: String): Parte {
+        val (s, err, av) = Medicamentos.revisarSeccion(o)
+        val cat = o.obj("catalogo")
+        val det = "catálogo ${cat?.txt("version") ?: "?"} · ${s?.registros ?: (cat?.get("medicamentos") as? kotlinx.serialization.json.JsonArray)?.size ?: 0} medicamentos"
+        return when {
+            s == null -> Parte("medicamentos", "Medicamentos (catálogo)", "error", err, av, emptyList(), det, o)
+            s.huella == activa -> Parte("medicamentos", "Medicamentos (catálogo)", "igual", emptyList(), emptyList(), emptyList(), det, o)
+            else -> Parte("medicamentos", "Medicamentos (catálogo)", "nueva", emptyList(), av,
+                listOf(Respaldo.Doc("config/medicamentos", Medicamentos.documentoActivo(s, ahora))), det, o)
+        }
     }
 
     private fun parteRutina(o: JsonObject, activa: JsonObject?, ahora: String): Parte {
