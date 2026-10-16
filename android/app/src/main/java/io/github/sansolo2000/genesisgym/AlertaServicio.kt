@@ -60,6 +60,7 @@ class AlertaServicio : Service() {
     }
 
     private val activas = LinkedHashMap<Int, String>()   // id de la notificación → tipo
+    private val notifs = HashMap<Int, android.app.Notification>()   // O-38: para pasar el primer plano a otra si se quita una
     private var idPrimerPlano: Int? = null
     private var notifPrimerPlano: android.app.Notification? = null
     private var tipoSonando: String? = null
@@ -80,7 +81,7 @@ class AlertaServicio : Service() {
         val fg = idPrimerPlano; val fgN = notifPrimerPlano
         if (fg == null || fgN == null) { startForeground(id, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK); idPrimerPlano = id; notifPrimerPlano = n }
         else { startForeground(fg, fgN, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK); getSystemService(NotificationManager::class.java).notify(id, n) }
-        activas[id] = t
+        activas[id] = t; notifs[id] = n
         if (Alertas.reemplaza(tipoSonando, t)) sonarTipo(t)
         return START_NOT_STICKY
     }
@@ -109,8 +110,27 @@ class AlertaServicio : Service() {
         val nm = getSystemService(NotificationManager::class.java)
         for ((id, t) in activas) if (!Alertas.esperaRespuesta(t)) nm.cancel(id)
         val quedaPrimerPlano = idPrimerPlano?.let { activas[it] }?.let { Alertas.esperaRespuesta(it) } == true
-        activas.clear()
+        activas.clear(); notifs.clear()
         detenerServicio(quitarNotificacion = !quedaPrimerPlano)
+    }
+
+    /**
+     * O-38 (Héctor, 16-oct): responder un medicamento quita solo su notificación. Si había otras alertas en el servicio,
+     * siguen; si sonaba la respondida, pasa a sonar la de mayor prioridad que quede.
+     */
+    fun quitarUna(id: Int) {
+        val nm = getSystemService(NotificationManager::class.java)
+        val t = activas.remove(id); notifs.remove(id)
+        if (t == null) { nm.cancel(id); return }
+        if (activas.isEmpty()) { callar(); nm.cancel(id); detenerServicio(quitarNotificacion = true); return }
+        if (id == idPrimerPlano) {
+            val otro = activas.keys.first(); val n = notifs[otro]
+            if (n != null) { startForeground(otro, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK); idPrimerPlano = otro; notifPrimerPlano = n }
+        }
+        nm.cancel(id)
+        val antes = tipoSonando
+        val sigue = Alertas.trasResponder(antes, t, activas.values)
+        if (sigue != antes) { if (sigue == null) callar() else sonarTipo(sigue) }
     }
 
     /** "Posponer" de una notificación: calla todo y quita solo esa notificación. */

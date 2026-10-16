@@ -365,8 +365,12 @@ object Medicamentos {
         val alertas: Boolean,
         val version: Int = 1, val vigenteDesde: String = "", val creadoEn: String = "",
         /** D-15: las versiones anteriores vigentes en los últimos días, para que una toma que sonaba al editar siga su cadena. */
-        val anteriores: List<Tratamiento> = emptyList()
+        val anteriores: List<Tratamiento> = emptyList(),
+        /** O-40 (Héctor, 16-oct): archivado = oculto y sin alertas; el historial se conserva. */
+        val archivado: Boolean = false
     ) {
+        /** Genera alertas: con alertas activas y sin archivar. */
+        val avisa: Boolean get() = alertas && !archivado
         val fin: LocalDate? get() = fechaFin(inicio, duracion)
         fun vencido(hoy: LocalDate): Boolean = fin?.let { it < hoy } ?: false
         val dosisTexto: String get() = "${numeroTexto(cantidad)} $unidad"
@@ -565,7 +569,7 @@ object Medicamentos {
      * Cada toma cuenta según la versión que regía a su hora; si el tratamiento ya no tiene alertas, no abre cadenas.
      */
     fun cadenasAbiertas(t: Tratamiento, ahora: ZonedDateTime, registros: Map<String, List<Registro>>): List<Pair<Ocurrencia, Long>> {
-        if (!t.alertas || t.frecuencia.segunNecesidad) return emptyList()
+        if (!t.avisa || t.frecuencia.segunNecesidad) return emptyList()
         val ahoraMs = ahora.toInstant().toEpochMilli()
         val r = mutableListOf<Pair<Ocurrencia, Long>>()
         for (oc in tomasPorVersion(t, ahora.minusMinutes(VENTANA_MIN), ahora))
@@ -580,7 +584,7 @@ object Medicamentos {
 
     /** Tomas con alertas de los últimos [dias] días que cerraron sus 2 horas sin ninguna respuesta (si el celular estuvo apagado, por ejemplo). */
     fun cerradasSinRespuesta(t: Tratamiento, ahora: ZonedDateTime, conRegistro: Set<String>, dias: Long = 3): List<Ocurrencia> {
-        if (!t.alertas) return emptyList()
+        if (!t.avisa) return emptyList()
         val hasta = ahora.minusMinutes(VENTANA_MIN)
         val desde = ahora.minusDays(dias)
         if (!hasta.isAfter(desde)) return emptyList()
@@ -634,6 +638,7 @@ object Medicamentos {
         "creado_en" to JsonPrimitive(t.creadoEn),
         "versiones_anteriores" to (if (t.anteriores.isEmpty()) null else JsonArray(t.anteriores.map { tratamientoAJson(it.copy(anteriores = emptyList())) }))
     ).let { o -> if (t.anteriores.isEmpty()) JsonObject(o - "versiones_anteriores") else o }
+        .let { o -> if (t.archivado) JsonObject(o + ("archivado" to JsonPrimitive(true))) else o }
 
     fun tratamientoDesdeJson(o: JsonObject?): Tratamiento? = runCatching {
         val m = medDesdeJson(o?.get("medicamento"))!!
@@ -642,7 +647,8 @@ object Medicamentos {
             frecuenciaDesdeJson(o.o("frecuencia"))!!, LocalDate.parse(o.s("inicio")!!),
             Duracion(d.s("tipo") ?: DUR_INDEFINIDA, entero(d, "dias"), d.s("fin")?.let { LocalDate.parse(it) }),
             o.b("alertas") ?: true, entero(o, "version") ?: 1, o.s("vigente_desde") ?: "", o.s("creado_en") ?: "",
-            o.a("versiones_anteriores")?.mapNotNull { tratamientoDesdeJson(it as? JsonObject) } ?: emptyList())
+            o.a("versiones_anteriores")?.mapNotNull { tratamientoDesdeJson(it as? JsonObject) } ?: emptyList(),
+            o.b("archivado") ?: false)
     }.getOrNull()
 
     /** Días que se guardan las versiones anteriores (los mismos que revisa el cierre "sin respuesta"). */
@@ -661,6 +667,9 @@ object Medicamentos {
         val vigentes = previas.filterIndexed { i, _ -> (previas.getOrNull(i + 1)?.let { instante(it.vigenteDesde) } ?: ahora).isAfter(limite) }
         return t.copy(id = anterior.id, version = anterior.version + 1, vigenteDesde = iso, creadoEn = anterior.creadoEn, anteriores = vigentes)
     }
+
+    /** O-40: un tratamiento se puede borrar solo si no tiene ningún registro en el historial; si tiene, se archiva. */
+    fun puedeBorrar(t: Tratamiento, registros: List<Registro>): Boolean = registros.none { it.tratamientoId == t.id }
 
     fun nuevoId(ahora: Instant): String = ahora.toEpochMilli().toString(36) + (100..999).random().toString(36)
 

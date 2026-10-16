@@ -106,7 +106,7 @@ object AvisosMedicamentos {
         val ahoraMs = ahora.toInstant().toEpochMilli()
         val r = LinkedHashMap<String, Programada>()
         for (t in trats) {
-            if (!t.alertas) continue
+            if (!t.avisa) continue
             val propios = regs.filterKeys { it.startsWith("${t.id}_") }
             for ((oc, inicio) in Medicamentos.cadenasAbiertas(t, ahora, propios)) {
                 val p = Medicamentos.paso(inicio, ahoraMs)
@@ -168,9 +168,18 @@ object AvisosMedicamentos {
         return true
     }
 
+    /** O-38 (Héctor, 16-oct): quita solo la alerta de esta toma; otra alerta que suene a la vez sigue sonando. */
     fun quitarNotificacion(c: Context, tratamientoId: String, local: LocalDateTime) {
         val id = idNotificacion(tratamientoId, local)
-        AlertaServicio.actual?.posponer(id) ?: c.getSystemService(NotificationManager::class.java).cancel(id)
+        AlertaServicio.actual?.quitarUna(id) ?: c.getSystemService(NotificationManager::class.java).cancel(id)
+    }
+
+    /** O-40: al archivar o borrar, quita las notificaciones de sus tomas programadas o en curso. */
+    fun quitarNotificaciones(c: Context, tratamientoId: String) {
+        for (k in prefs(c).getStringSet("programadas", emptySet()) ?: emptySet()) {
+            val (id, l) = k.split("|", limit = 2)
+            if (id == tratamientoId) runCatching { quitarNotificacion(c, id, LocalDateTime.parse(l)) }
+        }
     }
 
     // ---------- notificación ----------
@@ -222,7 +231,7 @@ class MedicamentoReceiver : BroadcastReceiver() {
         try {
             val base = BaseLocal(c)
             val t = Medicamentos.tratamientoDesdeJson(base.get(Medicamentos.rutaTratamiento(tid)))
-            if (t == null || !t.alertas) { AvisosMedicamentos.quitarNotificacion(c, tid, local); r.finish(); return }
+            if (t == null || !t.avisa) { AvisosMedicamentos.quitarNotificacion(c, tid, local); r.finish(); return }
             val propios = AvisosMedicamentos.registros(base).filter { it.tratamientoId == tid && it.programada == local }
             val ahora = System.currentTimeMillis()
             val inicio = Medicamentos.inicioCadena(ZonedDateTime.of(local, AvisosMedicamentos.zona()).toInstant().toEpochMilli(), propios)

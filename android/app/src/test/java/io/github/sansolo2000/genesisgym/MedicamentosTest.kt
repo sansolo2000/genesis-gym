@@ -354,6 +354,33 @@ class MedicamentosTest {
         assertTrue(M.cadenasAbiertas(t, en("2030-03-05T11:20"), regs).isEmpty())
     }
 
+    /** O-40 (Héctor, 16-oct): borrar solo sin historial; archivar lo oculta, no avisa y conserva el historial. */
+    @Test fun archivarYBorrar() {
+        val t = trat(veces("09:00"), inicio = "2030-03-05")
+        val oc = M.ocurrencias(t, en("2030-03-05T00:00"), en("2030-03-05T23:59"), SCL).single()
+        val r = M.registroDesde(M.rutaRegistro(t.id, oc.local, M.CONFIRMADA, 1), M.registro(t, oc, M.CONFIRMADA, oc.cuando.toInstant(), null, "alerta"))!!
+        assertTrue(M.puedeBorrar(t, emptyList()))
+        assertTrue(M.puedeBorrar(t, listOf(r.copy(tratamientoId = "otro"))))
+        assertFalse(M.puedeBorrar(t, listOf(r)))
+        val a = t.copy(archivado = true)
+        assertFalse(a.avisa)
+        assertTrue(M.cadenasAbiertas(a, en("2030-03-05T09:30"), emptyMap()).isEmpty())
+        assertTrue(M.cerradasSinRespuesta(a, en("2030-03-05T12:00"), emptySet()).isEmpty())
+        assertTrue(AvisosMedicamentos.calcular(listOf(a), emptyMap(), en("2030-03-05T08:00")).isEmpty())
+        assertEquals(a, M.tratamientoDesdeJson(Json.parseToJsonElement(JsJson.stringify(M.tratamientoAJson(a))).jsonObject))
+        assertNull(M.tratamientoAJson(t)["archivado"])   // sin archivar, el documento no cambia
+    }
+
+    /** O-38 (Héctor, 16-oct): responder un medicamento calla solo su alerta. */
+    @Test fun responderCallaSoloSuAlerta() {
+        val med = Alertas.MEDICAMENTO; val com = Recordatorios.COMIDA; val ent = Recordatorios.ENTRENAMIENTO
+        assertEquals(com, Alertas.trasResponder(med, med, listOf(com)))            // sonaba el medicamento: pasa a la comida
+        assertEquals(ent, Alertas.trasResponder(med, med, listOf(com, ent)))       // la de mayor prioridad que quede
+        assertEquals(com, Alertas.trasResponder(com, med, listOf(com)))            // sonaba otra: sigue
+        assertEquals(med, Alertas.trasResponder(med, med, listOf(med)))            // queda otro medicamento sonando
+        assertNull(Alertas.trasResponder(med, med, emptyList()))
+    }
+
     @Test fun elRegistroGuardaLoQuePideElRequerimiento() {
         val t = trat(M.Frecuencia(M.EVENTOS, eventos = listOf(M.Toma("desayuno", "07:00"))))
         val oc = M.ocurrencias(t, en("2030-03-05T00:00"), en("2030-03-05T23:59"), SCL).single()

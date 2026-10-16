@@ -226,6 +226,31 @@ class Medi(private val c: Context, private val base: BaseLocal, private val alCa
         mensaje = "ok" to "El tratamiento termina el $fin. No se generan más alertas después de esa fecha."
         cargar(); alCambiar()
     }
+
+    // ---------- O-40 (Héctor, 16-oct): archivar y borrar ----------
+    var confirmar by mutableStateOf<Pair<String, String>?>(null)   // (tratamiento, "archivar" | "borrar")
+    var verArchivados by mutableStateOf(false)
+
+    /** Lo oculta y deja de avisar; el historial se conserva. */
+    fun archivar(t: Medicamentos.Tratamiento) {
+        confirmar = null
+        base.put(Medicamentos.rutaTratamiento(t.id), Medicamentos.tratamientoAJson(t.copy(archivado = true)))
+        AvisosMedicamentos.quitarNotificaciones(c, t.id)
+        runCatching { AvisosMedicamentos.reprogramar(c) }
+        mensaje = "ok" to "Tratamiento archivado: ya no avisa y su historial se conserva."
+        cargar(); alCambiar()
+    }
+
+    /** Solo sin historial (si tiene, se archiva). */
+    fun borrar(t: Medicamentos.Tratamiento) {
+        confirmar = null
+        if (!Medicamentos.puedeBorrar(t, AvisosMedicamentos.registros(base))) { mensaje = "err" to "Tiene historial: no se puede borrar. Puedes archivarlo."; return }
+        base.borrar(Medicamentos.rutaTratamiento(t.id))
+        AvisosMedicamentos.quitarNotificaciones(c, t.id)
+        runCatching { AvisosMedicamentos.reprogramar(c) }
+        mensaje = "ok" to "Tratamiento borrado."
+        cargar(); alCambiar()
+    }
 }
 
 @Composable private fun Titulo(t: String) = Text(t, style = MaterialTheme.typography.titleMedium)
@@ -286,7 +311,9 @@ private fun Lista(m: Medi) {
     }
 
     Opciones(listOf<String?>(null) + Medicamentos.PERSONAS.keys, { it == m.filtro }, { it?.let { p -> Medicamentos.PERSONAS[p] } ?: "Las dos" }) { m.filtro = it }
-    val lista = m.tratamientos.filter { m.filtro == null || it.persona == m.filtro }
+    val todos = m.tratamientos.filter { m.filtro == null || it.persona == m.filtro }
+    val lista = todos.filter { !it.archivado }
+    val archivados = todos.filter { it.archivado }
     val hoy = m.hoy(); val ahora = m.ahora()
 
     HorizontalDivider(); Titulo("Hoy")
@@ -325,8 +352,29 @@ private fun Lista(m: Medi) {
                     OutlinedButton(onClick = { m.historialDe = tr.id; m.vista = "historial" }) { Text("Historial") }
                     if (!vencido) OutlinedButton(onClick = { m.registrarAhora(tr) }) { Text("Registrar toma ahora") }
                     if (!vencido) OutlinedButton(onClick = { m.terminarHoy(tr) }) { Text("Terminar hoy") }
+                    OutlinedButton(onClick = { m.confirmar = tr.id to "archivar" }) { Text("Archivar") }
+                    if (Medicamentos.puedeBorrar(tr, m.registros)) OutlinedButton(onClick = { m.confirmar = tr.id to "borrar" }) { Text("Borrar") }
+                }
+                if (m.confirmar?.first == tr.id) {
+                    val borrar = m.confirmar?.second == "borrar"
+                    Nota(if (borrar) "¿Borrar este tratamiento? No tiene historial y no se puede deshacer."
+                        else "¿Archivar este tratamiento? Deja de avisar y se oculta de la lista; su historial se conserva.", borrar)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { if (borrar) m.borrar(tr) else m.archivar(tr) }) { Text(if (borrar) "Sí, borrar" else "Sí, archivar") }
+                        OutlinedButton(onClick = { m.confirmar = null }) { Text("Cancelar") }
+                    }
                 }
             }
+        }
+    }
+    // O-40: los archivados se ven aparte, con su historial.
+    if (archivados.isNotEmpty()) {
+        HorizontalDivider()
+        TextButton(onClick = { m.verArchivados = !m.verArchivados }) { Text((if (m.verArchivados) "Ocultar" else "Ver") + " archivados (${archivados.size})") }
+        if (m.verArchivados) for (tr in archivados) Column(Modifier.fillMaxWidth()) {
+            Text(tr.med.nombre, fontWeight = FontWeight.SemiBold)
+            Gris("${Medicamentos.PERSONAS[tr.persona]} · ${tr.dosisTexto} · ${Medicamentos.resumen(tr.frecuencia, cfg)} · archivado")
+            TextButton(onClick = { m.historialDe = tr.id; m.vista = "historial" }) { Text("Historial") }
         }
     }
 }

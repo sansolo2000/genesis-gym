@@ -49,6 +49,13 @@ object Alertas {
     /** Si [nuevo] llega mientras suena [actual], ¿pasa a sonar [nuevo]? */
     fun reemplaza(actual: String?, nuevo: String): Boolean = actual == null || ganador(listOf(actual, nuevo)) == nuevo && nuevo != actual
 
+    /**
+     * O-38 (Héctor, 16-oct): al responder una alerta, qué queda sonando. Si sonaba otra, sigue; si sonaba la respondida y no
+     * quedan de su tipo, suena la de mayor prioridad entre las que quedan (null si no queda ninguna).
+     */
+    fun trasResponder(sonando: String?, respondida: String, quedan: Collection<String>): String? =
+        if (sonando != respondida || respondida in quedan) sonando else ganador(quedan)
+
     fun posponerHasta(ahoraMs: Long, minutos: Int): Long = ahoraMs + minutos * 60_000L
 
     // ---------- silencio y No molestar ----------
