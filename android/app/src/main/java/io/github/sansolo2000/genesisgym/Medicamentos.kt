@@ -363,7 +363,9 @@ object Medicamentos {
         val cantidad: Double, val unidad: String,
         val frecuencia: Frecuencia, val inicio: LocalDate, val duracion: Duracion,
         val alertas: Boolean,
-        val version: Int = 1, val vigenteDesde: String = "", val creadoEn: String = ""
+        val version: Int = 1, val vigenteDesde: String = "", val creadoEn: String = "",
+        /** D-15: las versiones anteriores vigentes en los últimos días, para que una toma que sonaba al editar siga su cadena. */
+        val anteriores: List<Tratamiento> = emptyList()
     ) {
         val fin: LocalDate? get() = fechaFin(inicio, duracion)
         fun vencido(hoy: LocalDate): Boolean = fin?.let { it < hoy } ?: false
@@ -529,21 +531,44 @@ object Medicamentos {
         return if (u.estado == POSTERGADA) u.postergadaHasta?.toEpochMilli() else null
     }
 
-    private fun desdeVigente(t: Tratamiento, desde: ZonedDateTime): ZonedDateTime {
-        val v = runCatching { Instant.parse(t.vigenteDesde) }.getOrNull() ?: return desde
-        return if (v.isAfter(desde.toInstant())) v.atZone(desde.zone) else desde
+    private fun instante(iso: String): Instant? = runCatching { Instant.parse(iso) }.getOrNull()
+
+    /** Cada versión con su vigencia [desde, hasta): las anteriores guardadas y la actual (sin fin). */
+    fun tramos(t: Tratamiento): List<Triple<Tratamiento, Instant?, Instant?>> {
+        val l = t.anteriores + t.copy(anteriores = emptyList())
+        return l.mapIndexed { i, v -> Triple(v, instante(v.vigenteDesde), l.getOrNull(i + 1)?.let { instante(it.vigenteDesde) }) }
+    }
+
+    /** La versión que regía cuando se programó una toma (para la copia del historial). */
+    fun versionDe(t: Tratamiento, cuando: Instant): Tratamiento =
+        tramos(t).lastOrNull { (_, d, h) -> (d == null || !cuando.isBefore(d)) && (h == null || cuando.isBefore(h)) }?.first ?: t.copy(anteriores = emptyList())
+
+    /**
+     * Tomas con instante en (desde, hasta], cada una según la versión que regía a esa hora (con alertas).
+     * D-15: así una toma de la versión anterior que ya estaba sonando sigue su cadena; una hora nueva no genera tomas hacia atrás.
+     */
+    private fun tomasPorVersion(t: Tratamiento, desde: ZonedDateTime, hasta: ZonedDateTime): List<Ocurrencia> {
+        val r = LinkedHashMap<LocalDateTime, Ocurrencia>()
+        for ((v, d, h) in tramos(t)) {
+            if (!v.alertas) continue
+            val a = if (d != null && d.isAfter(desde.toInstant())) d.atZone(desde.zone) else desde
+            val b = if (h != null && !h.isAfter(hasta.toInstant())) h.minusMillis(1).atZone(hasta.zone) else hasta
+            if (!b.isAfter(a)) continue
+            for (oc in ocurrencias(v, a, b, desde.zone)) r.putIfAbsent(oc.local, oc)
+        }
+        return r.values.sortedBy { it.cuando.toInstant() }
     }
 
     /**
      * Tomas cuya cadena de alertas sigue abierta en [ahora], con el inicio de su cadena: sin ninguna respuesta dentro de
      * sus 2 horas, o con una postergación que todavía no cierra. [registros]: los de este tratamiento, por clave.
-     * Solo cuentan las tomas de la versión vigente; un tratamiento sin alertas o vencido no abre cadenas nuevas.
+     * Cada toma cuenta según la versión que regía a su hora; si el tratamiento ya no tiene alertas, no abre cadenas.
      */
     fun cadenasAbiertas(t: Tratamiento, ahora: ZonedDateTime, registros: Map<String, List<Registro>>): List<Pair<Ocurrencia, Long>> {
         if (!t.alertas || t.frecuencia.segunNecesidad) return emptyList()
         val ahoraMs = ahora.toInstant().toEpochMilli()
         val r = mutableListOf<Pair<Ocurrencia, Long>>()
-        for (oc in ocurrencias(t, desdeVigente(t, ahora.minusMinutes(VENTANA_MIN)), ahora, ahora.zone))
+        for (oc in tomasPorVersion(t, ahora.minusMinutes(VENTANA_MIN), ahora))
             if (registros[clave(t.id, oc.local)].isNullOrEmpty()) r.add(oc to oc.cuando.toInstant().toEpochMilli())
         for (l in registros.values) {
             val u = ultima(l) ?: continue
@@ -557,10 +582,16 @@ object Medicamentos {
     fun cerradasSinRespuesta(t: Tratamiento, ahora: ZonedDateTime, conRegistro: Set<String>, dias: Long = 3): List<Ocurrencia> {
         if (!t.alertas) return emptyList()
         val hasta = ahora.minusMinutes(VENTANA_MIN)
-        val desde = desdeVigente(t, ahora.minusDays(dias))
+        val desde = ahora.minusDays(dias)
         if (!hasta.isAfter(desde)) return emptyList()
-        return ocurrencias(t, desde, hasta, ahora.zone).filter { clave(t.id, it.local) !in conRegistro }
+        return tomasPorVersion(t, desde, hasta).filter { clave(t.id, it.local) !in conRegistro }
     }
+
+    /** D-16: tomas cuya última respuesta es "postergada" y cuya ventana de 2 horas ya cerró (por ejemplo, con el celular apagado). */
+    fun postergadasVencidas(registros: Map<String, List<Registro>>, ahoraMs: Long): List<Registro> =
+        registros.values.mapNotNull { ultima(it) }.filter { u ->
+            u.estado == POSTERGADA && u.postergadaHasta != null && u.postergadaHasta.toEpochMilli() + VENTANA_MIN * 60_000L <= ahoraMs
+        }
 
     // ---------- JSON del tratamiento (documento medicamentos/t_<id>) ----------
     fun frecuenciaAJson(f: Frecuencia): JsonObject {
@@ -600,8 +631,9 @@ object Medicamentos {
         "alertas" to JsonPrimitive(t.alertas),
         "version" to JsonPrimitive(t.version),
         "vigente_desde" to JsonPrimitive(t.vigenteDesde),
-        "creado_en" to JsonPrimitive(t.creadoEn)
-    )
+        "creado_en" to JsonPrimitive(t.creadoEn),
+        "versiones_anteriores" to (if (t.anteriores.isEmpty()) null else JsonArray(t.anteriores.map { tratamientoAJson(it.copy(anteriores = emptyList())) }))
+    ).let { o -> if (t.anteriores.isEmpty()) JsonObject(o - "versiones_anteriores") else o }
 
     fun tratamientoDesdeJson(o: JsonObject?): Tratamiento? = runCatching {
         val m = medDesdeJson(o?.get("medicamento"))!!
@@ -609,17 +641,25 @@ object Medicamentos {
         Tratamiento(o.s("id")!!, o.s("persona")!!, m, o.o("dosis").n("cantidad")!!, o.o("dosis").s("unidad")!!,
             frecuenciaDesdeJson(o.o("frecuencia"))!!, LocalDate.parse(o.s("inicio")!!),
             Duracion(d.s("tipo") ?: DUR_INDEFINIDA, entero(d, "dias"), d.s("fin")?.let { LocalDate.parse(it) }),
-            o.b("alertas") ?: true, entero(o, "version") ?: 1, o.s("vigente_desde") ?: "", o.s("creado_en") ?: "")
+            o.b("alertas") ?: true, entero(o, "version") ?: 1, o.s("vigente_desde") ?: "", o.s("creado_en") ?: "",
+            o.a("versiones_anteriores")?.mapNotNull { tratamientoDesdeJson(it as? JsonObject) } ?: emptyList())
     }.getOrNull()
+
+    /** Días que se guardan las versiones anteriores (los mismos que revisa el cierre "sin respuesta"). */
+    const val DIAS_VERSIONES = 3L
 
     /**
      * Guardar (crear o editar). Una edición sube la versión y rige desde [ahora] para las tomas futuras;
      * el historial no se toca (cada registro guarda su propia copia de los datos).
+     * D-15: la versión anterior queda en [Tratamiento.anteriores] mientras haya regido en los últimos días.
      */
     fun guardar(t: Tratamiento, anterior: Tratamiento?, ahora: Instant): Tratamiento {
         val iso = isoUtc(ahora)
-        return if (anterior == null) t.copy(version = 1, vigenteDesde = iso, creadoEn = iso)
-        else t.copy(id = anterior.id, version = anterior.version + 1, vigenteDesde = iso, creadoEn = anterior.creadoEn)
+        if (anterior == null) return t.copy(version = 1, vigenteDesde = iso, creadoEn = iso, anteriores = emptyList())
+        val previas = anterior.anteriores + anterior.copy(anteriores = emptyList())
+        val limite = ahora.minusSeconds(DIAS_VERSIONES * 86_400)
+        val vigentes = previas.filterIndexed { i, _ -> (previas.getOrNull(i + 1)?.let { instante(it.vigenteDesde) } ?: ahora).isAfter(limite) }
+        return t.copy(id = anterior.id, version = anterior.version + 1, vigenteDesde = iso, creadoEn = anterior.creadoEn, anteriores = vigentes)
     }
 
     fun nuevoId(ahora: Instant): String = ahora.toEpochMilli().toString(36) + (100..999).random().toString(36)

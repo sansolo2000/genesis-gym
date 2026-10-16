@@ -127,9 +127,16 @@ object AvisosMedicamentos {
         val trats = tratamientos(base)
         var regs = porClave(registros(base))
         val nuevos = mutableListOf<Respaldo.Doc>()
-        for (t in trats) for (oc in Medicamentos.cerradasSinRespuesta(t, ahora, regs.keys)) {
+        fun cerrar(t: Medicamentos.Tratamiento, oc: Medicamentos.Ocurrencia) {
             val ruta = Medicamentos.rutaRegistro(t.id, oc.local, Medicamentos.SIN_RESPUESTA, 0)
-            if (base.get(ruta) == null) nuevos.add(Respaldo.Doc(ruta, Medicamentos.registro(t, oc, Medicamentos.SIN_RESPUESTA, ahora.toInstant(), null, "cierre")))
+            if (base.get(ruta) == null && nuevos.none { it.ruta == ruta })
+                nuevos.add(Respaldo.Doc(ruta, Medicamentos.registro(Medicamentos.versionDe(t, oc.cuando.toInstant()), oc, Medicamentos.SIN_RESPUESTA, ahora.toInstant(), null, "cierre")))
+        }
+        for (t in trats) for (oc in Medicamentos.cerradasSinRespuesta(t, ahora, regs.keys)) cerrar(t, oc)
+        // D-16: una postergación cuya ventana cerró con el celular apagado queda "sin respuesta".
+        for (u in Medicamentos.postergadasVencidas(regs, ahora.toInstant().toEpochMilli())) {
+            val t = trats.firstOrNull { it.id == u.tratamientoId } ?: continue
+            cerrar(t, Medicamentos.Ocurrencia(u.programada, ZonedDateTime.of(u.programada, ahora.zone), u.evento))
         }
         if (nuevos.isNotEmpty()) { base.ponerVarios(nuevos); regs = porClave(registros(base)) }
         val lista = calcular(trats, regs, ahora)
@@ -154,7 +161,8 @@ object AvisosMedicamentos {
         val t = Medicamentos.tratamientoDesdeJson(base.get(Medicamentos.rutaTratamiento(tratamientoId))) ?: return false
         val ahora = Instant.now()
         val oc = Medicamentos.Ocurrencia(local, ZonedDateTime.of(local, zona()), evento)
-        base.put(Medicamentos.rutaRegistro(t.id, local, estado, ahora.toEpochMilli()), Medicamentos.registro(t, oc, estado, ahora, postergacionMin, origen))
+        base.put(Medicamentos.rutaRegistro(t.id, local, estado, ahora.toEpochMilli()),
+            Medicamentos.registro(Medicamentos.versionDe(t, oc.cuando.toInstant()), oc, estado, ahora, postergacionMin, origen))
         quitarNotificacion(c, tratamientoId, local)
         runCatching { reprogramar(c) }
         return true
@@ -222,7 +230,8 @@ class MedicamentoReceiver : BroadcastReceiver() {
             val p = Medicamentos.paso(inicio, ahora)
             if (p.cerrar) {
                 val ruta = Medicamentos.rutaRegistro(tid, local, Medicamentos.SIN_RESPUESTA, 0)
-                if (base.get(ruta) == null) base.put(ruta, Medicamentos.registro(t, Medicamentos.Ocurrencia(local, ZonedDateTime.of(local, AvisosMedicamentos.zona()), evento),
+                val oc = Medicamentos.Ocurrencia(local, ZonedDateTime.of(local, AvisosMedicamentos.zona()), evento)
+                if (base.get(ruta) == null) base.put(ruta, Medicamentos.registro(Medicamentos.versionDe(t, oc.cuando.toInstant()), oc,
                     Medicamentos.SIN_RESPUESTA, Instant.ofEpochMilli(ahora), null, "cierre"))
                 AvisosMedicamentos.quitarNotificacion(c, tid, local)
                 runCatching { AvisosMedicamentos.reprogramar(c) }

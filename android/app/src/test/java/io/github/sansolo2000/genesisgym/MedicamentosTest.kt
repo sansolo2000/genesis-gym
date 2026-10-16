@@ -313,12 +313,45 @@ class MedicamentosTest {
         assertEquals(1, snap["version"]!!.jsonPrimitive.content.toInt())
         assertEquals("1", snap["dosis"]!!.jsonObject["cantidad"]!!.jsonPrimitive.content)
         assertEquals(listOf("09:00"), snap["frecuencia"]!!.jsonObject["horarios"]!!.jsonArray.map { it.jsonPrimitive.content })
-        // La versión nueva rige solo hacia adelante: no genera tomas antes de su vigencia.
+        // La versión nueva rige solo hacia adelante: sus horas (08:00) no generan tomas antes de su vigencia.
         assertTrue(M.cadenasAbiertas(v2, en("2030-03-06T09:05"), emptyMap()).isEmpty())
-        assertTrue(M.cerradasSinRespuesta(v2, en("2030-03-06T12:30"), emptySet()).isEmpty())
+        assertTrue(M.cerradasSinRespuesta(v2, en("2030-03-06T12:30"), emptySet()).none { it.local.toLocalDate() == LocalDate.parse("2030-03-06") })
         // Cada respuesta es un documento distinto.
         assertFalse(M.rutaRegistro(v1.id, oc.local, M.POSTERGADA, 1) == M.rutaRegistro(v1.id, oc.local, M.CONFIRMADA, 2))
         assertTrue(Regex("^[A-Za-z0-9_\\-.~:@+]{1,200}/[A-Za-z0-9_\\-.~:@+]{1,200}$").matches(M.rutaRegistro(v1.id, oc.local, M.POSTERGADA, 1)))
+    }
+
+    /** D-15 (QA): editar mientras una toma está en sus 2 h sin respuesta no corta su cadena, aunque cambie la hora. */
+    @Test fun editarNoCortaLaCadenaQueEstaSonando() {
+        val v1 = M.guardar(trat(veces("09:00"), inicio = "2030-03-05"), null, Instant.parse("2030-03-01T12:00:00Z"))
+        val v2 = M.guardar(v1.copy(cantidad = 2.0, frecuencia = veces("10:00")), v1, en("2030-03-05T09:05").toInstant())
+        assertEquals(listOf(1), v2.anteriores.map { it.version })
+        val abiertas = M.cadenasAbiertas(v2, en("2030-03-05T09:06"), emptyMap())
+        assertEquals(listOf(LocalDateTime.parse("2030-03-05T09:00")), abiertas.map { it.first.local })
+        assertEquals(1, M.versionDe(v2, abiertas.single().first.cuando.toInstant()).version)   // el historial copia la versión 1
+        assertEquals(2, M.versionDe(v2, en("2030-03-05T10:00").toInstant()).version)
+        assertEquals(listOf("2030-03-05T09:00"), M.cerradasSinRespuesta(v2, en("2030-03-05T11:01"), emptySet()).map { it.local.toString() })
+        // "Terminar hoy" (fin = hoy) tampoco la corta.
+        val fin = M.guardar(v1.copy(duracion = M.Duracion(M.DUR_FECHA, fin = LocalDate.parse("2030-03-05"))), v1, en("2030-03-05T09:05").toInstant())
+        assertEquals(1, M.cadenasAbiertas(fin, en("2030-03-05T09:30"), emptyMap()).size)
+        // Sin alertas en la versión nueva, se corta.
+        assertTrue(M.cadenasAbiertas(v1.copy(alertas = false).let { M.guardar(it, v1, en("2030-03-05T09:05").toInstant()) }, en("2030-03-05T09:30"), emptyMap()).isEmpty())
+        // Las versiones anteriores se guardan en el JSON y se olvidan después de unos días.
+        assertEquals(v2, M.tratamientoDesdeJson(Json.parseToJsonElement(JsJson.stringify(M.tratamientoAJson(v2))).jsonObject))
+        val v3 = M.guardar(v2, v2, en("2030-03-12T09:00").toInstant())
+        assertEquals(listOf(2), v3.anteriores.map { it.version })
+    }
+
+    /** D-16 (QA): una postergación cuya ventana cierra con el celular apagado se cierra como "sin respuesta". */
+    @Test fun postergacionVencidaSeCierra() {
+        val t = trat(veces("09:00"), inicio = "2030-03-05")
+        val oc = M.ocurrencias(t, en("2030-03-05T00:00"), en("2030-03-05T23:59"), SCL).single()
+        val r = en("2030-03-05T09:05").toInstant()
+        val pos = M.registroDesde(M.rutaRegistro(t.id, oc.local, M.POSTERGADA, r.toEpochMilli()), M.registro(t, oc, M.POSTERGADA, r, 15, "alerta"))!!
+        val regs = mapOf(M.clave(t.id, oc.local) to listOf(pos))
+        assertTrue(M.postergadasVencidas(regs, en("2030-03-05T11:19").toInstant().toEpochMilli()).isEmpty())   // aún dentro de 09:20 + 2 h
+        assertEquals(listOf(pos), M.postergadasVencidas(regs, en("2030-03-05T11:20").toInstant().toEpochMilli()))
+        assertTrue(M.cadenasAbiertas(t, en("2030-03-05T11:20"), regs).isEmpty())
     }
 
     @Test fun elRegistroGuardaLoQuePideElRequerimiento() {
