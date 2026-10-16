@@ -154,7 +154,10 @@ object AvisosMedicamentos {
         val ahoraSet = lista.map { "${it.tratamientoId}|${it.local}" }.toSet()
         for (k in prefs(c).getStringSet("programadas", emptySet()) ?: emptySet()) if (k !in ahoraSet) {
             val (id, l) = k.split("|", limit = 2)
-            runCatching { am.cancel(pendiente(c, intent(c, id, LocalDateTime.parse(l), null))) }
+            val local = LocalDateTime.parse(l)
+            runCatching { am.cancel(pendiente(c, intent(c, id, local, null))) }
+            // O-41: una toma que ya sonaba y dejó de corresponder (se movió de hora, se archivó…) se calla y se quita.
+            if (!ZonedDateTime.of(local, ahora.zone).isAfter(ahora)) runCatching { quitarNotificacion(c, id, local) }
         }
         for (p in lista) alarma(c, p.ms, intent(c, p.tratamientoId, p.local, p.evento))
         prefs(c).edit().putStringSet("programadas", ahoraSet).apply()

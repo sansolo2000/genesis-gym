@@ -622,15 +622,25 @@ object Medicamentos {
      */
     private fun tomasPorVersion(t: Tratamiento, desde: ZonedDateTime, hasta: ZonedDateTime): List<Ocurrencia> {
         val r = LinkedHashMap<LocalDateTime, Ocurrencia>()
+        val actual = t.copy(anteriores = emptyList())
         for ((v, d, h) in tramos(t)) {
             if (!v.alertas) continue
             val a = if (d != null && d.isAfter(desde.toInstant())) d.atZone(desde.zone) else desde
             val b = if (h != null && !h.isAfter(hasta.toInstant())) h.minusMillis(1).atZone(hasta.zone) else hasta
             if (!b.isAfter(a)) continue
-            for (oc in ocurrencias(v, a, b, desde.zone)) if (!enSuspension(t, oc.cuando.toInstant())) r.putIfAbsent(oc.local, oc)
+            for (oc in ocurrencias(v, a, b, desde.zone)) {
+                if (enSuspension(t, oc.cuando.toInstant())) continue
+                // O-41 (Héctor, 16-oct): si la versión nueva ya no tiene esa hora, la toma "se mueve" a la hora nueva y deja de sonar.
+                if (h != null && !sigueEnLaActual(actual, oc)) continue
+                r.putIfAbsent(oc.local, oc)
+            }
         }
         return r.values.sortedBy { it.cuando.toInstant() }
     }
+
+    /** ¿La versión actual tiene una toma a esa misma hora local? (misma toma, distinta versión: D-15). */
+    private fun sigueEnLaActual(actual: Tratamiento, oc: Ocurrencia): Boolean =
+        ocurrencias(actual, oc.cuando.minusMinutes(1), oc.cuando, oc.cuando.zone).any { it.local == oc.local }
 
     /**
      * Tomas cuya cadena de alertas sigue abierta en [ahora], con el inicio de su cadena: sin ninguna respuesta dentro de

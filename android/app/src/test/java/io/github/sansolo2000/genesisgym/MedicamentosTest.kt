@@ -321,15 +321,15 @@ class MedicamentosTest {
         assertTrue(Regex("^[A-Za-z0-9_\\-.~:@+]{1,200}/[A-Za-z0-9_\\-.~:@+]{1,200}$").matches(M.rutaRegistro(v1.id, oc.local, M.POSTERGADA, 1)))
     }
 
-    /** D-15 (QA): editar mientras una toma está en sus 2 h sin respuesta no corta su cadena, aunque cambie la hora. */
+    /** D-15 (QA): editar mientras una toma está en sus 2 h sin respuesta no corta su cadena si la hora sigue igual. */
     @Test fun editarNoCortaLaCadenaQueEstaSonando() {
         val v1 = M.guardar(trat(veces("09:00"), inicio = "2030-03-05"), null, Instant.parse("2030-03-01T12:00:00Z"))
-        val v2 = M.guardar(v1.copy(cantidad = 2.0, frecuencia = veces("10:00")), v1, en("2030-03-05T09:05").toInstant())
+        val v2 = M.guardar(v1.copy(cantidad = 2.0), v1, en("2030-03-05T09:05").toInstant())
         assertEquals(listOf(1), v2.anteriores.map { it.version })
         val abiertas = M.cadenasAbiertas(v2, en("2030-03-05T09:06"), emptyMap())
         assertEquals(listOf(LocalDateTime.parse("2030-03-05T09:00")), abiertas.map { it.first.local })
         assertEquals(1, M.versionDe(v2, abiertas.single().first.cuando.toInstant()).version)   // el historial copia la versión 1
-        assertEquals(2, M.versionDe(v2, en("2030-03-05T10:00").toInstant()).version)
+        assertEquals(2, M.versionDe(v2, en("2030-03-06T09:00").toInstant()).version)
         assertEquals(listOf("2030-03-05T09:00"), M.cerradasSinRespuesta(v2, en("2030-03-05T11:01"), emptySet()).map { it.local.toString() })
         // "Terminar hoy" (fin = hoy) tampoco la corta.
         val fin = M.guardar(v1.copy(duracion = M.Duracion(M.DUR_FECHA, fin = LocalDate.parse("2030-03-05"))), v1, en("2030-03-05T09:05").toInstant())
@@ -340,6 +340,23 @@ class MedicamentosTest {
         assertEquals(v2, M.tratamientoDesdeJson(Json.parseToJsonElement(JsJson.stringify(M.tratamientoAJson(v2))).jsonObject))
         val v3 = M.guardar(v2, v2, en("2030-03-12T09:00").toInstant())
         assertEquals(listOf(2), v3.anteriores.map { it.version })
+    }
+
+    /** O-41 (Héctor, 16-oct): si se cambia la hora mientras suena, la toma se mueve a la hora nueva y deja de sonar. */
+    @Test fun cambiarLaHoraMueveLaTomaQueSuena() {
+        val v1 = M.guardar(trat(veces("09:00"), inicio = "2030-03-05"), null, Instant.parse("2030-03-01T12:00:00Z"))
+        val v2 = M.guardar(v1.copy(frecuencia = veces("10:00")), v1, en("2030-03-05T09:05").toInstant())
+        assertTrue(M.cadenasAbiertas(v2, en("2030-03-05T09:06"), emptyMap()).isEmpty())          // la de las 09:00 deja de sonar
+        val p = AvisosMedicamentos.calcular(listOf(v2), emptyMap(), en("2030-03-05T09:06"))
+        assertEquals("2030-03-05T10:00", p.first().local.toString())                              // vuelve a avisar a las 10:00
+        assertEquals(2, M.versionDe(v2, en("2030-03-05T10:00").toInstant()).version)
+        assertTrue(M.cerradasSinRespuesta(v2, en("2030-03-05T11:30"), emptySet()).none { it.local.toString() == "2030-03-05T09:00" })
+        // En Hoy: la toma del día es la de las 10:00.
+        assertEquals(listOf("2030-03-05T10:00"), M.ocurrencias(v2, en("2030-03-05T00:00"), en("2030-03-05T23:59"), SCL).map { it.local.toString() })
+        // Con dos horas y cambiando solo una, la que se mantiene sigue su cadena.
+        val d1 = M.guardar(trat(veces("09:00", "21:00"), inicio = "2030-03-05"), null, Instant.parse("2030-03-01T12:00:00Z"))
+        val d2 = M.guardar(d1.copy(frecuencia = veces("09:00", "22:00")), d1, en("2030-03-05T09:05").toInstant())
+        assertEquals(1, M.cadenasAbiertas(d2, en("2030-03-05T09:06"), emptyMap()).size)
     }
 
     /** D-16 (QA): una postergación cuya ventana cierra con el celular apagado se cierra como "sin respuesta". */
