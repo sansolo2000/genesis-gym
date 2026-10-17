@@ -50,6 +50,9 @@ object Medicamentos {
     const val REPETIR_MIN = 10L
     const val VENTANA_MIN = 120L
 
+    /** D-17 (QA, 16-oct): recargar la pestaña no borra el mensaje de guardar, terminar, suspender o archivar; solo lo cambia un error de lectura. */
+    fun mensajeTrasCargar(actual: Pair<String, String>?, error: String?): Pair<String, String>? = error?.let { "err" to it } ?: actual
+
     const val SECCION_TIPO = "genesis-medicamentos"
     const val SECCION_VERSION = "1.0"
     const val COLECCION = "medicamentos"

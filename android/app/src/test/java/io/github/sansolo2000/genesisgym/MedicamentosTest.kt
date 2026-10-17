@@ -461,6 +461,28 @@ class MedicamentosTest {
         assertEquals("Pospuesta", M.ESTADOS[M.POSTERGADA])
     }
 
+    /** O-36 (Héctor, 16-oct): con una cantidad de días, las tomas del período suspendido se pierden y el término no cambia. */
+    @Test fun suspenderNoAlargaLaDuracionPorTomas() {
+        val t = M.guardar(trat(veces("09:00"), inicio = "2030-03-05", dur = M.Duracion(M.DUR_DIAS, dias = 10)), null, en("2030-03-05T08:00").toInstant(), SCL)
+        val ultima = M.ultimaToma(t, SCL)!!.local
+        assertEquals(LocalDateTime.parse("2030-03-14T09:00"), ultima)
+        // Suspendido del 6 al 8 (se pierden las tomas del 6, 7 y 8) y reanudado.
+        val r = M.reanudar(M.suspender(t, en("2030-03-06T08:00").toInstant()), en("2030-03-08T12:00").toInstant())
+        assertTrue(M.cerradasSinRespuesta(r, en("2030-03-08T12:00"), emptySet()).isEmpty())
+        val leido = M.conHistorial(r, emptyList())
+        assertEquals(0, leido.duracion.extra)
+        assertEquals(ultima, M.ultimaToma(leido, SCL)!!.local)
+        assertEquals(10, M.ocurrencias(leido, en("2030-03-01T00:00"), en("2030-05-01T00:00"), SCL).size)
+    }
+
+    /** D-17 (QA, 16-oct): recargar la pestaña no borra el mensaje de guardar o terminar; un error de lectura sí lo reemplaza. */
+    @Test fun recargarNoBorraElMensaje() {
+        val ok = "ok" to "Tratamiento guardado. Primera administración: 2030-03-05 a las 09:00."
+        assertEquals(ok, M.mensajeTrasCargar(ok, null))
+        assertNull(M.mensajeTrasCargar(null, null))
+        assertEquals("err" to "No se pudo leer", M.mensajeTrasCargar(ok, "No se pudo leer"))
+    }
+
     /** O-38 (Héctor, 16-oct): responder un medicamento calla solo su alerta. */
     @Test fun responderCallaSoloSuAlerta() {
         val med = Alertas.MEDICAMENTO; val com = Recordatorios.COMIDA; val ent = Recordatorios.ENTRENAMIENTO

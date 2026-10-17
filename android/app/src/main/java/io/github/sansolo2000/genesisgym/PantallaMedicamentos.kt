@@ -86,14 +86,18 @@ class Medi(private val c: Context, private val base: BaseLocal, private val alCa
     fun ahora(): ZonedDateTime = ZonedDateTime.now(AvisosMedicamentos.zona())
 
     fun cargar() {
-        mensaje = try {
+        val error = try {
             cfg = AvisosMedicamentos.config(c, base)
             tratamientos = AvisosMedicamentos.tratamientos(base).sortedWith(compareBy({ it.persona }, { Medicamentos.normalizar(it.med.nombre) }))
             registros = AvisosMedicamentos.registros(base)
             null
-        } catch (e: Exception) { "err" to "No se pudo leer la base de este celular: ${e.javaClass.simpleName}" }
+        } catch (e: Exception) { "No se pudo leer la base de este celular: ${e.javaClass.simpleName}" }
+        mensaje = Medicamentos.mensajeTrasCargar(mensaje, error)   // D-17
         tick++
     }
+
+    /** Al entrar a la pestaña (o abrirla desde una notificación) no queda el mensaje de la vez anterior. */
+    fun entrar() { mensaje = null; cargar() }
 
     /** Después de importar un plan con catálogo nuevo. */
     fun olvidarCatalogo() { catalogo = null }
@@ -107,7 +111,7 @@ class Medi(private val c: Context, private val base: BaseLocal, private val alCa
     fun abrirRespuesta(tid: String?, local: String?, evento: String?) {
         val l = runCatching { LocalDateTime.parse(local) }.getOrNull()
         if (tid != null && l != null) { porResponder = Triple(tid, l, evento); vista = "lista" }
-        cargar()
+        entrar()
     }
 
     fun responder(tid: String, local: LocalDateTime, evento: String?, estado: String, minutos: Int?) {

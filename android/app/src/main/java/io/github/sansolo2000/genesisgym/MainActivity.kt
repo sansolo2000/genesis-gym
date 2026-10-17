@@ -466,7 +466,7 @@ class MainActivity : ComponentActivity() {
                             listOf("hoy" to "Hoy", "comidas" to "Comidas", "reporte" to "Reporte", "salud" to "Salud", "medicamentos" to "Medicamentos", "rutina" to "Rutina", "historial" to "Historial", "importar" to "Importar", "avisos" to "Avisos", "pruebas" to "Pruebas").forEach { (v, t) ->
                                 val activa = gym.vista == v || (v == "hoy" && gym.vista == "sesion")
                                 val ir = { if (v == "comidas" && gym.vista != "comidas") com.cargar(); if (v == "reporte" && gym.vista != "reporte") apo.refrescar(); if (v == "salud" && gym.vista != "salud") { dd.revisar(); if (hc.disponible()) lifecycleScope.launch { hc.refrescarPermisos() } }
-                                    if (v == "medicamentos" && gym.vista != "medicamentos") med.cargar(); gym.ir(v) }
+                                    if (v == "medicamentos" && gym.vista != "medicamentos") med.entrar(); gym.ir(v) }
                                 Pestana(t, activa, ir)
                             }
                         }
