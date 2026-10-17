@@ -19,6 +19,11 @@ import java.time.format.ResolverStyle
 object ValidadorRutina {
     data class Resultado(val ok: Boolean, val errores: List<String>, val avisos: List<String>)
 
+    /** FORMATO-RUTINA 1.2 (0.18.0): la versión que deben declarar las rutinas con "alternativas". */
+    const val VERSION_ALTERNATIVAS = "1.2"
+    /** Aviso con los días fijos del plan de Héctor; con un perfil del formato nuevo no se muestra (Gimnasio.revisarImportacion). */
+    const val AVISO_DIAS = "No hay sesión para todos los días de fuerza del plan (lunes, miércoles y viernes)"
+
     private val DIAS = listOf("lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo")
     private val SLUG = Regex("^[a-z0-9][a-z0-9-]{1,60}$")
     private val FECHA = Regex("^\\d{4}-\\d{2}-\\d{2}$")
@@ -93,7 +98,10 @@ object ValidadorRutina {
         if (r !is JsonObject) return Resultado(false, listOf("El archivo no contiene un objeto JSON"), emptyList())
         claves(r, "raíz", listOf("formato", "version_formato", "rutina", "sesiones", "ejercicios"), emptyList())
         if (r.containsKey("formato") && textoDe(r["formato"]) != "genesis-rutina") e.add("raíz.formato: debe ser \"genesis-rutina\"")
-        if (r.containsKey("version_formato") && textoDe(r["version_formato"]) != "1.0") e.add("raíz.version_formato: esta app acepta solo \"1.0\"")
+        // FORMATO-RUTINA 1.2 (0.18.0, CONTEXTO-MULTIUSUARIO-APP §9): igual que 1.0 más "alternativas". El mensaje de error queda como
+        // el del validador JS de la 1.0/2.0 (validador-casos.json lo compara).
+        val version = textoDe(r["version_formato"])
+        if (r.containsKey("version_formato") && version != "1.0" && version != VERSION_ALTERNATIVAS) e.add("raíz.version_formato: esta app acepta solo \"1.0\"")
 
         // rutina
         if (r.containsKey("rutina")) {
@@ -112,6 +120,7 @@ object ValidadorRutina {
 
         // ejercicios (catálogo)
         val idsEj = linkedSetOf<String>()
+        val equipoDe = HashMap<String, String?>()   // para el aviso de las alternativas con otro equipo
         if (r.containsKey("ejercicios")) {
             val lista = r["ejercicios"]
             if (lista !is JsonArray || lista.isEmpty()) e.add("ejercicios: lista con al menos 1 ejercicio")
@@ -123,7 +132,7 @@ object ValidadorRutina {
                     val id = textoDe(ej["id"])
                     if (!(id != null && SLUG.matches(id))) e.add("$p.id: solo minúsculas, números y guiones")
                     else if (id in idsEj) e.add("$p.id: \"$id\" está repetido")
-                    else idsEj.add(id)
+                    else { idsEj.add(id); equipoDe[id] = textoDe(ej["equipo"])?.trim()?.lowercase() }
                 }
                 for (k in listOf("nombre", "descripcion", "equipo")) if (ej.containsKey(k) && !esStr(ej[k])) e.add("$p.$k: texto no vacío")
                 if (ej.containsKey("musculos_principales")) listaStr(ej["musculos_principales"], "$p.musculos_principales", 1)
@@ -182,6 +191,8 @@ object ValidadorRutina {
                         // Multiusuario, Parte 3 (0.18.0): 1 o 2 ejercicios de reemplazo si el equipo no está disponible.
                         if (x.containsKey("alternativas")) {
                             val alts = x["alternativas"]
+                            val vistas = mutableSetOf<String>()
+                            if (version != VERSION_ALTERNATIVAS) e.add("$q.alternativas: requiere \"version_formato\": \"$VERSION_ALTERNATIVAS\"")
                             if (alts !is JsonArray || alts.isEmpty() || alts.size > 2) e.add("$q.alternativas: lista de 1 o 2 ejercicios")
                             else alts.forEachIndexed { m, al ->
                                 val qa = "$q.alternativas[$m]"
@@ -191,7 +202,14 @@ object ValidadorRutina {
                                 if (al.containsKey("ejercicio_id")) {
                                     if (aid == null || aid !in idsEj) e.add("$qa.ejercicio_id: \"${js(al["ejercicio_id"])}\" no existe en el catálogo \"ejercicios\"")
                                     else if (aid == textoDe(x["ejercicio_id"])) e.add("$qa.ejercicio_id: no puede ser el mismo ejercicio")
-                                    else usados.add(aid)
+                                    else if (!vistas.add(aid)) e.add("$qa.ejercicio_id: \"$aid\" está repetida en las alternativas")
+                                    else {
+                                        usados.add(aid)
+                                        // Regla de Entrenamiento (17-oct): con otro equipo, la alternativa trae sus series (no hereda carga_kg).
+                                        val eqOrig = equipoDe[textoDe(x["ejercicio_id"])]; val eqAlt = equipoDe[aid]
+                                        if (!al.containsKey("series") && eqOrig != null && eqAlt != null && eqOrig != eqAlt)
+                                            a.add("$qa: usa otro equipo (\"$eqAlt\" en vez de \"$eqOrig\") y no trae sus \"series\": hereda las cargas del original")
+                                    }
                                 }
                                 if (al.containsKey("notas") && !esTexto(al["notas"])) e.add("$qa.notas: debe ser texto")
                                 if (al.containsKey("series")) validarSeries(al["series"], qa)
@@ -201,7 +219,7 @@ object ValidadorRutina {
                         validarSeries(x["series"], q)
                     }
                 }
-                if (!listOf("lunes", "miercoles", "viernes").all { it in dias }) a.add("No hay sesión para todos los días de fuerza del plan (lunes, miércoles y viernes)")
+                if (!listOf("lunes", "miercoles", "viernes").all { it in dias }) a.add(AVISO_DIAS)
             }
         }
         for (id in idsEj) if (id !in usados) a.add("El ejercicio \"$id\" está en el catálogo pero ninguna sesión lo usa")

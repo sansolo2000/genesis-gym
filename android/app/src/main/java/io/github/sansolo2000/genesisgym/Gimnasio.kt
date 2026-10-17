@@ -282,8 +282,13 @@ object Gimnasio {
     // ---------- importar (reglas extra de la 2.0 sobre el validador) ----------
     data class Importacion(val resultado: ValidadorRutina.Resultado, val yaActiva: Boolean, val rutina: JsonObject?)
 
-    fun revisarImportacion(texto: String, activa: JsonObject?): Importacion {
-        val base = ValidadorRutina.validarTexto(texto)
+    /**
+     * [diasFijos]: false con un perfil del formato nuevo (multiusuario): el aviso de lunes, miércoles y viernes es del plan de
+     * Héctor y no se muestra a otra persona, que entrena los días que diga su rutina.
+     */
+    fun revisarImportacion(texto: String, activa: JsonObject?, diasFijos: Boolean = true): Importacion {
+        val v = ValidadorRutina.validarTexto(texto)
+        val base = if (diasFijos) v else v.copy(avisos = v.avisos - ValidadorRutina.AVISO_DIAS)
         if (!base.ok) return Importacion(base, false, null)
         val obj = kotlinx.serialization.json.Json.parseToJsonElement(texto) as JsonObject
         val nueva = obj.obj("rutina")!!

@@ -99,7 +99,7 @@ object Plan {
         if (err.isNotEmpty()) return Revision(err, av, emptyList())
 
         val partes = listOfNotNull(
-            if ("rutina" in requeridas) parteRutina(sobre.obj("rutina")!!, rutinaActiva, ahoraIso) else null,
+            if ("rutina" in requeridas) parteRutina(sobre.obj("rutina")!!, rutinaActiva, ahoraIso, diasFijos = del == null) else null,
             if ("alimentacion" in requeridas) parteAlimentacion(sobre.obj("alimentacion")!!, alimentacionActiva, ahoraIso) else null,
             if ("apoyo" in requeridas) parteApoyo(sobre.obj("apoyo")!!, apoyoActivo, ahoraIso) else null,
             sobre.obj("medicamentos")?.takeIf { conMed }?.let { parteMedicamentos(it, huellaMedicamentos, ahoraIso) }
@@ -137,8 +137,8 @@ object Plan {
         }
     }
 
-    private fun parteRutina(o: JsonObject, activa: JsonObject?, ahora: String): Parte {
-        val im = Gimnasio.revisarImportacion(JsJson.stringify(o), activa)
+    private fun parteRutina(o: JsonObject, activa: JsonObject?, ahora: String, diasFijos: Boolean): Parte {
+        val im = Gimnasio.revisarImportacion(JsJson.stringify(o), activa, diasFijos)
         val ru = o.obj("rutina")
         val det = "${ru?.txt("nombre") ?: ru?.txt("id") ?: "rutina"} · versión ${ru?.get("version") ?: "?"}"
         return when {

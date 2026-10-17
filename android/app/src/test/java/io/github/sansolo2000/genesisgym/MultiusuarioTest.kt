@@ -197,11 +197,50 @@ class MultiusuarioTest {
     }
 
     // ---------- Parte 3: "no está disponible" ----------
-    private fun rutinaConAlternativas(alts: JsonElement): JsonObject {
+    /** FORMATO-RUTINA 1.2: las alternativas exigen "version_formato": "1.2". */
+    private fun rutinaConAlternativas(alts: JsonElement, version: String = "1.2"): JsonObject {
         val ses = rutina.arr("sesiones")
         val lunes = ses[0]; val ej0 = lunes.arr("ejercicios")[0].mas("alternativas" to alts)
         val lunesNuevo = lunes.mas("ejercicios" to JsonArray(listOf(ej0) + lunes.arr("ejercicios").drop(1)))
-        return rutina.mas("sesiones" to JsonArray(listOf(lunesNuevo) + ses.drop(1)))
+        return rutina.mas("sesiones" to JsonArray(listOf(lunesNuevo) + ses.drop(1)), "version_formato" to jp(version))
+    }
+
+    @Test fun formatoRutina12() {
+        // Con alternativas, la rutina declara 1.2; una 1.0 con alternativas se rechaza con un mensaje claro.
+        val en10 = ValidadorRutina.validar(rutinaConAlternativas(buildJsonArray { add(alt("ejemplo-b")) }, "1.0"))
+        assertFalse(en10.ok); assertTrue(en10.errores.toString(), en10.errores.any { it.contains("requiere \"version_formato\": \"1.2\"") })
+        // Una 1.2 sin alternativas también vale; otra versión sigue con el mensaje de siempre.
+        assertTrue(ValidadorRutina.validar(rutina.mas("version_formato" to jp("1.2"))).ok)
+        assertEquals(listOf("raíz.version_formato: esta app acepta solo \"1.0\""), ValidadorRutina.validar(rutina.mas("version_formato" to jp("1.3"))).errores)
+        // Dos alternativas iguales: error.
+        val repetidas = ValidadorRutina.validar(rutinaConAlternativas(buildJsonArray { add(alt("ejemplo-b")); add(alt("ejemplo-b")) }))
+        assertFalse(repetidas.ok); assertTrue(repetidas.errores.toString(), repetidas.errores.any { it.contains("repetida") })
+        // Un ejercicio que solo se usa como alternativa no genera "ninguna sesión lo usa".
+        val soloAlt = rutinaConAlternativas(buildJsonArray { add(alt("ejemplo-c")) })
+        assertTrue(ValidadorRutina.validar(soloAlt).avisos.none { it.contains("ninguna sesión lo usa") })
+    }
+
+    @Test fun alternativaConOtroEquipoSinSeriesAvisa() {
+        val ejs = rutina.arr("ejercicios").map { if (it.txt("id") == "ejemplo-b") it.mas("equipo" to jp("Mancuernas")) else it }
+        val conEquipo = { alts: JsonElement -> rutinaConAlternativas(alts).mas("ejercicios" to JsonArray(ejs)) }
+        val sin = ValidadorRutina.validar(conEquipo(buildJsonArray { add(alt("ejemplo-b")) }))
+        assertTrue(sin.ok)   // es un aviso, no un error
+        assertTrue(sin.avisos.toString(), sin.avisos.any { it.contains("usa otro equipo") })
+        assertTrue(ValidadorRutina.validar(conEquipo(buildJsonArray { add(alt("ejemplo-b", true)) })).avisos.none { it.contains("usa otro equipo") })
+        // Mismo equipo (el resto de la prueba usa "e"): sin aviso.
+        assertTrue(ValidadorRutina.validar(rutinaConAlternativas(buildJsonArray { add(alt("ejemplo-c")) })).avisos.none { it.contains("usa otro equipo") })
+    }
+
+    @Test fun elAvisoDeLosDiasFijosSoloEnUnPerfilDeAntes() {
+        val soloLunes = rutina.mas("sesiones" to JsonArray(rutina.arr("sesiones").take(1)))
+        val texto = JsJson.stringify(soloLunes)
+        assertTrue(Gimnasio.revisarImportacion(texto, null).resultado.avisos.contains(ValidadorRutina.AVISO_DIAS))
+        assertFalse(Gimnasio.revisarImportacion(texto, null, diasFijos = false).resultado.avisos.contains(ValidadorRutina.AVISO_DIAS))
+        // En el plan: con perfil nuevo no aparece; con el plan de antes sí.
+        val nuevo = Plan.revisar(sobre(perfil(modulos = listOf(Perfil.ENTRENAMIENTO)), mapOf("rutina" to soloLunes)), null, null, null, null, ahora)
+        assertTrue(nuevo.ok); assertFalse(nuevo.partes.single().avisos.contains(ValidadorRutina.AVISO_DIAS))
+        val antes = Plan.revisar(sobre(JsonPrimitive("prueba"), mapOf("rutina" to soloLunes, "alimentacion" to alimentacion, "apoyo" to apoyo), null, null, null), null, null, null, null, ahora)
+        assertTrue(antes.partes.first { it.clave == "rutina" }.avisos.contains(ValidadorRutina.AVISO_DIAS))
     }
     private fun alt(id: String, conSeries: Boolean = false) = buildJsonObject {
         put("ejercicio_id", id)

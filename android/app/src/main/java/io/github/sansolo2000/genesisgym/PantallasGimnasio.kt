@@ -306,7 +306,7 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
     fun validarImport(texto: String) {
         importTexto = texto; importMensaje = ""
         if (texto.isBlank()) { importacion = null; importMensaje = "No hay nada que validar: elige el archivo o pega el contenido completo."; return }
-        importacion = Gimnasio.revisarImportacion(texto, rutinaActiva())
+        importacion = Gimnasio.revisarImportacion(texto, rutinaActiva(), diasFijos = !datosPerfil().conPlan)
     }
 
     fun activar() {
