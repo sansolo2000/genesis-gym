@@ -145,7 +145,7 @@ object AvisosMedicamentos {
         for (u in Medicamentos.postergadasVencidas(regs, ahora.toInstant().toEpochMilli())) {
             val t = trats.firstOrNull { it.id == u.tratamientoId } ?: continue
             // O-36: suspendido, una toma no queda "sin respuesta".
-            if (!t.avisa || u.postergadaHasta?.let { Medicamentos.enSuspension(t, it) } == true) continue
+            if (!t.avisa || u.postergadaHasta?.let { Medicamentos.cortada(t, it) } == true) continue   // D-20: también si la cortó una suspensión o Terminar
             cerrar(t, Medicamentos.Ocurrencia(u.programada, ZonedDateTime.of(u.programada, ahora.zone), u.evento))
         }
         if (nuevos.isNotEmpty()) { base.ponerVarios(nuevos); regs = porClave(registros(base)); trats = tratamientos(base) }   // O-36: las nuevas "sin respuesta" alargan
