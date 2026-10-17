@@ -88,6 +88,7 @@ object ValidadorRutina {
             if (v.size < min) e.add("$ruta: debe tener al menos $min elemento(s)")
             v.forEachIndexed { i, s -> if (!esStr(s)) e.add("$ruta[$i]: debe ser un texto no vacío") }
         }
+        fun validarSeries(series: JsonElement?, q: String) = validarSeriesEn(e, series, q, ::claves)
 
         if (r !is JsonObject) return Resultado(false, listOf("El archivo no contiene un objeto JSON"), emptyList())
         claves(r, "raíz", listOf("formato", "version_formato", "rutina", "sesiones", "ejercicios"), emptyList())
@@ -165,7 +166,7 @@ object ValidadorRutina {
                     ejs.forEachIndexed { j, x ->
                         val q = "$p.ejercicios[$j]"
                         if (x !is JsonObject) { e.add("$q: debe ser un objeto"); return@forEachIndexed }
-                        claves(x, q, listOf("ejercicio_id", "orden", "descanso_seg", "series"), listOf("notas"))
+                        claves(x, q, listOf("ejercicio_id", "orden", "descanso_seg", "series"), listOf("notas", "alternativas"))
                         if (x.containsKey("ejercicio_id")) {
                             val id = textoDe(x["ejercicio_id"])
                             if (id == null || id !in idsEj) e.add("$q.ejercicio_id: \"${js(x["ejercicio_id"])}\" no existe en el catálogo \"ejercicios\"")
@@ -178,9 +179,38 @@ object ValidadorRutina {
                         }
                         if (x.containsKey("descanso_seg") && !esInt(x["descanso_seg"], 0, 600)) e.add("$q.descanso_seg: entero entre 0 y 600")
                         if (x.containsKey("notas") && !esTexto(x["notas"])) e.add("$q.notas: debe ser texto")
+                        // Multiusuario, Parte 3 (0.18.0): 1 o 2 ejercicios de reemplazo si el equipo no está disponible.
+                        if (x.containsKey("alternativas")) {
+                            val alts = x["alternativas"]
+                            if (alts !is JsonArray || alts.isEmpty() || alts.size > 2) e.add("$q.alternativas: lista de 1 o 2 ejercicios")
+                            else alts.forEachIndexed { m, al ->
+                                val qa = "$q.alternativas[$m]"
+                                if (al !is JsonObject) { e.add("$qa: debe ser un objeto"); return@forEachIndexed }
+                                claves(al, qa, listOf("ejercicio_id"), listOf("series", "notas"))
+                                val aid = textoDe(al["ejercicio_id"])
+                                if (al.containsKey("ejercicio_id")) {
+                                    if (aid == null || aid !in idsEj) e.add("$qa.ejercicio_id: \"${js(al["ejercicio_id"])}\" no existe en el catálogo \"ejercicios\"")
+                                    else if (aid == textoDe(x["ejercicio_id"])) e.add("$qa.ejercicio_id: no puede ser el mismo ejercicio")
+                                    else usados.add(aid)
+                                }
+                                if (al.containsKey("notas") && !esTexto(al["notas"])) e.add("$qa.notas: debe ser texto")
+                                if (al.containsKey("series")) validarSeries(al["series"], qa)
+                            }
+                        }
                         if (!x.containsKey("series")) return@forEachIndexed
-                        val series = x["series"]
-                        if (series !is JsonArray || series.isEmpty() || series.size > 10) { e.add("$q.series: entre 1 y 10 series"); return@forEachIndexed }
+                        validarSeries(x["series"], q)
+                    }
+                }
+                if (!listOf("lunes", "miercoles", "viernes").all { it in dias }) a.add("No hay sesión para todos los días de fuerza del plan (lunes, miércoles y viernes)")
+            }
+        }
+        for (id in idsEj) if (id !in usados) a.add("El ejercicio \"$id\" está en el catálogo pero ninguna sesión lo usa")
+        return Resultado(e.isEmpty(), e, a)
+    }
+
+    /** Las series de un ejercicio de la sesión (o de una alternativa), con las mismas reglas de siempre. */
+    private fun validarSeriesEn(e: MutableList<String>, series: JsonElement?, q: String, claves: (JsonObject, String, List<String>, List<String>) -> Unit) {
+                        if (series !is JsonArray || series.isEmpty() || series.size > 10) { e.add("$q.series: entre 1 y 10 series"); return }
                         series.forEachIndexed { k, se ->
                             val t = "$q.series[$k]"
                             if (se !is JsonObject) { e.add("$t: debe ser un objeto"); return@forEachIndexed }
@@ -203,12 +233,5 @@ object ValidadorRutina {
                             if (se.containsKey("carga_indicacion") && !esStr(se["carga_indicacion"])) e.add("$t.carga_indicacion: texto no vacío")
                             if (se.containsKey("rpe_objetivo") && !esNum(se["rpe_objetivo"], 1.0, 10.0)) e.add("$t.rpe_objetivo: número entre 1 y 10")
                         }
-                    }
-                }
-                if (!listOf("lunes", "miercoles", "viernes").all { it in dias }) a.add("No hay sesión para todos los días de fuerza del plan (lunes, miércoles y viernes)")
-            }
-        }
-        for (id in idsEj) if (id !in usados) a.add("El ejercicio \"$id\" está en el catálogo pero ninguna sesión lo usa")
-        return Resultado(e.isEmpty(), e, a)
     }
 }

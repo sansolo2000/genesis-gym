@@ -178,9 +178,17 @@ interface AccionesHc {
 }
 
 @Composable
-fun PantallaSaludE6(h: Hc, a: AccionesHc, ci: Cin, ac: AccionesCintura, dd: Dd, ad: AccionesDd) {
+fun PantallaSaludE6(h: Hc, a: AccionesHc, ci: Cin, ac: AccionesCintura, dd: Dd, ad: AccionesDd, conSalud: Boolean = true) {
     @Suppress("UNUSED_VARIABLE") val t = h.tick
     Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Multiusuario: sin el módulo Salud queda solo la subida de datos diarios (la vuelta de datos al Evaluador).
+        if (!conSalud) {
+            Text("Datos", fontSize = 32.sp, fontWeight = FontWeight.Bold)
+            Text("Sube a tu Drive lo que registraste en la app, para el Evaluador.", color = GRIS, fontSize = 14.sp)
+            SeccionDatosDiarios(dd, ad)
+            Text(Saludo.version(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, BuildConfig.COMMIT), color = GRIS, fontSize = 12.sp)
+            return@Column
+        }
         Text("Salud", fontSize = 32.sp, fontWeight = FontWeight.Bold)
         Text("Lee una semana de Health Connect y sube al Drive los 2 CSV del Evaluador: diario (FC en reposo, sueño y peso) y actividades. Si un dato no está, la celda va vacía. Las 2 primeras semanas se compara con el script de Garmin.",
             color = GRIS, fontSize = 14.sp)

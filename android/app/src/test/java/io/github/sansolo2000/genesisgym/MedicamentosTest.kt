@@ -51,7 +51,7 @@ class MedicamentosTest {
     ))
 
     private fun trat(f: M.Frecuencia, inicio: String = "2030-03-04", dur: M.Duracion = M.Duracion(M.DUR_INDEFINIDA),
-                     persona: String = M.HECTOR, alertas: Boolean = true, vigente: String = "2030-01-01T00:00:00.000Z") =
+                     persona: String = "persona-1", alertas: Boolean = true, vigente: String = "2030-01-01T00:00:00.000Z") =
         M.Tratamiento("tq1", persona, ficticina1, 1.0, "comprimido", f, LocalDate.parse(inicio), dur, alertas, 1, vigente, vigente)
 
     private fun veces(vararg h: String) = M.Frecuencia(M.VECES_DIA, veces = h.size, horarios = h.toList())
@@ -180,11 +180,17 @@ class MedicamentosTest {
         assertFalse(M.validarFrecuencia(M.Frecuencia("otra"), cfg).isEmpty())
     }
 
-    @Test fun tratamientosDistintosParaHectorYMajo() {
-        val h = trat(veces("09:00")); val m = trat(veces("10:00"), persona = M.MAJO).copy(id = "tq2")
+    /** Multiusuario (0.18.0): la persona es el id del perfil del celular; no hay nombres escritos en el código. */
+    @Test fun laPersonaEsElIdDelPerfil() {
+        val h = trat(veces("09:00")); val m = trat(veces("10:00"), persona = "persona-2").copy(id = "tq2")
         assertTrue(M.validar(h, cfg).isEmpty()); assertTrue(M.validar(m, cfg).isEmpty())
-        assertFalse(M.validar(h.copy(persona = "otra"), cfg).isEmpty())
-        assertEquals(M.MAJO, M.tratamientoDesdeJson(M.tratamientoAJson(m))!!.persona)
+        assertFalse(M.validar(h.copy(persona = ""), cfg).isEmpty())
+        assertFalse(M.validar(h.copy(persona = "Con Espacios"), cfg).isEmpty())
+        assertEquals("persona-2", M.tratamientoDesdeJson(M.tratamientoAJson(m))!!.persona)
+        // El nombre que se muestra: el del perfil si es la misma persona; si no, su id.
+        val d = Perfil.leer(Apoyo.objeto("nombre" to kotlinx.serialization.json.JsonPrimitive("Persona Uno"), "id" to kotlinx.serialization.json.JsonPrimitive("persona-1")))
+        assertEquals("Persona Uno", Perfil.nombreDe("persona-1", d))
+        assertEquals("Persona-2", Perfil.nombreDe("persona-2", d))
     }
 
     // ---------- primera administración ----------
@@ -503,7 +509,7 @@ class MedicamentosTest {
         assertEquals(15, r["postergacion_min"]!!.jsonPrimitive.content.toInt())
         assertEquals("2030-03-05T10:20:00.000Z", r["postergada_hasta"]!!.jsonPrimitive.content)
         assertEquals("desayuno", r["evento"]!!.jsonPrimitive.content)
-        assertEquals(M.HECTOR, r["persona"]!!.jsonPrimitive.content)
+        assertEquals("persona-1", r["persona"]!!.jsonPrimitive.content)
         assertEquals("FICTICINA 10 mg comprimidos", r["tratamiento"]!!.jsonObject["medicamento"]!!.jsonObject["nombre"]!!.jsonPrimitive.content)
     }
 

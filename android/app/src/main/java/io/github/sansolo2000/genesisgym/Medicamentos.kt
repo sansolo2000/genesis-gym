@@ -32,8 +32,13 @@ import java.time.temporal.ChronoUnit
  * - El historial no se reescribe: cada respuesta es un documento nuevo con los datos del tratamiento de ese momento.
  */
 object Medicamentos {
-    const val HECTOR = "hector"; const val MAJO = "majo"
-    val PERSONAS = linkedMapOf(HECTOR to "Héctor", MAJO to "Majo")
+    /**
+     * Multiusuario (0.18.0): la persona de un tratamiento es el id del perfil del celular (`Perfil`); la app ya no tiene personas
+     * escritas. Estos dos ids quedan SOLO porque las pruebas de QA (QaMedicamentosTest) los usan como datos de prueba; ningún
+     * código de la app los lee. Se quitan cuando QA cambie esas pruebas (requiere la autorización de Héctor).
+     */
+    @Deprecated("Solo para las pruebas de QA existentes") const val HECTOR = "hector"
+    @Deprecated("Solo para las pruebas de QA existentes") const val MAJO = "majo"
 
     const val VECES_DIA = "veces_al_dia"; const val INTERVALO_HORAS = "intervalo_horas"; const val INTERVALO_DIAS = "intervalo_dias"
     const val DIAS_SEMANA = "dias_semana"; const val CICLOS = "ciclos"; const val EVENTOS = "eventos"
@@ -445,7 +450,7 @@ object Medicamentos {
 
     fun validar(t: Tratamiento, cfg: Config): List<String> {
         val e = mutableListOf<String>()
-        if (t.persona !in PERSONAS) e.add("Elige la persona: Héctor o Majo.")
+        if (!Perfil.idValido(t.persona)) e.add("Falta la persona de este celular: escribe su nombre en Hoy o importa su plan Génesis.")
         if (t.med.nombre.isBlank() || t.med.ids.isEmpty()) e.add("Elige el medicamento en el buscador.")
         validarDosis(cfg, t.cantidad, t.unidad, t.med.fraccionable)?.let { e.add(it) }
         e.addAll(validarFrecuencia(t.frecuencia, cfg))

@@ -102,10 +102,31 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
     fun sesiones(): List<JsonObject> = Gimnasio.ordenarSesiones(base.coleccion("sesiones").map { it.data })
     fun perfil(): String? = base.get("config/perfil")?.txt("nombre")
     fun ultimoRespaldo(): String? = base.get("config/respaldo")?.txt("ultimo")
+    // ---------- multiusuario (0.18.0): perfil único del celular ----------
+    fun perfilDoc(): JsonObject? = base.get(Perfil.RUTA)
+    fun datosPerfil(): Perfil.Datos = Perfil.leer(perfilDoc())
+    /** El id de la persona para los nombres de archivo (CSV, datos diarios): el del plan o, si no hay, el nombre sin tildes. */
+    fun perfilId(): String = datosPerfil().id
+    fun visible(modulo: String): Boolean = datosPerfil().visible(modulo)
+    /** Texto de seguridad en la sesión: las señales de alarma de esta persona; el texto de siempre solo en un perfil de antes. */
+    fun textoAlarma(): String = datosPerfil().let { d -> d.senales?.let { s -> "Señales de alarma: ${s.senales.joinToString(", ")}. ${s.accion}" } ?: if (d.conPlan) "" else ALARMA }
 
     fun guardarPerfil(nombre: String) {
         val n = nombre.trim(); if (n.isEmpty()) return
-        base.put("config/perfil", buildJsonObject { put("nombre", n); put("creado", Gimnasio.ahoraIso()) }); editarPerfil = false; refrescar()
+        base.put(Perfil.RUTA, Perfil.conNombre(perfilDoc(), n, Gimnasio.ahoraIso())); editarPerfil = false; refrescar()
+    }
+
+    /** Señales de alarma de esta persona (del perfil o, en un perfil de antes, de Apoyo); las conecta la actividad. */
+    var senalesHoy: () -> Perfil.Senales? = { null }
+    fun respuestaSenal(fecha: String): Boolean? = Perfil.respuestaSenal(base.get(Perfil.rutaSenal(fecha)))
+    fun responderSenal(fecha: String, si: Boolean) {
+        runCatching { base.put(Perfil.rutaSenal(fecha), Perfil.registroSenal(fecha, si, perfilId(), Gimnasio.ahoraIso())) }; refrescar()
+    }
+
+    /** Ocultar o volver a mostrar un módulo en este celular (no borra su historial). La actividad reprograma los avisos. */
+    var alCambiarModulos: () -> Unit = {}
+    fun ocultarModulo(m: String, ocultar: Boolean) {
+        base.put(Perfil.RUTA, Perfil.ocultar(perfilDoc(), m, ocultar)); alCambiarModulos(); refrescar()
     }
 
     fun abrirSesion(fecha: String, sesionId: String) {
@@ -157,7 +178,7 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
     fun ir(v: String) { if (vista == "sesion" && v != "sesion") borrador = null; vista = v; confirmarBorrado = false; errorCierre = ""; editarFecha = false }
 
     // ---------- 0.6.0: hoja y descanso ----------
-    fun abrirEjercicio(i: Int) { idxEj = i; verFicha = false; sesVista = "hoja" }
+    fun abrirEjercicio(i: Int) { idxEj = i; verFicha = false; verNoDisponible = false; sesVista = "hoja" }
 
     /** ✓ de una serie: si no tiene valores, copia lo indicado (como "= Indicado"); después parte el descanso. */
     fun marcarSerie(i: Int, k: Int) {
@@ -173,6 +194,20 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
         aviso = ""
         if (relojSerie.de == (i to k)) relojSerie.cancelar()   // M-01: si el temporizador de esta serie seguía, ya no hace falta
         iniciarDescanso(i, k)
+    }
+
+    // ---------- multiusuario, Parte 3: "no está disponible" ----------
+    var verNoDisponible by mutableStateOf(false)
+    /** [alternativa]: índice en las alternativas que trae la rutina; null = saltarlo. Queda registrado en la sesión. */
+    fun marcarNoDisponible(i: Int, alternativa: Int?) {
+        val b = borrador ?: return
+        val n = Gimnasio.noDisponible(b, i, alternativa, Gimnasio.ahoraIso()) ?: run { aviso = "Ya tiene series anotadas: no se puede cambiar."; return }
+        guardar(n); verNoDisponible = false
+        aviso = if (alternativa == null) "Saltado: quedó registrado que no estaba disponible." else "Reemplazado: quedó registrado que el original no estaba disponible."
+    }
+    fun deshacerNoDisponible(i: Int) {
+        val b = borrador ?: return
+        Gimnasio.deshacerNoDisponible(b, i)?.let { guardar(it); aviso = "" }
     }
 
     // ---------- M-01: series por tiempo ----------
@@ -289,12 +324,17 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
     var revisarPlan: (String) -> Plan.Revision? = { null }
     /** M-06: frase del día del programa de apoyo activo (null si no hay); la conecta la actividad. */
     var fraseHoy: () -> Pair<String, String>? = { null }
-    var aplicarPlan: (Plan.Revision) -> String = { "" }
-    fun validarPlan(texto: String) { planMensaje = ""; plan = revisarPlan(texto) }
+    var aplicarPlan: (Plan.Revision, Set<String>) -> String = { _, _ -> "" }
+    /** Multiusuario: la persona confirmó importar un plan de otra persona o un borrador. */
+    var planConfirmado by mutableStateOf(false)
+    /** Módulos ocultos que el plan trae y que la persona pidió volver a mostrar. */
+    val mostrarDeNuevo = androidx.compose.runtime.mutableStateListOf<String>()
+    fun validarPlan(texto: String) { planMensaje = ""; planConfirmado = false; mostrarDeNuevo.clear(); plan = revisarPlan(texto) }
     fun activarPlan() {
         val r = plan ?: return
-        if (!r.ok || r.nuevas.isEmpty()) return
-        planMensaje = aplicarPlan(r); plan = null; refrescar()
+        if (!r.ok || !r.hayQueAplicar) return
+        if (r.confirmar.isNotEmpty() && !planConfirmado) return
+        planMensaje = aplicarPlan(r, mostrarDeNuevo.toSet()); plan = null; planConfirmado = false; refrescar()
     }
 
     fun textoCsv(): String = "﻿" + Gimnasio.csv(sesiones())
@@ -374,6 +414,31 @@ interface AccionesGym {
     fun elegirRespaldo()
 }
 
+/**
+ * Multiusuario (diseño, Parte 1): la pregunta diaria de señales de alarma, común a todos los módulos y siempre activa.
+ * Pregunta, señales y acción son las de esta persona (las trae su plan). "Sí" muestra la acción en el momento.
+ */
+@Composable
+private fun SenalesHoy(g: Gym, hoy: String) {
+    val s = g.senalesHoy()
+    if (s == null) {
+        if (g.datosPerfil().existe) Nota("Falta la pregunta de señales de alarma de esta persona: llega con su plan Génesis (Importar → Importar plan completo).", MaterialTheme.colorScheme.errorContainer)
+        return
+    }
+    val r = g.respuestaSenal(hoy)
+    Tarjeta {
+        Sub("Señales de alarma de hoy")
+        Text(s.pregunta)
+        if (s.senales.isNotEmpty()) Gris(s.senales.joinToString(" · "))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (r == true) Button(onClick = { g.responderSenal(hoy, true) }) { Text("Sí") } else OutlinedButton(onClick = { g.responderSenal(hoy, true) }) { Text("Sí") }
+            if (r == false) Button(onClick = { g.responderSenal(hoy, false) }) { Text("No") } else OutlinedButton(onClick = { g.responderSenal(hoy, false) }) { Text("No") }
+        }
+        if (r == true) Nota(s.accion, MaterialTheme.colorScheme.errorContainer)
+        if (r == null) Gris("Responde una vez al día. Si en cualquier momento tienes una de estas señales, no esperes a mañana.")
+    }
+}
+
 // ---------- Hoy ----------
 @Composable
 private fun Hoy(g: Gym) {
@@ -381,7 +446,9 @@ private fun Hoy(g: Gym) {
     val rutina = g.rutina()
     Gris("${Gimnasio.DIA_LABEL[dia]} · hora de Chile")
     Titulo(Gimnasio.fechaLarga(hoy))
-    rutina?.obj("rutina")?.let { Gris("${it.txt("nombre")} · versión ${JsJson.numero(it["version"].toString())}") }
+    val conEntreno = g.visible(Perfil.ENTRENAMIENTO)
+    if (conEntreno) rutina?.obj("rutina")?.let { Gris("${it.txt("nombre")} · versión ${JsJson.numero(it["version"].toString())}") }
+    SenalesHoy(g, hoy)
     // M-06 (CONTEXTO-MODULO-APOYO §5.1): una frase por día según el tipo de día del plan semanal, tal cual.
     g.fraseHoy()?.let { (tipo, frase) ->
         Card(modifier = Modifier.fillMaxWidth(), colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
@@ -413,6 +480,7 @@ private fun Hoy(g: Gym) {
         if (ultimo == null) Nota("Aún no tienes respaldo. Tus datos están solo en este celular. Crea uno en Historial → Respaldo.", MaterialTheme.colorScheme.errorContainer)
         else if (dias != null && dias > 7) Nota("Tu último respaldo tiene $dias días. Crea uno nuevo en Historial → Respaldo.", MaterialTheme.colorScheme.errorContainer)
     }
+    if (!conEntreno) return   // multiusuario: sin el módulo Entrenamiento, Hoy no muestra la rutina
     if (rutina?.obj("rutina")?.txt("id") == Gimnasio.RUTINA_EJEMPLO) Nota("Rutina de ejemplo: los ejercicios y cargas son de relleno. Importa la rutina de Entrenamiento.")
     if (rutina == null) { Tarjeta { Sub("Aún no hay rutina"); Gris("La rutina la entrega el chat Entrenamiento en un archivo JSON. Impórtala para ver aquí la sesión de cada día."); Button(onClick = { g.ir("importar") }) { Text("Importar rutina") } }; return }
 
@@ -589,7 +657,7 @@ private fun Ficha(g: Gym, id: String) {
                 Sub("Pasos"); lista("pasos").forEachIndexed { n, p -> Text("${n + 1}. $p") }
                 Sub("Errores comunes"); lista("errores_comunes").forEach { Text("• $it") }
                 lista("precauciones").takeIf { it.isNotEmpty() }?.let { Sub("Precauciones"); it.forEach { p -> Text("• $p") } }
-                Nota(ALARMA, MaterialTheme.colorScheme.errorContainer)
+                g.textoAlarma().takeIf { it.isNotEmpty() }?.let { Nota(it, MaterialTheme.colorScheme.errorContainer) }
             }
         })
 }
@@ -719,10 +787,27 @@ private fun ImportarPlan(g: Gym, a: AccionesGym) {
                 r.errores.forEach { Text("• $it") }
             }
             !r.ok -> Nota("Plan rechazado: una parte tiene errores, así que no se importa ninguna. Devuelve la lista al área dueña de esa parte.", MaterialTheme.colorScheme.errorContainer)
-            r.nuevas.isEmpty() -> Nota("Las tres partes ya están activas. No hay nada que importar.")
+            !r.hayQueAplicar -> Nota("Todas las partes ya están activas. No hay nada que importar.")
             else -> Nota("Plan válido.")
         }
         r.avisos.forEach { Text("• $it") }
+        r.perfil?.let { p ->
+            HorizontalDivider()
+            Text("Persona: ${p.nombre} · módulos: ${p.modulos.joinToString(", ") { Perfil.NOMBRE[it] ?: it }}", fontWeight = FontWeight.SemiBold)
+            Gris("Generado por ${p.meta.generadoPor} · ${p.meta.estado}" + (p.meta.generadoEn?.let { " · $it" } ?: "") + (if (r.perfilCambia) " · cambia el perfil de este celular" else ""))
+            // Ocultar un módulo no lo reactiva un plan nuevo sin preguntar (diseño, Parte 1).
+            for (m in r.ocultosQueTrae) Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                androidx.compose.material3.Checkbox(checked = m in g.mostrarDeNuevo, onCheckedChange = { if (it) g.mostrarDeNuevo.add(m) else g.mostrarDeNuevo.remove(m) })
+                Text("Ocultaste ${Perfil.NOMBRE[m] ?: m}. Volver a mostrarlo")
+            }
+        }
+        if (r.ok && r.hayQueAplicar && r.confirmar.isNotEmpty()) {
+            Nota(r.confirmar.joinToString("\n"), MaterialTheme.colorScheme.errorContainer)
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                androidx.compose.material3.Checkbox(checked = g.planConfirmado, onCheckedChange = { g.planConfirmado = it })
+                Text("Sí, quiero importarlo igual")
+            }
+        }
         for (p in r.partes) {
             HorizontalDivider()
             Text("${p.nombre}: " + when (p.estado) { "nueva" -> "se importa"; "igual" -> "ya está activa, se omite"; else -> "con errores" }, fontWeight = FontWeight.SemiBold)
@@ -730,7 +815,26 @@ private fun ImportarPlan(g: Gym, a: AccionesGym) {
             p.errores.forEach { Text("• $it") }
             if (p.avisos.isNotEmpty()) p.avisos.forEach { Gris("Aviso: $it") }
         }
-        if (r.ok && r.nuevas.isNotEmpty()) Button(onClick = { g.activarPlan() }) { Text("Importar ${r.nuevas.size} ${if (r.nuevas.size == 1) "parte" else "partes"}") }
+        if (r.ok && r.hayQueAplicar) Button(onClick = { g.activarPlan() }, enabled = r.confirmar.isEmpty() || g.planConfirmado) {
+            Text(if (r.nuevas.isEmpty()) "Actualizar el perfil" else "Importar ${r.nuevas.size} ${if (r.nuevas.size == 1) "parte" else "partes"}")
+        }
+    }
+    Modulos(g)
+}
+
+/** Multiusuario: los módulos de este celular. Ocultar no borra el historial ni los datos; se puede volver a mostrar. */
+@Composable
+private fun Modulos(g: Gym) {
+    val d = g.datosPerfil()
+    Gris("Este celular"); Titulo("Módulos")
+    Tarjeta {
+        Gris(if (d.conPlan) "Los módulos los trae el plan de ${d.nombre ?: d.id}. Ocultar uno no borra su historial ni sus datos, y sus avisos dejan de sonar."
+            else "Este celular usa todos los módulos. Ocultar uno no borra su historial ni sus datos, y sus avisos dejan de sonar.")
+        for (m in d.propios) Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text(Perfil.NOMBRE[m] ?: m, modifier = Modifier.weight(1f))
+            androidx.compose.material3.Switch(checked = m !in d.ocultos, onCheckedChange = { g.ocultarModulo(m, !it) })
+        }
+        d.plan?.let { Gris("Plan: ${it.estado ?: "?"} · generado por ${it.generadoPor ?: "?"}" + (it.generadoEn?.let { f -> " · $f" } ?: "")) }
     }
 }
 

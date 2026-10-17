@@ -132,7 +132,8 @@ object AvisosMedicamentos {
     fun reprogramar(c: Context): Int {
         val base = BaseLocal(c)
         val ahora = ZonedDateTime.now(zona())
-        var trats = tratamientos(base)
+        // Multiusuario: con el módulo oculto (o fuera del plan de la persona) no suena nada ni se cierran tomas "sin respuesta".
+        var trats = if (Perfil.leer(base.get(Perfil.RUTA)).visible(Perfil.MEDICAMENTOS)) tratamientos(base) else emptyList()
         var regs = porClave(registros(base))
         val nuevos = mutableListOf<Respaldo.Doc>()
         fun cerrar(t: Medicamentos.Tratamiento, oc: Medicamentos.Ocurrencia) {
@@ -148,7 +149,7 @@ object AvisosMedicamentos {
             if (!t.avisa || u.postergadaHasta?.let { Medicamentos.enSuspension(t, it) } == true) continue
             cerrar(t, Medicamentos.Ocurrencia(u.programada, ZonedDateTime.of(u.programada, ahora.zone), u.evento))
         }
-        if (nuevos.isNotEmpty()) { base.ponerVarios(nuevos); regs = porClave(registros(base)); trats = tratamientos(base) }   // O-36: las nuevas "sin respuesta" alargan
+        if (nuevos.isNotEmpty()) { base.ponerVarios(nuevos); regs = porClave(registros(base)); trats = tratamientos(base) }   // O-36: las nuevas "sin respuesta" alargan (solo hay nuevas con el módulo visible)
         val lista = calcular(trats, regs, ahora)
         val am = c.getSystemService(AlarmManager::class.java)
         val ahoraSet = lista.map { "${it.tratamientoId}|${it.local}" }.toSet()
@@ -199,7 +200,8 @@ object AvisosMedicamentos {
     fun datos(c: Context, t: Medicamentos.Tratamiento, local: LocalDateTime, evento: String?): Intent {
         val cfg = runCatching { config(c, BaseLocal(c)) }.getOrNull()
         val ev = evento?.let { cfg?.evento(it)?.nombre ?: it }
-        val titulo = "Medicamento · ${Medicamentos.PERSONAS[t.persona] ?: t.persona} · ${local.toLocalTime()}"
+        val quien = runCatching { Perfil.nombreDe(t.persona, Perfil.leer(BaseLocal(c).get(Perfil.RUTA))) }.getOrDefault(t.persona)
+        val titulo = "Medicamento · $quien · ${local.toLocalTime()}"
         val texto = "${t.med.nombre}\n${t.dosisTexto}" + (ev?.let { " · $it" } ?: "") + "\nProgramada: ${local.toLocalDate()} ${local.toLocalTime()}"
         return intent(c, t.id, local, evento).putExtra(Programador.EXTRA_TITULO, titulo).putExtra(Programador.EXTRA_TEXTO, texto)
             .putExtra(Programador.EXTRA_VISTA, "medicamentos").putExtra(Programador.EXTRA_TIPO, Alertas.MEDICAMENTO)

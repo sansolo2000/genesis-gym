@@ -177,7 +177,7 @@ private fun Mapa(g: Gym) {
                     for (i in idx) FilaMapa(g, i, ejs[i])
                 }
             }
-            Text(ALARMA, color = GRIS, fontSize = 12.sp)
+            g.textoAlarma().takeIf { it.isNotEmpty() }?.let { Text(it, color = GRIS, fontSize = 12.sp) }
             Spacer(Modifier.height(4.dp))
         }
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -193,7 +193,7 @@ private fun Mapa(g: Gym) {
 private fun FilaMapa(g: Gym, i: Int, ej: JsonObject) {
     val series = ej.arr("series")
     val hechas = series.count { Gimnasio.registrada(it) }
-    val listo = hechas == series.size && series.isNotEmpty()
+    val listo = Gimnasio.ejercicioListo(ej) && series.isNotEmpty()   // un ejercicio saltado (no disponible) cuenta como listo
     val curso = !listo && hechas > 0
     val cal = series.count { it.txt("tipo") == "calentamiento" }
     val ef = series.size - cal
@@ -209,7 +209,7 @@ private fun FilaMapa(g: Gym, i: Int, ej: JsonObject) {
             Text(ej.txt("nombre") ?: "", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(detalle, color = GRIS, fontSize = 12.sp)
         }
-        if (listo) Text("listo", color = VERDE, fontSize = 12.sp) else if (curso) Text("$hechas de ${series.size}", color = AMBAR, fontSize = 12.sp)
+        if (Gimnasio.saltado(ej)) Text("saltado", color = AMBAR, fontSize = 12.sp) else if (listo) Text("listo", color = VERDE, fontSize = 12.sp) else if (curso) Text("$hechas de ${series.size}", color = AMBAR, fontSize = 12.sp)
     }
 }
 
@@ -272,7 +272,8 @@ private fun Hoja(g: Gym) {
                     if (descanso > 0) Chip("Descanso ${mmss(descanso)}")
                 }
                 if (!compacto) ej.txt("notas")?.takeIf { it.isNotEmpty() }?.let { Text(it, color = GRIS, fontSize = 14.sp) }
-                series.forEachIndexed { k, se -> FilaSerie(g, b, i, k, ej.txt("ejercicio_id")!!, se, sesiones, k == actual) }
+                if (!compacto) NoDisponible(g, i, ej)
+                if (!Gimnasio.saltado(ej)) series.forEachIndexed { k, se -> FilaSerie(g, b, i, k, ej.txt("ejercicio_id")!!, se, sesiones, k == actual) }
             }
         }
         if (descanso > 0 && !g.verFicha && !teclado) OutlinedButton(onClick = {
@@ -293,6 +294,32 @@ private fun Hoja(g: Gym) {
                 }
             }
         }
+    }
+}
+
+/**
+ * Multiusuario, Parte 3: "No está disponible" (falta el equipo). Ofrece las 1 o 2 alternativas que trae la rutina para este
+ * ejercicio, o saltarlo. Queda registrado en la sesión y vuelve al Evaluador. Solo antes de anotar una serie.
+ */
+@Composable
+private fun NoDisponible(g: Gym, i: Int, ej: JsonObject) {
+    val sinAnotar = ej.arr("series").none { Gimnasio.registrada(it) }
+    val nd = ej["no_disponible"] as? JsonObject
+    if (nd != null) {
+        Text(if (Gimnasio.saltado(ej)) "No estaba disponible: saltado." else "${nd.txt("nombre")} no estaba disponible: lo reemplaza ${ej.txt("nombre")}.", color = AMBAR, fontSize = 14.sp)
+        if (sinAnotar) TextButton(onClick = { g.deshacerNoDisponible(i) }) { Text("Deshacer", color = GRIS) }
+        return
+    }
+    if (!sinAnotar) return
+    if (!g.verNoDisponible) { TextButton(onClick = { g.verNoDisponible = true }) { Text("No está disponible", color = GRIS) }; return }
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(CAJA).padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        val alts = ej.arr("alternativas")
+        Text(if (alts.isEmpty()) "La rutina no trae alternativas para este ejercicio." else "¿Qué haces en su lugar?", fontWeight = FontWeight.SemiBold)
+        alts.forEachIndexed { k, al ->
+            OutlinedButton(onClick = { g.marcarNoDisponible(i, k) }, modifier = Modifier.fillMaxWidth()) { Text(al.txt("nombre") ?: "", color = TEXTO) }
+        }
+        OutlinedButton(onClick = { g.marcarNoDisponible(i, null) }, modifier = Modifier.fillMaxWidth()) { Text("Saltarlo", color = TEXTO) }
+        TextButton(onClick = { g.verNoDisponible = false }) { Text("Cancelar", color = GRIS) }
     }
 }
 

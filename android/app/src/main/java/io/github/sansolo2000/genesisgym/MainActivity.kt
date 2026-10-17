@@ -138,12 +138,14 @@ class MainActivity : ComponentActivity() {
     }
 
     /** Plan Génesis: guarda todas las partes nuevas en una sola transacción y recarga cada módulo. */
-    private fun aplicarPlan(r: Plan.Revision): String = try {
+    private fun aplicarPlan(r: Plan.Revision, mostrar: Set<String>): String = try {
         val idAlimAntes = (com.estado.programa?.get("programa") as? kotlinx.serialization.json.JsonObject)?.get("id")
         val horaApoyoAntes = apo.horaReporteDe(apo.estado.programa)
         // Medicamentos: el catálogo va a un archivo aparte (no a la base ni al respaldo), antes de guardar el resto.
         r.nuevas.firstOrNull { it.clave == "medicamentos" }?.contenido?.let { AvisosMedicamentos.guardarCatalogo(this, it) }
-        base.ponerVarios(r.nuevas.flatMap { it.docs })
+        // Multiusuario: el perfil (id, módulos, señales y metadatos del plan) va en la misma transacción que las partes.
+        val perfil = r.perfil?.let { listOf(Respaldo.Doc(Perfil.RUTA, Perfil.aplicar(gym.perfilDoc(), it, mostrar, Gimnasio.ahoraIso()))) } ?: emptyList()
+        base.ponerVarios(r.nuevas.flatMap { it.docs } + perfil)
         val claves = r.nuevas.map { it.clave }.toSet()
         if ("alimentacion" in claves) com.trasImportarPlan(idAlimAntes)
         if ("apoyo" in claves) apo.trasImportarPlan(horaApoyoAntes)
@@ -151,7 +153,8 @@ class MainActivity : ComponentActivity() {
         runCatching { Programador.reprogramar(this) }
         runCatching { AvisosMedicamentos.reprogramar(this) }
         val omitidas = r.partes.filter { it.estado == "igual" }
-        "Plan importado: " + r.nuevas.joinToString(", ") { it.nombre.lowercase() } + "." +
+        (if (r.nuevas.isEmpty()) "Perfil actualizado." else "Plan importado: " + r.nuevas.joinToString(", ") { it.nombre.lowercase() } + ".") +
+            (r.perfil?.let { " Este celular es de ${it.nombre}." } ?: "") +
             (if (omitidas.isNotEmpty()) " Ya estaban activas: " + omitidas.joinToString(", ") { it.nombre.lowercase() } + "." else "")
     } catch (e: Exception) { "No se pudo guardar el plan; no cambió nada. (${e.javaClass.simpleName})" }
 
@@ -201,7 +204,7 @@ class MainActivity : ComponentActivity() {
             pedirToken({ token ->
                 cin.enviando = ""
                 if (token == null) { cin.mensaje = "err" to "Google no entregó un permiso de acceso."; return@pedirToken }
-                lifecycleScope.launch { cin.subir(token, gym.perfil()) }
+                lifecycleScope.launch { cin.subir(token, gym.perfilId()) }
             }, { m -> cin.enviando = ""; cin.mensaje = "err" to "No se pudo enviar a Drive: $m" })
         }
     }
@@ -213,7 +216,7 @@ class MainActivity : ComponentActivity() {
             pedirToken({ token ->
                 dd.enviando = ""
                 if (token == null) { dd.mensaje = "err" to "Google no entregó un permiso de acceso."; return@pedirToken }
-                lifecycleScope.launch { dd.subir(token, gym.perfil()) }
+                lifecycleScope.launch { dd.subir(token, gym.perfilId()) }
             }, { m -> dd.enviando = ""; dd.mensaje = "err" to "No se pudo enviar a Drive: $m" })
         }
     }
@@ -225,7 +228,7 @@ class MainActivity : ComponentActivity() {
             pedirToken({ token ->
                 hc.enviando = ""
                 if (token == null) { hc.mensaje = "err" to "Google no entregó un permiso de acceso."; return@pedirToken }
-                lifecycleScope.launch { hc.subir(token, gym.perfil()) }
+                lifecycleScope.launch { hc.subir(token, gym.perfilId()) }
             }, { m -> hc.enviando = ""; hc.mensaje = "err" to "No se pudo enviar a Drive: $m" })
         }
     }
@@ -433,8 +436,11 @@ class MainActivity : ComponentActivity() {
         gym.alRestaurar = { runCatching { Programador.restaurarDesde(this, base) }; runCatching { AvisosMedicamentos.reprogramar(this) }; refresco++ }
         gym.fraseHoy = { Frases.deHoy(apo.estado.programa) }
         gym.revisarPlan = { t -> Plan.revisar(t, gym.rutinaActiva(), com.estado.programa, apo.estado.programa, gym.perfil(), Gimnasio.ahoraIso(),
-            runCatching { AvisosMedicamentos.huellaActiva(this, base) }.getOrNull()) }
-        gym.aplicarPlan = { r -> aplicarPlan(r) }
+            runCatching { AvisosMedicamentos.huellaActiva(this, base) }.getOrNull(), gym.perfilDoc()) }
+        gym.aplicarPlan = { r, mostrar -> aplicarPlan(r, mostrar) }
+        // Multiusuario: señales de alarma de esta persona y módulos visibles.
+        gym.senalesHoy = { Perfil.senalesVigentes(gym.datosPerfil(), apo.estado) }
+        gym.alCambiarModulos = { runCatching { Programador.reprogramar(this) }; runCatching { AvisosMedicamentos.reprogramar(this) }; refresco++ }
         apo.alActivar = { nueva, anterior -> runCatching { Programador.horaReporteDesdeApoyo(this, nueva, anterior) }; refresco++ }
         runCatching { Programador.reprogramar(this) }
         runCatching { AvisosMedicamentos.reprogramar(this) }
@@ -463,7 +469,12 @@ class MainActivity : ComponentActivity() {
                     }
                     Column(modifier = Modifier.safeDrawingPadding()) {
                         if (gym.vista != "sesion") Row(modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf("hoy" to "Hoy", "comidas" to "Comidas", "reporte" to "Reporte", "salud" to "Salud", "medicamentos" to "Medicamentos", "rutina" to "Rutina", "historial" to "Historial", "importar" to "Importar", "avisos" to "Avisos", "pruebas" to "Pruebas").forEach { (v, t) ->
+                            // Multiusuario: solo las pestañas de los módulos visibles; Hoy, Salud (datos para el Evaluador), Historial (respaldo), Importar y Avisos siempre.
+                            @Suppress("UNUSED_VARIABLE") val tk = gym.tick   // se vuelve a dibujar al ocultar un módulo o importar un plan
+                            val pf = gym.datosPerfil()
+                            val modulo = mapOf("comidas" to Perfil.COMIDAS, "reporte" to Perfil.APOYO, "medicamentos" to Perfil.MEDICAMENTOS, "rutina" to Perfil.ENTRENAMIENTO)
+                            listOf("hoy" to "Hoy", "comidas" to "Comidas", "reporte" to "Reporte", "salud" to (if (pf.visible(Perfil.SALUD)) "Salud" else "Datos"), "medicamentos" to "Medicamentos", "rutina" to "Rutina", "historial" to "Historial", "importar" to "Importar", "avisos" to "Avisos", "pruebas" to "Pruebas")
+                                .filter { (v, _) -> modulo[v]?.let { pf.visible(it) } ?: true }.forEach { (v, t) ->
                                 val activa = gym.vista == v || (v == "hoy" && gym.vista == "sesion")
                                 val ir = { if (v == "comidas" && gym.vista != "comidas") com.cargar(); if (v == "reporte" && gym.vista != "reporte") apo.refrescar(); if (v == "salud" && gym.vista != "salud") { dd.revisar(); if (hc.disponible()) lifecycleScope.launch { hc.refrescarPermisos() } }
                                     if (v == "medicamentos" && gym.vista != "medicamentos") med.entrar(); gym.ir(v) }
@@ -478,7 +489,7 @@ class MainActivity : ComponentActivity() {
                                 .background(CAJA).clickable { dd.revisar(); if (hc.disponible()) lifecycleScope.launch { hc.refrescarPermisos() }; gym.ir("salud") }.padding(12.dp))
                         if (gym.vista == "comidas") PantallaComidas(com, accionesComidas)
                         else if (gym.vista == "reporte") PantallaApoyo(apo, accionesApoyo)
-                        else if (gym.vista == "salud") PantallaSaludE6(hc, accionesHc, cin, accionesCintura, dd, accionesDd)
+                        else if (gym.vista == "salud") PantallaSaludE6(hc, accionesHc, cin, accionesCintura, dd, accionesDd, gym.visible(Perfil.SALUD))
                         else if (gym.vista == "medicamentos") PantallaMedicamentos(med)
                         else if (gym.vista == "avisos") PantallaAvisos(this@MainActivity, accionesAvisos, refresco, eleccionSonido, uriSonido)
                         else if (gym.vista != "pruebas") PantallaGimnasio(gym, accionesGym)

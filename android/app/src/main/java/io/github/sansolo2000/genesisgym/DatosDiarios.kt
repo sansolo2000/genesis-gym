@@ -200,7 +200,8 @@ object DatosDiarios {
 
     /** El manifest nombra el archivo vigente de cada tipo, aunque no haya cambiado. Un tipo que nunca se exportó no aparece. */
     fun manifest(perfil: String, d: LocalDate, version: Int, generadoEn: ZonedDateTime, appVersion: String, appCodigo: Int, motivo: String,
-                 vigentes: Map<String, Subido>, faltantes: List<Faltante>, hc: LecturaHc, reporte: JsonObject?): String {
+                 vigentes: Map<String, Subido>, faltantes: List<Faltante>, hc: LecturaHc, reporte: JsonObject?,
+                 noDisponibles: List<JsonObject> = emptyList(), senalAlarma: Boolean? = null): String {
         // Regla de cobertura (v3.1): cada tipo está en vigentes o en faltantes; uno que nunca se exportó y no vino como faltante se agrega aquí.
         val falt = faltantes + TIPOS.filter { t -> t !in vigentes && faltantes.none { it.tipo == t } }.map { Faltante(it, "error", "No se exportó.") }
         val vig = TIPOS.mapNotNull { t -> vigentes[t]?.let { s -> Apoyo.objeto("tipo" to JsonPrimitive(t), "nombre" to JsonPrimitive(s.nombre),
@@ -217,7 +218,12 @@ object DatosDiarios {
                 "permisos_faltantes" to JsonArray(hc.permisosFaltantes.map { JsonPrimitive(it) })),
             "reporte_apoyo" to reporteApoyo(reporte),
             "completo" to JsonPrimitive(falt.isEmpty() && TIPOS.all { it in vigentes }))
-        return JsJson.indentado(o)
+        // Multiusuario (0.18.0, propuesta en CONTEXTO-MULTIUSUARIO-APP §4): campos nuevos al final y solo si hay algo, para que
+        // el manifest de un día sin ellos quede igual que antes.
+        val extra = LinkedHashMap<String, JsonElement>(o)
+        if (noDisponibles.isNotEmpty()) extra["ejercicios_no_disponibles"] = JsonArray(noDisponibles)
+        if (senalAlarma != null) extra["senal_alarma"] = Apoyo.objeto("respuesta" to JsonPrimitive(senalAlarma))
+        return JsJson.indentado(JsonObject(extra))
     }
 
     /** "manual" en la primera subida del día; lo que cambia después es "tardio" (§1.6). La entrega 2 agrega "automatico". */

@@ -32,9 +32,18 @@ object Plan {
         val contenido: JsonObject?
     )
 
-    data class Revision(val errores: List<String>, val avisos: List<String>, val partes: List<Parte>) {
+    /**
+     * [perfil]: la sección "perfil" del formato nuevo (multiusuario), o null en un plan de antes ("perfil" como texto).
+     * [confirmar]: motivos que exigen que la persona confirme antes de importar (el plan es de otra persona o es un borrador).
+     * [perfilCambia]: importar cambia `config/perfil` (módulos, señales o metadatos), aunque las partes ya estén activas.
+     * [ocultosQueTrae]: módulos que la persona ocultó y que el plan trae; se pregunta si se vuelven a mostrar.
+     */
+    data class Revision(val errores: List<String>, val avisos: List<String>, val partes: List<Parte>,
+                        val perfil: Perfil.DelPlan? = null, val confirmar: List<String> = emptyList(), val perfilCambia: Boolean = false,
+                        val ocultosQueTrae: List<String> = emptyList()) {
         val ok: Boolean get() = errores.isEmpty() && partes.none { it.estado == "error" }
         val nuevas: List<Parte> get() = partes.filter { it.estado == "nueva" }
+        val hayQueAplicar: Boolean get() = nuevas.isNotEmpty() || perfilCambia
     }
 
     private fun slug(s: String?): String = java.text.Normalizer.normalize(s ?: "", java.text.Normalizer.Form.NFD)
@@ -44,32 +53,75 @@ object Plan {
      * [rutinaActiva]: documento config/rutina_activa; [alimentacionActiva] y [apoyoActivo]: el archivo del programa activo
      * (los mismos valores que usan sus importaciones por separado).
      */
+    /**
+     * Multiusuario (0.18.0, `claude/CONTEXTO-MULTIUSUARIO-APP.md` §2): "perfil" puede ser un texto (el plan de siempre: todos los
+     * módulos) o un objeto { id, nombre, modulos, senales_alarma } con generado_por, para y estado en el sobre. Con el objeto, el sobre
+     * trae solo las partes de sus módulos y cada programa debe ser de esa misma persona. [perfilActual]: `config/perfil` del celular.
+     */
     fun revisar(
         texto: String, rutinaActiva: JsonObject?, alimentacionActiva: JsonObject?, apoyoActivo: JsonObject?,
-        perfilCelular: String?, ahoraIso: String, huellaMedicamentos: String? = null
+        perfilCelular: String?, ahoraIso: String, huellaMedicamentos: String? = null, perfilActual: JsonObject? = null
     ): Revision {
         if (texto.isBlank()) return Revision(listOf("El archivo llegó vacío al celular."), emptyList(), emptyList())
         val sobre = try { Json.parseToJsonElement(texto.removePrefix("﻿")) as? JsonObject } catch (e: Exception) { null }
             ?: return Revision(listOf("El archivo no es un JSON válido."), emptyList(), emptyList())
-        val err = mutableListOf<String>(); val av = mutableListOf<String>()
+        val err = mutableListOf<String>(); val av = mutableListOf<String>(); val confirmar = mutableListOf<String>()
         if (sobre.txt("tipo") != TIPO) err.add("tipo: debe ser \"$TIPO\". ¿Es un plan del Consolidador? Las partes sueltas se importan en su pestaña.")
         if (sobre.txt("version_formato") != VERSION) err.add("version_formato: debe ser \"$VERSION\".")
-        val perfil = sobre.txt("perfil")
-        if (perfil.isNullOrBlank()) err.add("perfil: falta.")
-        else if (perfilCelular != null && slug(perfil) != slug(perfilCelular))
-            av.add("Este plan es para \"$perfil\" y este celular es de \"$perfilCelular\". Revisa que sea el archivo correcto.")
-        val faltan = listOf("rutina", "alimentacion", "apoyo").filter { sobre.obj(it) == null }
+        val actual = Perfil.leer(perfilActual)
+        var del: Perfil.DelPlan? = null
+        if (sobre.obj("perfil") != null) {
+            val (p, e) = Perfil.revisarSeccion(sobre)
+            err.addAll(e); del = p
+            if (p != null && (actual.existe || perfilCelular != null) && actual.id != p.id)
+                confirmar.add("Este plan es de \"${p.nombre}\" y este celular es de \"${actual.nombre ?: perfilCelular ?: actual.id}\". Si lo importas, este celular pasa a ser de esa persona.")
+            if (p?.meta?.estado == "borrador") confirmar.add("Este plan está en borrador: todavía no se entregó. Impórtalo solo si es para probarlo.")
+        } else {
+            val perfil = sobre.txt("perfil")
+            if (perfil.isNullOrBlank()) err.add("perfil: falta.")
+            else if (perfilCelular != null && slug(perfil) != slug(perfilCelular)) {
+                val t = "Este plan es para \"$perfil\" y este celular es de \"$perfilCelular\". Revisa que sea el archivo correcto."
+                av.add(t); confirmar.add(t)
+            }
+        }
+        val modulos = del?.modulos ?: Perfil.MODULOS
+        val requeridas = modulos.mapNotNull { Perfil.PARTE[it] }
+        val faltan = requeridas.filter { sobre.obj(it) == null }
         if (faltan.isNotEmpty()) err.add("Faltan partes en el sobre: ${faltan.joinToString(", ")}.")
+        val sobran = Perfil.PARTE.values.filter { it !in requeridas && sobre[it] != null }
+        if (sobran.isNotEmpty()) av.add("El plan trae ${sobran.joinToString(", ")}, pero esta persona no usa ese módulo: no se importa.")
         if (sobre["medicamentos"] != null && sobre.obj("medicamentos") == null) err.add("medicamentos: debe ser un objeto.")
+        val conMed = Perfil.MEDICAMENTOS in modulos
+        if (!conMed && sobre.obj("medicamentos") != null) av.add("El plan trae el catálogo de medicamentos, pero esta persona no usa Medicamentos: no se importa.")
+        if (del != null && conMed && sobre.obj("medicamentos") == null && huellaMedicamentos == null)
+            av.add("El plan no trae el catálogo de medicamentos y este celular no lo tiene: no vas a poder buscar medicamentos hasta importar un plan que lo traiga.")
+        if (err.isEmpty() && del != null) err.addAll(personaDeLosProgramas(sobre, del.id, requeridas))
         if (err.isNotEmpty()) return Revision(err, av, emptyList())
 
         val partes = listOfNotNull(
-            parteRutina(sobre.obj("rutina")!!, rutinaActiva, ahoraIso),
-            parteAlimentacion(sobre.obj("alimentacion")!!, alimentacionActiva, ahoraIso),
-            parteApoyo(sobre.obj("apoyo")!!, apoyoActivo, ahoraIso),
-            sobre.obj("medicamentos")?.let { parteMedicamentos(it, huellaMedicamentos, ahoraIso) }
+            if ("rutina" in requeridas) parteRutina(sobre.obj("rutina")!!, rutinaActiva, ahoraIso) else null,
+            if ("alimentacion" in requeridas) parteAlimentacion(sobre.obj("alimentacion")!!, alimentacionActiva, ahoraIso) else null,
+            if ("apoyo" in requeridas) parteApoyo(sobre.obj("apoyo")!!, apoyoActivo, ahoraIso) else null,
+            sobre.obj("medicamentos")?.takeIf { conMed }?.let { parteMedicamentos(it, huellaMedicamentos, ahoraIso) }
         )
-        return Revision(emptyList(), av, partes)
+        return Revision(emptyList(), av, partes, del, confirmar, del?.let { Perfil.cambia(perfilActual, it) } ?: false,
+            del?.let { Perfil.ocultosQueTrae(actual, it) } ?: emptyList())
+    }
+
+    /** Anti-meta del diseño: un programa de otra persona no entra. Los programas de Alimentación y Apoyo traen su perfil. */
+    private fun personaDeLosProgramas(sobre: JsonObject, id: String, partes: List<String>): List<String> {
+        val e = mutableListOf<String>()
+        if ("alimentacion" in partes) {
+            val pid = ((sobre.obj("alimentacion")?.get("perfiles") as? kotlinx.serialization.json.JsonArray)?.firstOrNull() as? JsonObject)?.txt("id")
+            if (pid != null && pid != id) e.add("alimentacion: el programa es del perfil \"$pid\", no de \"$id\". No se importa nada.")
+        }
+        if ("apoyo" in partes) {
+            val pid = when (val x = sobre.obj("apoyo")?.get("perfil")) {
+                is JsonObject -> x.txt("id"); is kotlinx.serialization.json.JsonArray -> (x.firstOrNull() as? JsonObject)?.txt("id"); else -> null
+            }
+            if (pid != null && pid != id) e.add("apoyo: el programa es del perfil \"$pid\", no de \"$id\". No se importa nada.")
+        }
+        return e
     }
 
     /** [activa]: huella de la sección importada antes (null si no hay o falta el catálogo en el celular). El catálogo lo guarda la actividad en un archivo. */

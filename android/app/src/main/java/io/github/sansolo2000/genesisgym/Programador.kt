@@ -214,8 +214,14 @@ object Programador {
         val apoyo = base.get("programas_apoyo/activo")?.obj("programa")
         val reportados = base.rutas("reportes_apoyo").map { it.removePrefix("reportes_apoyo/") }.toSet()
         val texto = apoyo?.obj("textos")?.txt("recordatorio_reporte") ?: Recordatorios.TEXTO_REPORTE
-        return Recordatorios.juntar(Recordatorios.calcular(config(c), comidas, sesionesRutina, registradas, ahora, reportados = reportados, textoReporte = texto))
+        val cfg = conModulos(config(c), Perfil.leer(base.get(Perfil.RUTA)))
+        return Recordatorios.juntar(Recordatorios.calcular(cfg, comidas, sesionesRutina, registradas, ahora, reportados = reportados, textoReporte = texto))
     }
+
+    /** Multiusuario: un módulo oculto (o que el plan de la persona no trae) no avisa, aunque su aviso siga encendido en Avisos. */
+    fun conModulos(k: Recordatorios.Config, p: Perfil.Datos): Recordatorios.Config = k.copy(
+        comidas = k.comidas && p.visible(Perfil.COMIDAS), tareas = k.tareas && p.visible(Perfil.COMIDAS),
+        entrenamiento = k.entrenamiento && p.visible(Perfil.ENTRENAMIENTO), reporte = k.reporte && p.visible(Perfil.APOYO))
 
     private fun datos(c: Context, titulo: String, texto: String, vista: String, tipo: String, claves: List<String>): Intent =
         Intent(c, RecordatorioReceiver::class.java).putExtra(EXTRA_TITULO, titulo).putExtra(EXTRA_TEXTO, texto).putExtra(EXTRA_VISTA, vista)

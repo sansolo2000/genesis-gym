@@ -47,7 +47,13 @@ import java.time.ZonedDateTime
 class Medi(private val c: Context, private val base: BaseLocal, private val alCambiar: () -> Unit) {
     var tick by mutableIntStateOf(0)
     var vista by mutableStateOf("lista")              // lista | form | historial
-    var filtro by mutableStateOf<String?>(null)       // persona, o null = las dos
+    var filtro by mutableStateOf<String?>(null)       // persona, o null = todas
+
+    // Multiusuario (0.18.0): cada persona registra solo sus medicamentos en su celular. La persona es el id del perfil.
+    fun perfil(): Perfil.Datos = Perfil.leer(base.get(Perfil.RUTA))
+    fun nombre(persona: String): String = Perfil.nombreDe(persona, perfil())
+    /** Personas con tratamientos en este celular (por ejemplo, los de otra persona que quedaron de antes, para archivarlos). */
+    fun personas(): List<String> = tratamientos.map { it.persona }.distinct()
     var mensaje by mutableStateOf<Pair<String, String>?>(null)
     var cfg: Medicamentos.Config? = null; private set
     var catalogo by mutableStateOf<Medicamentos.Catalogo?>(null); private set
@@ -128,7 +134,7 @@ class Medi(private val c: Context, private val base: BaseLocal, private val alCa
     // ---------- formulario ----------
     fun nuevo() {
         anterior = null; errores = emptyList(); mensaje = null
-        fPersona = filtro; fMed = null; fBusca = ""; fCantidad = ""; fUnidad = null; fModalidad = null
+        fPersona = perfil().takeIf { it.existe }?.id; fMed = null; fBusca = ""; fCantidad = ""; fUnidad = null; fModalidad = null
         fVeces = ""; fIntervaloH = ""; fIntervaloD = ""; fDias.clear(); fToma = ""; fDescanso = ""; fCiclos = ""
         fHorarios.clear(); fEventos.clear(); fInicio = hoy().toString(); fDur = Medicamentos.DUR_INDEFINIDA; fDurDias = ""; fDurFin = ""; fAlertas = true
         vista = "form"
@@ -181,7 +187,7 @@ class Medi(private val c: Context, private val base: BaseLocal, private val alCa
     private fun armar(k: Medicamentos.Config): Pair<Medicamentos.Tratamiento?, List<String>> {
         val e = mutableListOf<String>()
         val m = fMed
-        if (fPersona == null) e.add("Elige la persona: Héctor o Majo.")
+        if (fPersona == null) e.add("Falta la persona de este celular: escribe su nombre en Hoy o importa su plan Génesis.")
         if (m == null) e.add("Elige el medicamento en el buscador.")
         val inicio = runCatching { LocalDate.parse(fInicio.trim()) }.getOrNull()
         if (inicio == null) e.add("Escribe la fecha de inicio como AAAA-MM-DD.")
@@ -312,7 +318,7 @@ private fun Lista(m: Medi) {
         Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Titulo("Responder la toma de las ${local.toLocalTime()}")
-                if (tr != null) Text("${Medicamentos.PERSONAS[tr.persona]} · ${tr.med.nombre} · ${tr.dosisTexto}" + (evento?.let { e -> " · " + (cfg?.evento(e)?.nombre ?: e) } ?: ""))
+                if (tr != null) Text("${m.nombre(tr.persona)} · ${tr.med.nombre} · ${tr.dosisTexto}" + (evento?.let { e -> " · " + (cfg?.evento(e)?.nombre ?: e) } ?: ""))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { m.responder(tid, local, evento, Medicamentos.CONFIRMADA, null) }) { Text("Confirmar") }
                     OutlinedButton(onClick = { m.responder(tid, local, evento, Medicamentos.OMITIDA, null) }) { Text("Omitir") }
@@ -324,8 +330,10 @@ private fun Lista(m: Medi) {
         }
     }
 
-    Opciones(listOf<String?>(null) + Medicamentos.PERSONAS.keys, { it == m.filtro }, { it?.let { p -> Medicamentos.PERSONAS[p] } ?: "Las dos" }) { m.filtro = it }
-    val todos = m.tratamientos.filter { m.filtro == null || it.persona == m.filtro }
+    val personas = m.personas()
+    if (personas.size > 1) Opciones(listOf<String?>(null) + personas, { it == m.filtro }, { it?.let { p -> m.nombre(p) } ?: "Todas" }) { m.filtro = it }
+    val filtro = m.filtro?.takeIf { it in personas }
+    val todos = m.tratamientos.filter { filtro == null || it.persona == filtro }
     val lista = todos.filter { !it.archivado }
     val archivados = todos.filter { it.archivado }
     val hoy = m.hoy(); val ahora = m.ahora()
@@ -340,7 +348,7 @@ private fun Lista(m: Medi) {
         val estado = u?.let { Medicamentos.ESTADOS[it.estado] } ?: if (Medicamentos.enSuspension(tr, oc.cuando.toInstant())) "Suspendida"
             else if (oc.cuando.isAfter(ahora)) "Pendiente" else "Sin responder"
         Column(Modifier.fillMaxWidth()) {
-            Text("${oc.local.toLocalTime()} · ${Medicamentos.PERSONAS[tr.persona]} · ${tr.med.nombre} · ${tr.dosisTexto}", fontWeight = FontWeight.SemiBold)
+            Text("${oc.local.toLocalTime()} · ${m.nombre(tr.persona)} · ${tr.med.nombre} · ${tr.dosisTexto}", fontWeight = FontWeight.SemiBold)
             Gris(estado + (oc.evento?.let { e -> " · " + (cfg?.evento(e)?.nombre ?: e) } ?: ""))
             if (u == null || u.estado == Medicamentos.POSTERGADA) TextButton(onClick = { m.porResponder = Triple(tr.id, oc.local, oc.evento) }) { Text("Responder") }
         }
@@ -357,7 +365,7 @@ private fun Lista(m: Medi) {
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(tr.med.nombre, fontWeight = FontWeight.SemiBold)
-                Gris("${Medicamentos.PERSONAS[tr.persona]} · ids ${tr.med.ids.joinToString(", ")}")
+                Gris("${m.nombre(tr.persona)} · ids ${tr.med.ids.joinToString(", ")}")
                 Text("${tr.dosisTexto} · ${Medicamentos.resumen(tr.frecuencia, cfg)}")
                 Gris("Desde ${tr.inicio} · " + (Medicamentos.ultimaToma(tr, ahora.zone)?.let { "última toma ${it.local.toLocalDate()} ${it.local.toLocalTime()}" }
                     ?: tr.fin?.let { "hasta $it" } ?: "indefinido") + (if (vencido) " · TERMINADO" else if (tr.suspendido) " · SUSPENDIDO" else "") +
@@ -397,7 +405,7 @@ private fun Lista(m: Medi) {
         TextButton(onClick = { m.verArchivados = !m.verArchivados }) { Text((if (m.verArchivados) "Ocultar" else "Ver") + " archivados (${archivados.size})") }
         if (m.verArchivados) for (tr in archivados) Column(Modifier.fillMaxWidth()) {
             Text(tr.med.nombre, fontWeight = FontWeight.SemiBold)
-            Gris("${Medicamentos.PERSONAS[tr.persona]} · ${tr.dosisTexto} · ${Medicamentos.resumen(tr.frecuencia, cfg)} · archivado")
+            Gris("${m.nombre(tr.persona)} · ${tr.dosisTexto} · ${Medicamentos.resumen(tr.frecuencia, cfg)} · archivado")
             TextButton(onClick = { m.historialDe = tr.id; m.vista = "historial" }) { Text("Historial") }
         }
     }
@@ -409,8 +417,8 @@ private fun Formulario(m: Medi) {
     Text(if (m.anterior == null) "Nuevo tratamiento" else "Editar tratamiento", style = MaterialTheme.typography.headlineSmall)
     if (m.anterior != null) Gris("Los cambios rigen desde ahora para las próximas tomas. El historial no cambia.")
 
-    Titulo("Persona")
-    Opciones(Medicamentos.PERSONAS.keys.toList(), { it == m.fPersona }, { Medicamentos.PERSONAS.getValue(it) }) { m.fPersona = it }
+    m.fPersona?.let { Gris("Persona: ${m.nombre(it)}") }
+        ?: Nota("Falta la persona de este celular: escribe su nombre en Hoy o importa su plan Génesis.", true)
 
     HorizontalDivider(); Titulo("Medicamento")
     m.fMed?.let { med ->
@@ -518,7 +526,7 @@ private fun Formulario(m: Medi) {
 private fun Historial(m: Medi) {
     val tr = m.historialDe?.let { id -> m.tratamientos.firstOrNull { it.id == id } }
     Text("Historial", style = MaterialTheme.typography.headlineSmall)
-    Gris(tr?.let { "${it.med.nombre} · ${Medicamentos.PERSONAS[it.persona]}" } ?: "Todos los tratamientos" + (m.filtro?.let { " de ${Medicamentos.PERSONAS[it]}" } ?: ""))
+    Gris(tr?.let { "${it.med.nombre} · ${m.nombre(it.persona)}" } ?: "Todos los tratamientos" + (m.filtro?.let { " de ${m.nombre(it)}" } ?: ""))
     OutlinedButton(onClick = { m.vista = "lista" }) { Text("Volver") }
     val lista = m.registros.filter { r -> (tr == null || r.tratamientoId == tr.id) && (m.filtro == null || tr != null || (r.data["persona"] as? kotlinx.serialization.json.JsonPrimitive)?.content == m.filtro) }
         .sortedWith(compareByDescending<Medicamentos.Registro> { it.programada }.thenByDescending { it.respondidaEn })

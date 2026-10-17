@@ -64,20 +64,16 @@ object Gimnasio {
                     put("nombre", catalogo.firstOrNull { it.txt("id") == id }?.txt("nombre") ?: id)
                     put("orden", x["orden"]!!); put("descanso_seg", x["descanso_seg"]!!)
                     put("notas", x.txt("notas") ?: "")
-                    put("series", buildJsonArray {
-                        for (se in x.arr("series")) add(buildJsonObject {
-                            val modo = if (se.containsKey("duracion_seg")) "tiempo" else if (se.containsKey("reps")) "reps" else "rango"
-                            put("n", se["n"]!!); put("tipo", se["tipo"]!!); put("modo", modo)
-                            put("prescrito_reps", when (modo) {
-                                "reps" -> JsonPrimitive(jsNum(se["reps"]))
-                                "rango" -> JsonPrimitive("${jsNum(se["reps_min"])}–${jsNum(se["reps_max"])}")
-                                else -> JsonNull
-                            })
-                            put("prescrito_seg", if (modo == "tiempo") se["duracion_seg"]!! else JsonNull)
-                            put("carga_prescrita_kg", se["carga_kg"] ?: JsonNull)
-                            put("carga_indicacion", se.txt("carga_indicacion")?.takeIf { it.isNotEmpty() }?.let { JsonPrimitive(it) } ?: JsonNull)
-                            put("rpe_objetivo", se["rpe_objetivo"]?.takeIf { it !is JsonNull } ?: JsonNull)
-                            put("carga_real_kg", JsonNull); put("reps_reales", JsonNull); put("seg_reales", JsonNull)
+                    put("series", seriesBorrador(x.arr("series")))
+                    // Multiusuario, Parte 3: las alternativas viajan con el ejercicio (solo si la rutina las trae: el resto no cambia).
+                    val alts = x.arr("alternativas")
+                    if (alts.isNotEmpty()) put("alternativas", buildJsonArray {
+                        for (al in alts) add(buildJsonObject {
+                            val aid = al.txt("ejercicio_id")!!
+                            put("ejercicio_id", aid)
+                            put("nombre", catalogo.firstOrNull { it.txt("id") == aid }?.txt("nombre") ?: aid)
+                            put("notas", al.txt("notas") ?: "")
+                            put("series", seriesBorrador(al.arr("series").ifEmpty { x.arr("series") }))
                         })
                     })
                 })
@@ -85,6 +81,64 @@ object Gimnasio {
             put("rpe_sesion", JsonNull); put("duracion_min", JsonNull); put("nota", "")
             put("creado", creadoIso); put("actualizado", JsonNull)
         }
+    }
+
+    private fun seriesBorrador(series: List<JsonObject>): JsonArray = buildJsonArray {
+        for (se in series) add(buildJsonObject {
+            val modo = if (se.containsKey("duracion_seg")) "tiempo" else if (se.containsKey("reps")) "reps" else "rango"
+            put("n", se["n"]!!); put("tipo", se["tipo"]!!); put("modo", modo)
+            put("prescrito_reps", when (modo) {
+                "reps" -> JsonPrimitive(jsNum(se["reps"]))
+                "rango" -> JsonPrimitive("${jsNum(se["reps_min"])}–${jsNum(se["reps_max"])}")
+                else -> JsonNull
+            })
+            put("prescrito_seg", if (modo == "tiempo") se["duracion_seg"]!! else JsonNull)
+            put("carga_prescrita_kg", se["carga_kg"] ?: JsonNull)
+            put("carga_indicacion", se.txt("carga_indicacion")?.takeIf { it.isNotEmpty() }?.let { JsonPrimitive(it) } ?: JsonNull)
+            put("rpe_objetivo", se["rpe_objetivo"]?.takeIf { it !is JsonNull } ?: JsonNull)
+            put("carga_real_kg", JsonNull); put("reps_reales", JsonNull); put("seg_reales", JsonNull)
+        })
+    }
+
+    // ---------- multiusuario, Parte 3: "no está disponible" ----------
+    /**
+     * El ejercicio [i] de la sesión no está disponible (falta el equipo). Con [alternativa] (índice en "alternativas") se reemplaza
+     * por esa alternativa; sin ella queda saltado. Queda registrado en "no_disponible" del ejercicio (va en el respaldo y en el
+     * manifest de los datos diarios). Solo si todavía no tiene series anotadas. Devuelve null si no se puede.
+     */
+    fun noDisponible(b: JsonObject, i: Int, alternativa: Int?, ahoraIso: String): JsonObject? {
+        val ejs = b.arr("ejercicios"); val ej = ejs.getOrNull(i) ?: return null
+        if (ej.arr("series").any { registrada(it) } || ej["no_disponible"] != null) return null
+        val alt = alternativa?.let { ej.arr("alternativas").getOrNull(it) ?: return null }
+        val marca = buildJsonObject {
+            put("ejercicio_id", ej["ejercicio_id"] ?: JsonNull); put("nombre", ej["nombre"] ?: JsonNull)
+            put("reemplazo", alt?.get("ejercicio_id") ?: JsonNull); put("marcado_en", ahoraIso)
+            put("original", ej)
+        }
+        val nuevo = if (alt == null) ej.con("no_disponible", marca)
+            else JsonObject(LinkedHashMap(ej).also {
+                it["ejercicio_id"] = alt["ejercicio_id"]!!; it["nombre"] = alt["nombre"]!!; it["notas"] = alt["notas"] ?: JsonPrimitive("")
+                it["series"] = alt["series"]!!; it.remove("alternativas"); it["no_disponible"] = marca
+            })
+        return b.con("ejercicios", JsonArray(ejs.mapIndexed { k, x -> if (k == i) nuevo else x }))
+    }
+
+    /** Deshace "no está disponible" mientras el reemplazo no tenga series anotadas: vuelve el ejercicio original. */
+    fun deshacerNoDisponible(b: JsonObject, i: Int): JsonObject? {
+        val ejs = b.arr("ejercicios"); val ej = ejs.getOrNull(i) ?: return null
+        val orig = ej.obj("no_disponible")?.obj("original") ?: return null
+        if (ej.arr("series").any { registrada(it) }) return null
+        return b.con("ejercicios", JsonArray(ejs.mapIndexed { k, x -> if (k == i) orig else x }))
+    }
+
+    fun saltado(ej: JsonObject): Boolean = ej.obj("no_disponible")?.let { it["reemplazo"] is JsonNull } == true
+
+    /** Lo que vuelve al Evaluador: los ejercicios no disponibles de las sesiones de un día (sin la copia del original). */
+    fun noDisponiblesDelDia(sesiones: List<JsonObject>, fecha: String): List<JsonObject> = sesiones.filter { it.txt("fecha") == fecha }.flatMap { s ->
+        s.arr("ejercicios").mapNotNull { e -> e.obj("no_disponible")?.let { n -> buildJsonObject {
+            put("sesion_id", s["sesion_id"] ?: JsonNull); put("ejercicio_id", n["ejercicio_id"] ?: JsonNull); put("nombre", n["nombre"] ?: JsonNull)
+            put("reemplazo", n["reemplazo"] ?: JsonNull); put("marcado_en", n["marcado_en"] ?: JsonNull)
+        } } }
     }
 
     /** Devuelve una copia del documento con un campo cambiado (los JsonObject son inmutables). */
@@ -121,7 +175,8 @@ object Gimnasio {
         val primero = ejs.indexOfFirst { !porTiempo(it) }; val ultimo = ejs.indexOfLast { !porTiempo(it) }
         return ejs.indices.map { i -> if (primero < 0) "fuerza" else if (i < primero) "cal" else if (i > ultimo) "elong" else "fuerza" }
     }
-    fun ejercicioListo(ej: JsonObject) = ej.arr("series").all { registrada(it) }
+    /** Un ejercicio saltado por "no está disponible" cuenta como listo (no queda pendiente). */
+    fun ejercicioListo(ej: JsonObject) = saltado(ej) || ej.arr("series").all { registrada(it) }
     /** Primer ejercicio con alguna serie sin anotar; -1 si todo está anotado. */
     fun primerPendiente(b: JsonObject): Int = b.arr("ejercicios").indexOfFirst { !ejercicioListo(it) }
 

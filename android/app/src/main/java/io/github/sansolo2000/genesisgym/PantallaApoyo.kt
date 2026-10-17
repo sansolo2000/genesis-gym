@@ -122,6 +122,8 @@ class Apo(val base: BaseLocal, private val comidas: () -> EstadoComidas?, privat
         resp.clear(); textos.clear(); comidasManual.clear()
         val r = estado.reportes[f]
         resp.putAll(estado.respuestasDe(r))
+        // Multiusuario: la señal de alarma es común; si ya se respondió ese día (en Hoy), el reporte parte con esa respuesta.
+        campoAlarma()?.let { c -> if (resp[c] == null) runCatching { Perfil.respuestaSenal(base.get(Perfil.rutaSenal(f))) }.getOrNull()?.let { resp[c] = it } }
         for ((k, v) in resp) if (v is String || v is Double) textos[k] = if (v is Double) JsJson.numero(v.toString()).replace('.', ',') else v as String
         val det = r.o("comidas").o("detalle")
         for (t in Comidas.TIPOS) comidasManual[t] = det.s(t)
@@ -131,6 +133,15 @@ class Apo(val base: BaseLocal, private val comidas: () -> EstadoComidas?, privat
         hecho = entreno!!.hecho; minutos = entreno!!.minutos?.toString() ?: ""; rpe = entreno!!.rpe?.toString() ?: ""
         if (vista == "resumen" && !Apoyo.esViernes(f)) vista = "reporte"
         tick++
+    }
+
+    /** La pregunta de alarma del programa (alarma_inmediata.campo). */
+    fun campoAlarma(): String? = with(Apoyo) { estado.programa.o("alarma_inmediata").s("campo") }
+
+    /** Responder la señal de alarma en el reporte también la deja como la respuesta común del día (la que se ve en Hoy). */
+    fun responderSenal(id: String, si: Boolean) {
+        if (id != campoAlarma()) return
+        runCatching { base.put(Perfil.rutaSenal(dia), Perfil.registroSenal(dia, si, Perfil.leer(base.get(Perfil.RUTA)).id, Gimnasio.ahoraIso())) }
     }
 
     fun moverDia(n: Long) { val f = Apoyo.dia(dia, n); if (f <= hoy()) abrirDia(f) }
@@ -392,8 +403,8 @@ private fun Pregunta(a: Apo, q: JsonObject, bloqueado: Boolean) {
             "si_no" -> {
                 val sel = a.resp[id] as? Boolean
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Opcion(sel == true, "Sí", Modifier.weight(1f)) { if (!bloqueado) { a.resp[id] = true; a.tick++ } }
-                    Opcion(sel == false, "No", Modifier.weight(1f)) { if (!bloqueado) { a.resp[id] = false; a.tick++ } }
+                    Opcion(sel == true, "Sí", Modifier.weight(1f)) { if (!bloqueado) { a.resp[id] = true; a.responderSenal(id, true); a.tick++ } }
+                    Opcion(sel == false, "No", Modifier.weight(1f)) { if (!bloqueado) { a.resp[id] = false; a.responderSenal(id, false); a.tick++ } }
                 }
                 // Señal de alarma: el texto se muestra en el momento, sin esperar a guardar.
                 if (sel == true && a.estado.programa.o("alarma_inmediata").s("campo") == id) a.estado.textoAlarma()?.let { Nota(it, "alarma") }
