@@ -86,6 +86,8 @@ class Medi(private val c: Context, private val base: BaseLocal, private val alCa
     var fDurFin by mutableStateOf("")
     var fAlertas by mutableStateOf(true)
     var errores by mutableStateOf<List<String>>(emptyList())
+    /** Texto de confirmación al cambiar la frecuencia de un tratamiento por días (null = no se está confirmando). */
+    var confirmarFrecuencia by mutableStateOf<String?>(null)
 
     fun hayCatalogo(): Boolean = AvisosMedicamentos.hayCatalogo(c)
     fun hoy(): LocalDate = LocalDate.now(AvisosMedicamentos.zona())
@@ -133,7 +135,7 @@ class Medi(private val c: Context, private val base: BaseLocal, private val alCa
 
     // ---------- formulario ----------
     fun nuevo() {
-        anterior = null; errores = emptyList(); mensaje = null
+        anterior = null; errores = emptyList(); mensaje = null; confirmarFrecuencia = null
         fPersona = perfil().takeIf { it.existe }?.id; fMed = null; fBusca = ""; fCantidad = ""; fUnidad = null; fModalidad = null
         fVeces = ""; fIntervaloH = ""; fIntervaloD = ""; fDias.clear(); fToma = ""; fDescanso = ""; fCiclos = ""
         fHorarios.clear(); fEventos.clear(); fInicio = hoy().toString(); fDur = Medicamentos.DUR_INDEFINIDA; fDurDias = ""; fDurFin = ""; fAlertas = true
@@ -218,6 +220,17 @@ class Medi(private val c: Context, private val base: BaseLocal, private val alCa
         errores = e
         if (t == null) return
         val g = Medicamentos.guardar(t, anterior, Instant.now())
+        // Decisión del Coordinador (17-oct, revisar con Héctor): cambiar la frecuencia de un tratamiento por días muestra antes
+        // el total de tomas y el término resultantes, y se guarda solo si la persona confirma. Nunca se recalcula en silencio.
+        val ant = anterior
+        if (ant != null && g.duracion.tipo == Medicamentos.DUR_DIAS && ant.frecuencia != g.frecuencia && confirmarFrecuencia == null) {
+            val leido = Medicamentos.conHistorial(g, registros.filter { it.tratamientoId == g.id })
+            confirmarFrecuencia = "Con la frecuencia nueva el tratamiento queda en ${Medicamentos.tomasTotales(leido) ?: 0} tomas en total" +
+                (Medicamentos.ultimaToma(leido, AvisosMedicamentos.zona())?.let { u -> ", la última el ${u.local.toLocalDate()} a las ${u.local.toLocalTime()}" } ?: "") +
+                ". El término por calendario no cambia y las tomas ya registradas cuentan. ¿Guardar así?"
+            return
+        }
+        confirmarFrecuencia = null
         try { base.put(Medicamentos.rutaTratamiento(g.id), Medicamentos.tratamientoAJson(g)) }
         catch (x: Exception) { errores = listOf("No se pudo guardar: ${x.javaClass.simpleName}"); return }
         runCatching { AvisosMedicamentos.reprogramar(c) }
@@ -354,7 +367,7 @@ private fun Lista(m: Medi) {
     if (tomas.isEmpty()) Gris("No hay tomas programadas para hoy.")
     for ((tr, oc) in tomas) {
         val u = Medicamentos.ultima(porClave[Medicamentos.clave(tr.id, oc.local)] ?: emptyList())
-        val estado = u?.let { Medicamentos.ESTADOS[it.estado] } ?: if (Medicamentos.enSuspension(tr, oc.cuando.toInstant())) "Suspendida"
+        val estado = u?.let { Medicamentos.ESTADOS[it.estado] } ?: if (Medicamentos.cortadaPorSuspension(tr, oc.cuando.toInstant()) && !oc.cuando.isAfter(ahora)) "Suspendida"
             else if (oc.cuando.isAfter(ahora)) "Pendiente" else "Sin responder"
         Column(Modifier.fillMaxWidth()) {
             Text("${oc.local.toLocalTime()} · ${m.nombre(tr.persona)} · ${tr.med.nombre} · ${tr.dosisTexto}", fontWeight = FontWeight.SemiBold)
@@ -525,7 +538,14 @@ private fun Formulario(m: Medi) {
     }
     Gris("Sin respuesta, la alerta se repite cada ${Medicamentos.REPETIR_MIN} minutos durante ${Medicamentos.VENTANA_MIN / 60} horas. El tono y el volumen se eligen en Avisos → Medicamentos.")
     if (m.errores.isNotEmpty()) Nota(m.errores.joinToString("\n") { "• $it" }, true)
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    val confirmar = m.confirmarFrecuencia
+    if (confirmar != null) {
+        Nota(confirmar, true)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { m.guardar() }) { Text("Sí, guardar") }
+            OutlinedButton(onClick = { m.confirmarFrecuencia = null }) { Text("Volver a editar") }
+        }
+    } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = { m.guardar() }) { Text("Guardar") }
         OutlinedButton(onClick = { m.vista = "lista"; m.errores = emptyList() }) { Text("Cancelar") }
     }

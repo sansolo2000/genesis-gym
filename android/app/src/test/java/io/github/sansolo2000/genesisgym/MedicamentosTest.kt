@@ -447,7 +447,10 @@ class MedicamentosTest {
         val cierre = M.cierreAlTerminar(t, en("2030-03-05T15:05"), emptyMap())
         assertEquals(1, cierre.size)
         val reg = M.registroDesde(cierre[0].first, cierre[0].second)!!
-        assertEquals(M.SIN_RESPUESTA, reg.estado); assertEquals("2030-03-05T15:00", reg.programada.toString())
+        assertEquals(M.TERMINADA, reg.estado); assertEquals("2030-03-05T15:00", reg.programada.toString())   // decisión del Coordinador
+        assertTrue(M.cadenasAbiertas(fin, en("2030-03-05T15:10"), emptyMap()).isEmpty())   // terminar corta la cadena aunque no haya registro
+        assertTrue(M.cerradasSinRespuesta(fin, en("2030-03-05T18:00"), emptySet()).none { it.local.toString() == "2030-03-05T15:00" })   // y no queda "sin respuesta"
+        assertEquals(0, M.conHistorial(fin, listOf(reg)).duracion.extra)
         val porClave = AvisosMedicamentos.porClave(listOf(reg))
         assertTrue(M.cadenasAbiertas(fin, en("2030-03-05T15:10"), porClave).isEmpty())
         // Sin una toma sonando, terminar no registra nada.
@@ -487,6 +490,51 @@ class MedicamentosTest {
         assertEquals(0, leido.duracion.extra)
         assertEquals(ultima, M.ultimaToma(leido, SCL)!!.local)
         assertEquals(10, M.ocurrencias(leido, en("2030-03-01T00:00"), en("2030-05-01T00:00"), SCL).size)
+    }
+
+    /** D-22 (QA, 17-oct): editar un tratamiento por días de la 0.17.0 (sin primera toma) no reinicia el conteo. */
+    @Test fun editarUnTratamientoDeLa0170NoReiniciaElConteo() {
+        val viejo = trat(veces("07:00", "19:00"), inicio = "2030-03-05", dur = M.Duracion(M.DUR_DIAS, dias = 7))
+        assertNull(viejo.duracion.primera); assertEquals(LocalDate.parse("2030-03-11"), viejo.fin)
+        val ed = M.guardar(viejo.copy(cantidad = 0.5), viejo, en("2030-03-09T12:00").toInstant(), SCL)
+        assertEquals(LocalDateTime.parse("2030-03-05T07:00"), ed.duracion.primera)   // del inicio guardado, no de "ahora"
+        assertEquals(LocalDate.parse("2030-03-11"), ed.fin)
+        assertEquals(LocalDateTime.parse("2030-03-11T19:00"), M.ultimaToma(ed, SCL)!!.local)
+        assertNull(ed.duracion.base)   // solo la dosis: no hay cambio de frecuencia
+    }
+
+    /** D-21 (QA, 17-oct) y decisión del Coordinador: cambiar la frecuencia a mitad no suma ni pierde tomas, y el término por calendario no cambia. */
+    @Test fun cambiarLaFrecuenciaAMitadNoSumaTomas() {
+        // 3 al día × 5 días desde el 5 a las 07:00. El 7 a las 16:00 (ya tuvo las de 07:00 y 15:00) pasa a 2 al día (09:00 y 21:00).
+        val v1 = M.guardar(trat(veces("07:00", "15:00", "23:00"), inicio = "2030-03-05", dur = M.Duracion(M.DUR_DIAS, dias = 5)), null, en("2030-03-05T06:00").toInstant(), SCL)
+        assertEquals(15, M.tomasTotales(v1))
+        val v2 = M.guardar(v1.copy(frecuencia = veces("09:00", "21:00")), v1, en("2030-03-07T16:00").toInstant(), SCL)
+        assertEquals(M.Base(LocalDateTime.parse("2030-03-07T16:00"), 8, 2), v2.duracion.base)
+        // Hoy ya tuvo 2: no se agrega la de las 21:00. Quedan el 8 y el 9 (2 al día); el término sigue siendo el del calendario (antes del 10 a las 07:00).
+        val quedan = M.ocurrencias(v2, en("2030-03-07T16:00"), en("2030-04-01T00:00"), SCL).map { it.local.toString() }
+        assertEquals(listOf("2030-03-08T09:00", "2030-03-08T21:00", "2030-03-09T09:00", "2030-03-09T21:00"), quedan)
+        assertEquals(12, M.tomasTotales(v2))
+        assertEquals(LocalDateTime.parse("2030-03-09T21:00"), M.ultimaToma(v2, SCL)!!.local)
+        // Se guarda y se lee igual.
+        assertEquals(v2.duracion, M.tratamientoDesdeJson(Json.parseToJsonElement(JsJson.stringify(M.tratamientoAJson(v2))).jsonObject)!!.duracion)
+        // Editar después solo la dosis conserva la base.
+        assertEquals(v2.duracion.base, M.guardar(v2.copy(cantidad = 2.0), v2, en("2030-03-08T10:00").toInstant(), SCL).duracion.base)
+        // Un documento sin cambio de frecuencia no lleva "base".
+        assertNull((M.tratamientoAJson(v1)["duracion"] as kotlinx.serialization.json.JsonObject)["base"])
+    }
+
+    /** D-20 (QA, 17-oct): una toma que sonaba al suspender queda cerrada: al reanudar dentro de sus 2 h no vuelve a sonar ni queda "sin respuesta". */
+    @Test fun suspenderConUnaTomaSonandoLaCierra() {
+        val t = trat(veces("09:00"), inicio = "2030-03-05")
+        val r = M.reanudar(M.suspender(t, en("2030-03-05T09:05").toInstant()), en("2030-03-05T09:30").toInstant())
+        assertTrue(M.cortadaPorSuspension(r, en("2030-03-05T09:00").toInstant()))
+        assertTrue(M.cadenasAbiertas(r, en("2030-03-05T09:31"), emptyMap()).isEmpty())
+        assertTrue(M.cerradasSinRespuesta(r, en("2030-03-05T11:30"), emptySet()).isEmpty())
+        // La toma siguiente suena normal.
+        assertFalse(M.cortadaPorSuspension(r, en("2030-03-06T09:00").toInstant()))
+        assertEquals("2030-03-06T09:00", AvisosMedicamentos.calcular(listOf(r), emptyMap(), en("2030-03-05T12:00")).first().local.toString())
+        // Una suspensión que empezó después de que la cadena cerró no la toca.
+        assertFalse(M.cortadaPorSuspension(M.suspender(t, en("2030-03-05T11:30").toInstant()), en("2030-03-05T09:00").toInstant()))
     }
 
     /** D-17 (QA, 16-oct): recargar la pestaña no borra el mensaje de guardar o terminar; un error de lectura sí lo reemplaza. */

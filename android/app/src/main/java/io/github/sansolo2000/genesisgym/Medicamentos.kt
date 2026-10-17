@@ -49,7 +49,10 @@ object Medicamentos {
     const val DUR_DIAS = "dias"; const val DUR_FECHA = "fecha"; const val DUR_INDEFINIDA = "indefinida"
 
     const val CONFIRMADA = "confirmada"; const val POSTERGADA = "postergada"; const val OMITIDA = "omitida"; const val SIN_RESPUESTA = "sin_respuesta"
-    val ESTADOS = linkedMapOf(CONFIRMADA to "Confirmada", POSTERGADA to "Pospuesta", OMITIDA to "Omitida", SIN_RESPUESTA to "Sin respuesta")
+    /** Decisión del Coordinador (17-oct, revisar con Héctor): la toma que sonaba al tocar "Terminar". No alarga nada. */
+    const val TERMINADA = "terminada"
+    val ESTADOS = linkedMapOf(CONFIRMADA to "Confirmada", POSTERGADA to "Pospuesta", OMITIDA to "Omitida", SIN_RESPUESTA to "Sin respuesta",
+        TERMINADA to "No tomada: tratamiento terminado")
     val POSTERGAR = listOf(15, 30, 60, 90)
     /** Sin respuesta, la alerta se repite cada 10 minutos; a las 2 horas de la primera se cierra como "sin respuesta". */
     const val REPETIR_MIN = 10L
@@ -356,7 +359,16 @@ object Medicamentos {
      * [extra]: O-36 (Héctor, 16-oct), tomas omitidas o "sin respuesta" desde la primera; no cuentan y alargan el tratamiento.
      * Sale del historial al leer el tratamiento ([conHistorial]); no se guarda.
      */
-    data class Duracion(val tipo: String, val dias: Int? = null, val fin: LocalDate? = null, val primera: LocalDateTime? = null, val extra: Int = 0)
+    data class Duracion(val tipo: String, val dias: Int? = null, val fin: LocalDate? = null, val primera: LocalDateTime? = null, val extra: Int = 0,
+                        val base: Base? = null)
+
+    /**
+     * D-21 (QA, 17-oct) y decisión del Coordinador (17-oct, revisar con Héctor): cambiar la frecuencia a mitad de un tratamiento
+     * por días no cambia el término por calendario (la primera toma + N días). Las [tomas] programadas con la configuración
+     * anterior hasta [desde] (la hora local de la edición) ya cuentan; ese día, la configuración nueva solo agrega las tomas que
+     * le faltan al día ([dia]: las que ya tuvo con la anterior). Ej.: 1 al día, tomada a las 09:00 y pasada a las 20:00: hoy no hay otra.
+     */
+    data class Base(val desde: LocalDateTime, val tomas: Int, val dia: Int)
 
     /** O-36: el fin del período base (exclusivo): la primera toma + N días. null si no aplica. */
     fun limite(d: Duracion): LocalDateTime? = if (d.tipo == DUR_DIAS && d.dias != null && d.primera != null) d.primera.plusDays(d.dias.toLong()) else null
@@ -369,31 +381,54 @@ object Medicamentos {
     }
 
     /** Las horas locales de las tomas de [t] desde su primera toma, sin límite de duración, hasta juntar [n] (o hasta [maxDias] días). */
+    /**
+     * Las horas locales de las tomas de [t] desde su primera toma (o, si se cambió la frecuencia, desde la edición: [Base]),
+     * sin límite de duración, hasta juntar [n] (o hasta [maxDias] días). No incluye las [Base.tomas] de antes de la edición.
+     */
     private fun tomasDesdePrimera(t: Tratamiento, n: Int, hasta: LocalDateTime? = null, maxDias: Long = 4000): List<LocalDateTime> {
         val p = t.duracion.primera ?: return emptyList()
+        val b = t.duracion.base
         val libre = t.copy(duracion = Duracion(DUR_INDEFINIDA), terminadoEn = null, anteriores = emptyList())
+        val cupo = b?.let { cupo(libre, it) }
         val l = mutableListOf<LocalDateTime>()
-        var desde = ZonedDateTime.of(p, ZoneOffset.UTC).minusMinutes(1)   // en UTC: solo importa la hora local de cada toma
+        var desde = ZonedDateTime.of(if (b != null && b.desde > p) b.desde else p, ZoneOffset.UTC).minusMinutes(1)   // en UTC: solo importa la hora local
         val tope = desde.plusDays(maxDias)
         while (l.size < n && desde < tope && (hasta == null || desde.toLocalDateTime() < hasta)) {
             val h = desde.plusDays(62)
-            for (oc in ocurrencias(libre, desde, h, ZoneOffset.UTC)) { if (hasta != null && oc.local >= hasta) return l; l.add(oc.local); if (l.size >= n) break }
+            for (oc in ocurrencias(libre, desde, h, ZoneOffset.UTC)) {
+                if (hasta != null && oc.local >= hasta) return l
+                if (b != null && !enCupo(b, cupo!!, oc.local)) continue
+                l.add(oc.local); if (l.size >= n) break
+            }
             desde = h
         }
         return l
     }
 
+    /** D-21: el día de la edición, las tomas nuevas posteriores a ella que caben (las que le faltan al día). */
+    private fun cupo(libre: Tratamiento, b: Base): Set<LocalDateTime> {
+        val d = b.desde.toLocalDate()
+        val delDia = ocurrencias(libre, ZonedDateTime.of(d.atStartOfDay(), ZoneOffset.UTC).minusNanos(1), ZonedDateTime.of(d.plusDays(1).atStartOfDay(), ZoneOffset.UTC).minusNanos(1), ZoneOffset.UTC)
+            .map { it.local }
+        return delDia.filter { it >= b.desde }.take(maxOf(0, delDia.size - b.dia)).toSet()
+    }
+    private fun enCupo(b: Base, cupo: Set<LocalDateTime>, local: LocalDateTime): Boolean =
+        local >= b.desde && (local.toLocalDate() != b.desde.toLocalDate() || local in cupo)
+
     /** O-36: cantidad de tomas del tratamiento (N días × tomas al día, en días de calendario desde la primera). */
     fun tomasTotales(t: Tratamiento): Int? {
         val lim = limite(t.duracion) ?: return null
-        return tomasDesdePrimera(t, Int.MAX_VALUE, lim).size
+        return (t.duracion.base?.tomas ?: 0) + tomasDesdePrimera(t, Int.MAX_VALUE, lim).size
     }
 
     /** O-36: la última toma: la del lugar tomas totales + omitidas o "sin respuesta" (cada una agrega una al final). */
     fun corte(t: Tratamiento): LocalDateTime? {
         val n = tomasTotales(t) ?: return null
         if (n == 0) return null
-        return tomasDesdePrimera(t, n + t.duracion.extra).lastOrNull()
+        val nuevas = n + t.duracion.extra - (t.duracion.base?.tomas ?: 0)
+        // Si ya se cumplieron todas con la configuración anterior, la última fue antes de la edición: desde ahí no hay más.
+        if (nuevas <= 0) return t.duracion.base?.desde?.minusMinutes(1)
+        return tomasDesdePrimera(t, nuevas).lastOrNull()
     }
 
     /** O-36: [extra] según el historial: tomas de este tratamiento desde la primera cuya última respuesta es omitida o "sin respuesta". */
@@ -515,7 +550,11 @@ object Medicamentos {
             }
         }
         val pri = t.duracion.primera; val ult = if (pri != null) t.ultima else null; val term = t.terminado
-        return locales.filter { (pri == null || it.first >= pri) && (ult == null || it.first <= ult) }.map { (l, ev) -> Ocurrencia(l, ZonedDateTime.of(l, zona), ev) }
+        // D-21: el día en que se cambió la frecuencia, solo las tomas nuevas que le faltan al día.
+        val b = t.duracion.base?.takeIf { pri != null }
+        val cupo = b?.let { cupo(t.copy(duracion = Duracion(DUR_INDEFINIDA), terminadoEn = null, anteriores = emptyList()), it) }
+        return locales.filter { (pri == null || it.first >= pri) && (ult == null || it.first <= ult) && (b == null || it.first < b.desde || enCupo(b, cupo!!, it.first)) }
+            .map { (l, ev) -> Ocurrencia(l, ZonedDateTime.of(l, zona), ev) }
             .filter { it.cuando.isAfter(desde) && !it.cuando.isAfter(hasta) && (term == null || it.cuando.toInstant().isBefore(term)) }
             .sortedWith(compareBy<Ocurrencia>({ it.cuando.toInstant() }, { it.local }))
     }
@@ -563,7 +602,7 @@ object Medicamentos {
     fun rutaTratamiento(id: String) = "$COLECCION/t_$id"
     /** Cada respuesta es un documento nuevo; "sin respuesta" tiene ruta fija para no duplicarse. */
     fun rutaRegistro(tratamientoId: String, local: LocalDateTime, estado: String, respuestaMs: Long): String =
-        if (estado == SIN_RESPUESTA) "$COLECCION/a_${clave(tratamientoId, local)}_$estado" else "$COLECCION/a_${clave(tratamientoId, local)}_${estado}_$respuestaMs"
+        if (estado == SIN_RESPUESTA || estado == TERMINADA) "$COLECCION/a_${clave(tratamientoId, local)}_$estado" else "$COLECCION/a_${clave(tratamientoId, local)}_${estado}_$respuestaMs"
 
     /** Registro inmutable de una respuesta, con los datos del tratamiento vigentes en ese momento. */
     fun registro(t: Tratamiento, oc: Ocurrencia, estado: String, respondidaEn: Instant, postergacionMin: Int?, origen: String): JsonObject {
@@ -660,14 +699,28 @@ object Medicamentos {
         val ahoraMs = ahora.toInstant().toEpochMilli()
         val r = mutableListOf<Pair<Ocurrencia, Long>>()
         for (oc in tomasPorVersion(t, ahora.minusMinutes(VENTANA_MIN), ahora))
-            if (registros[clave(t.id, oc.local)].isNullOrEmpty()) r.add(oc to oc.cuando.toInstant().toEpochMilli())
+            if (registros[clave(t.id, oc.local)].isNullOrEmpty() && !cortada(t, oc.cuando.toInstant())) r.add(oc to oc.cuando.toInstant().toEpochMilli())
         for (l in registros.values) {
             val u = ultima(l) ?: continue
             val h = u.postergadaHasta?.toEpochMilli() ?: continue
-            if (u.estado == POSTERGADA && h + VENTANA_MIN * 60_000L > ahoraMs) r.add(Ocurrencia(u.programada, ZonedDateTime.of(u.programada, ahora.zone), u.evento) to h)
+            if (u.estado == POSTERGADA && h + VENTANA_MIN * 60_000L > ahoraMs && !cortada(t, Instant.ofEpochMilli(h)))
+                r.add(Ocurrencia(u.programada, ZonedDateTime.of(u.programada, ahora.zone), u.evento) to h)
         }
         return r
     }
+
+    /**
+     * D-20 (QA, 17-oct): una suspensión que empezó mientras sonaba la toma (dentro de sus 2 horas desde [inicio]) la deja
+     * cerrada: no vuelve a sonar al reanudar ni queda "sin respuesta". Incluye las tomas que cayeron en la suspensión.
+     */
+    fun cortadaPorSuspension(t: Tratamiento, inicio: Instant): Boolean {
+        val fin = inicio.plusSeconds(VENTANA_MIN * 60)
+        return t.suspensiones.any { it.desde.isBefore(fin) && (it.hasta == null || it.hasta.isAfter(inicio)) }
+    }
+
+    /** La cadena que empezó en [inicio] la cortó una suspensión o "Terminar" (Héctor, 17-oct: Terminar calla la toma que suena). */
+    fun cortada(t: Tratamiento, inicio: Instant): Boolean =
+        cortadaPorSuspension(t, inicio) || t.terminado?.isBefore(inicio.plusSeconds(VENTANA_MIN * 60)) == true
 
     /** Tomas con alertas de los últimos [dias] días que cerraron sus 2 horas sin ninguna respuesta (si el celular estuvo apagado, por ejemplo). */
     fun cerradasSinRespuesta(t: Tratamiento, ahora: ZonedDateTime, conRegistro: Set<String>, dias: Long = 3): List<Ocurrencia> {
@@ -675,7 +728,7 @@ object Medicamentos {
         val hasta = ahora.minusMinutes(VENTANA_MIN)
         val desde = ahora.minusDays(dias)
         if (!hasta.isAfter(desde)) return emptyList()
-        return tomasPorVersion(t, desde, hasta).filter { clave(t.id, it.local) !in conRegistro }
+        return tomasPorVersion(t, desde, hasta).filter { clave(t.id, it.local) !in conRegistro && !cortada(t, it.cuando.toInstant()) }
     }
 
     /** D-16: tomas cuya última respuesta es "postergada" y cuya ventana de 2 horas ya cerró (por ejemplo, con el celular apagado). */
@@ -728,6 +781,9 @@ object Medicamentos {
         .let { o -> if (t.archivado) JsonObject(o + ("archivado" to JsonPrimitive(true))) else o }
         // O-36: solo si existen, para no cambiar los documentos guardados antes.
         .let { o -> t.duracion.primera?.let { p -> JsonObject(o + ("duracion" to JsonObject(o.o("duracion")!! + ("primera_toma" to JsonPrimitive(p.format(FMT_LOCAL)))))) } ?: o }
+        // D-21: solo si se cambió la frecuencia de un tratamiento por días.
+        .let { o -> t.duracion.base?.let { b -> JsonObject(o + ("duracion" to JsonObject(o.o("duracion")!! + ("base" to Apoyo.objeto(
+            "desde" to JsonPrimitive(b.desde.format(FMT_LOCAL)), "tomas" to JsonPrimitive(b.tomas), "dia" to JsonPrimitive(b.dia)))))) } ?: o }
         .let { o -> t.terminadoEn?.let { JsonObject(o + ("terminado_en" to JsonPrimitive(it))) } ?: o }
         .let { o -> if (t.suspensiones.isEmpty()) o else JsonObject(o + ("suspensiones" to JsonArray(t.suspensiones.map {
             Apoyo.objeto("desde" to JsonPrimitive(isoUtc(it.desde)), "hasta" to Apoyo.txt(it.hasta?.let { h -> isoUtc(h) })) }))) }
@@ -737,7 +793,8 @@ object Medicamentos {
         val d = o.o("duracion")
         Tratamiento(o.s("id")!!, o.s("persona")!!, m, o.o("dosis").n("cantidad")!!, o.o("dosis").s("unidad")!!,
             frecuenciaDesdeJson(o.o("frecuencia"))!!, LocalDate.parse(o.s("inicio")!!),
-            Duracion(d.s("tipo") ?: DUR_INDEFINIDA, entero(d, "dias"), d.s("fin")?.let { LocalDate.parse(it) }, d.s("primera_toma")?.let { LocalDateTime.parse(it, FMT_LOCAL) }),
+            Duracion(d.s("tipo") ?: DUR_INDEFINIDA, entero(d, "dias"), d.s("fin")?.let { LocalDate.parse(it) }, d.s("primera_toma")?.let { LocalDateTime.parse(it, FMT_LOCAL) },
+                base = d.o("base")?.let { b -> b.s("desde")?.let { s -> Base(LocalDateTime.parse(s, FMT_LOCAL), entero(b, "tomas") ?: 0, entero(b, "dia") ?: 0) } }),
             o.b("alertas") ?: true, entero(o, "version") ?: 1, o.s("vigente_desde") ?: "", o.s("creado_en") ?: "",
             o.a("versiones_anteriores")?.mapNotNull { tratamientoDesdeJson(it as? JsonObject) } ?: emptyList(),
             o.b("archivado") ?: false, o.s("terminado_en"),
@@ -754,8 +811,31 @@ object Medicamentos {
      */
     fun cierreAlTerminar(t: Tratamiento, ahora: ZonedDateTime, registros: Map<String, List<Registro>>): List<Pair<String, JsonObject>> =
         cadenasAbiertas(t, ahora, registros).map { (oc, _) -> oc }.distinctBy { it.local }.map { oc ->
-            rutaRegistro(t.id, oc.local, SIN_RESPUESTA, 0) to registro(versionDe(t, oc.cuando.toInstant()), oc, SIN_RESPUESTA, ahora.toInstant(), null, "cierre")
+            // Decisión del Coordinador (17-oct, revisar con Héctor): "no tomada: tratamiento terminado", distinta de "sin respuesta".
+            rutaRegistro(t.id, oc.local, TERMINADA, 0) to registro(versionDe(t, oc.cuando.toInstant()), oc, TERMINADA, ahora.toInstant(), null, "cierre")
         }
+
+    /**
+     * D-22 (QA, 17-oct): un tratamiento por días guardado con la 0.17.0 no tiene primera toma. Se deriva de su fecha de inicio
+     * guardada (la primera toma de ese día o la siguiente), nunca de "ahora": así su término queda como en la 0.17.0
+     * (inicio + N − 1) y editar solo la dosis no lo mueve.
+     */
+    fun primeraDerivada(t: Tratamiento, zona: ZoneId): Tratamiento {
+        if (t.duracion.tipo != DUR_DIAS || t.duracion.primera != null) return t
+        val libre = t.copy(duracion = Duracion(DUR_INDEFINIDA), terminadoEn = null, anteriores = emptyList(), suspensiones = emptyList())
+        val p = proxima(libre, t.inicio.atStartOfDay(zona).minusSeconds(1))?.local ?: return t
+        return t.copy(duracion = t.duracion.copy(primera = p))
+    }
+
+    /** D-21: lo que ya se programó con [ant] antes de [desde] (sin pasarse de su última toma) y cuántas de ellas fueron ese día. */
+    private fun baseAlEditar(ant: Tratamiento, desde: LocalDateTime): Base {
+        val previa = ant.duracion.base
+        val ult = ant.ultima
+        val antes = tomasDesdePrimera(ant, Int.MAX_VALUE, desde).filter { ult == null || it <= ult }
+        val d = desde.toLocalDate()
+        val delDia = antes.count { it.toLocalDate() == d } + (if (previa != null && previa.desde.toLocalDate() == d) previa.dia else 0)
+        return Base(desde, (previa?.tomas ?: 0) + antes.size, delDia)
+    }
 
     /** Días que se guardan las versiones anteriores (los mismos que revisa el cierre "sin respuesta"). */
     const val DIAS_VERSIONES = 3L
@@ -769,10 +849,12 @@ object Medicamentos {
         val iso = isoUtc(ahora)
         // O-36: con una cantidad de días, se cuenta desde la primera toma real (la de la versión anterior si ya se contaba así).
         fun conPrimera(x: Tratamiento): Tratamiento {
-            if (x.duracion.tipo != DUR_DIAS) return x.copy(duracion = x.duracion.copy(primera = null))
-            val previa = anterior?.duracion?.takeIf { it.tipo == DUR_DIAS }?.primera
-            val p = previa ?: proxima(x.copy(duracion = Duracion(DUR_INDEFINIDA), terminadoEn = null), ahora.atZone(zona))?.local
-            return x.copy(duracion = x.duracion.copy(primera = p))
+            if (x.duracion.tipo != DUR_DIAS) return x.copy(duracion = x.duracion.copy(primera = null, base = null))
+            val ant = anterior?.takeIf { it.duracion.tipo == DUR_DIAS }?.let { primeraDerivada(it, zona) }
+            val p = ant?.duracion?.primera ?: proxima(x.copy(duracion = Duracion(DUR_INDEFINIDA), terminadoEn = null), ahora.atZone(zona))?.local
+            // D-21: si cambia la frecuencia, lo ya programado con la anterior cuenta y el término por calendario no cambia.
+            val base = if (ant == null) null else if (ant.frecuencia != x.frecuencia) baseAlEditar(ant, ahora.atZone(zona).toLocalDateTime().truncatedTo(java.time.temporal.ChronoUnit.MINUTES)) else ant.duracion.base
+            return x.copy(duracion = x.duracion.copy(primera = p, base = base, extra = 0))
         }
         if (anterior == null) return conPrimera(t.copy(version = 1, vigenteDesde = iso, creadoEn = iso, anteriores = emptyList()))
         val previas = anterior.anteriores + anterior.copy(anteriores = emptyList())
