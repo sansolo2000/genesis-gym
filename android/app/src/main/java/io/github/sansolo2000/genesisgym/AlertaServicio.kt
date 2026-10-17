@@ -10,11 +10,13 @@ import android.media.MediaPlayer
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 
 /**
  * M-10 — hace sonar una alerta hasta "Detener" o "Posponer", con el tope de 2 minutos (después se calla y la
  * notificación queda). Si llegan varias, se ve una notificación por tipo y suena la de mayor prioridad
- * (Entrenamiento > Comidas > Tareas > Reporte). Al detener una se detienen todas.
+ * (Medicamentos > Entrenamiento > Comidas > Tareas > Reporte). D-18 (0.18.0): cada alerta suena sus propios 2 minutos desde
+ * que llega. Al detener una se detienen todas las que ya estaban (O-35: no una que llega en ese momento).
  */
 class AlertaServicio : Service() {
     companion object {
@@ -27,13 +29,19 @@ class AlertaServicio : Service() {
 
         private fun canalesQueInsisten() = Alertas.TIPOS.filter { Alertas.insiste(it) }.map { Programador.canal(it) }.toSet()
 
-        /** "Detener" (o tocar la notificación, O-33): calla y quita todas las alertas, también las que quedaron después del tope. */
-        fun detenerTodas(c: Context) {
-            actual?.detenerTodo()
+        /**
+         * "Detener" (o tocar la notificación, O-33): calla y quita las alertas, también las que quedaron después del tope.
+         * O-35: una que llegó hace menos de [Alertas.GRACIA_MS] sigue sonando, salvo que sea la tocada ([tocada]).
+         */
+        fun detenerTodas(c: Context, tocada: Int? = null) {
+            val ahora = System.currentTimeMillis()
+            actual?.detenerTodo(tocada)
             val nm = c.getSystemService(NotificationManager::class.java)
             val canales = canalesQueInsisten()
-            for (n in nm.activeNotifications) if (n.notification.channelId in canales) nm.cancel(n.id)
-            Programador.detener(); Programador.dejarDeVibrar(c)
+            val quedan = actual?.ids().orEmpty()
+            for (n in nm.activeNotifications) if (n.notification.channelId in canales && n.id !in quedan && (n.id == tocada || Alertas.detenerAlcanza(n.postTime, ahora))) nm.cancel(n.id)
+            Programador.detener()
+            if (actual?.suenaAlgo() != true) Programador.dejarDeVibrar(c)
         }
 
         /** O-33: marcar la comida o la tarea, abrir la sesión o guardar el reporte calla la alerta de ese tipo. */
@@ -45,28 +53,21 @@ class AlertaServicio : Service() {
     }
 
     fun idEnPrimerPlano(): Int? = idPrimerPlano
+    fun ids(): Set<Int> = activas.keys.toSet()
+    fun suenaAlgo(): Boolean = tipoSonando != null
 
-    /** Quita las alertas de un tipo. Si era la que sonaba, se calla y se cierra el servicio; si sonaba otra, sigue. */
-    fun quitarTipo(t: String) {
-        val nm = getSystemService(NotificationManager::class.java)
-        val ids = activas.filterValues { it == t }.keys.toList()
-        if (ids.isEmpty() && tipoSonando != t) return
-        for (id in ids) if (id != idPrimerPlano) { nm.cancel(id); activas.remove(id) }
-        if (tipoSonando == t) {
-            callar()
-            for (id in ids) activas.remove(id)
-            detenerServicio(quitarNotificacion = ids.contains(idPrimerPlano))
-        }
-    }
+    /** Quita las alertas de un tipo (O-33); las de otros tipos siguen. */
+    fun quitarTipo(t: String) = quitar(activas.filterValues { it == t }.keys.toList()) { true }
 
     private val activas = LinkedHashMap<Int, String>()   // id de la notificación → tipo
+    private val llegada = HashMap<Int, Long>()   // D-18 y O-35: cuándo llegó cada una (elapsedRealtime)
     private val notifs = HashMap<Int, android.app.Notification>()   // O-38: para pasar el primer plano a otra si se quita una
     private var idPrimerPlano: Int? = null
     private var notifPrimerPlano: android.app.Notification? = null
     private var tipoSonando: String? = null
     private var mp: MediaPlayer? = null
     private val h = Handler(Looper.getMainLooper())
-    private val tope = Runnable { callar(); detenerServicio(quitarNotificacion = false) }
+    private val revisar = Runnable { actualizar() }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -81,9 +82,23 @@ class AlertaServicio : Service() {
         val fg = idPrimerPlano; val fgN = notifPrimerPlano
         if (fg == null || fgN == null) { startForeground(id, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK); idPrimerPlano = id; notifPrimerPlano = n }
         else { startForeground(fg, fgN, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK); getSystemService(NotificationManager::class.java).notify(id, n) }
-        activas[id] = t; notifs[id] = n
-        if (Alertas.reemplaza(tipoSonando, t)) sonarTipo(t)
+        activas[id] = t; notifs[id] = n; llegada[id] = SystemClock.elapsedRealtime()
+        actualizar()
         return START_NOT_STICKY
+    }
+
+    /**
+     * D-18: suena la de mayor prioridad entre las que no llegaron a su tope de 2 minutos (cada una cuenta desde que llegó).
+     * Cuando todas llegaron, se calla y se cierra el servicio; las notificaciones quedan.
+     */
+    private fun actualizar() {
+        val ahora = SystemClock.elapsedRealtime()
+        val lista = activas.map { (id, t) -> Alertas.Activa(t, llegada[id] ?: ahora) }
+        val t = Alertas.queSuena(lista, ahora)
+        if (t == null) { callar(); detenerServicio(quitarNotificacion = false); return }
+        if (t != tipoSonando) sonarTipo(t)
+        h.removeCallbacks(revisar)
+        Alertas.proximoTope(lista, ahora)?.let { h.postDelayed(revisar, it - ahora) }
     }
 
     private fun sonarTipo(t: String) {
@@ -93,7 +108,6 @@ class AlertaServicio : Service() {
         if (Alertas.suena(v, e.timbre, e.filtro, e.alarmasPermitidas)) mp = Programador.preparar(this, v, true)?.also { it.start() }
         if (Alertas.vibra(v, e.timbre)) Programador.vibrar(this, true)
         tipoSonando = t
-        h.removeCallbacks(tope); h.postDelayed(tope, Alertas.TOPE_MS)
     }
 
     /** Calla el sonido y la vibración; las notificaciones quedan. */
@@ -101,17 +115,16 @@ class AlertaServicio : Service() {
         mp?.let { runCatching { it.stop() }; it.release() }; mp = null
         Programador.dejarDeVibrar(this)
         tipoSonando = null
-        h.removeCallbacks(tope)
+        h.removeCallbacks(revisar)
     }
 
-    /** "Detener": calla y quita todas las notificaciones de alertas, salvo las de Medicamentos (esperan Confirmar, Posponer u Omitir). */
-    fun detenerTodo() {
-        callar()
-        val nm = getSystemService(NotificationManager::class.java)
-        for ((id, t) in activas) if (!Alertas.esperaRespuesta(t)) nm.cancel(id)
-        val quedaPrimerPlano = idPrimerPlano?.let { activas[it] }?.let { Alertas.esperaRespuesta(it) } == true
-        activas.clear(); notifs.clear()
-        detenerServicio(quitarNotificacion = !quedaPrimerPlano)
+    /**
+     * "Detener": calla y quita las alertas que ya estaban, salvo las notificaciones de Medicamentos (esperan Confirmar,
+     * Posponer u Omitir; §9.6). O-35: una que llegó hace menos de [Alertas.GRACIA_MS] sigue con sus 2 minutos.
+     */
+    fun detenerTodo(tocada: Int? = null) {
+        val ahora = SystemClock.elapsedRealtime()
+        quitar(activas.keys.filter { it == tocada || Alertas.detenerAlcanza(llegada[it] ?: 0L, ahora) }) { !Alertas.esperaRespuesta(it) }
     }
 
     /**
@@ -119,18 +132,36 @@ class AlertaServicio : Service() {
      * siguen; si sonaba la respondida, pasa a sonar la de mayor prioridad que quede.
      */
     fun quitarUna(id: Int) {
+        if (id !in activas) { getSystemService(NotificationManager::class.java).cancel(id); return }
+        quitar(listOf(id)) { true }
+    }
+
+    /**
+     * Saca alertas del servicio; [cancelar] dice, según el tipo, si también se quita su notificación. Las que quedan siguen
+     * sonando con sus propios 2 minutos (D-18); si no queda ninguna, se calla y se cierra el servicio.
+     */
+    private fun quitar(ids: Collection<Int>, cancelar: (String) -> Boolean) {
+        val fuera = ids.mapNotNull { id -> activas.remove(id)?.let { t -> llegada.remove(id); notifs.remove(id); id to t } }
+        if (fuera.isEmpty()) return
         val nm = getSystemService(NotificationManager::class.java)
-        val t = activas.remove(id); notifs.remove(id)
-        if (t == null) { nm.cancel(id); return }
-        if (activas.isEmpty()) { callar(); nm.cancel(id); detenerServicio(quitarNotificacion = true); return }
-        if (id == idPrimerPlano) {
-            val otro = activas.keys.first(); val n = notifs[otro]
-            if (n != null) { startForeground(otro, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK); idPrimerPlano = otro; notifPrimerPlano = n }
+        val fg = idPrimerPlano; val fgN = notifPrimerPlano
+        val tipoFg = fuera.firstOrNull { it.first == fg }?.second
+        if (activas.isEmpty()) {
+            callar()
+            for ((id, t) in fuera) if (id != fg && cancelar(t)) nm.cancel(id)
+            detenerServicio(quitarNotificacion = tipoFg != null && cancelar(tipoFg))
+            return
         }
-        nm.cancel(id)
-        val antes = tipoSonando
-        val sigue = Alertas.trasResponder(antes, t, activas.values)
-        if (sigue != antes) { if (sigue == null) callar() else sonarTipo(sigue) }
+        if (fg != null && tipoFg != null) {
+            val otro = activas.keys.first(); val n = notifs[otro]
+            if (n != null) {
+                startForeground(otro, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK); idPrimerPlano = otro; notifPrimerPlano = n
+                // Al cambiar el primer plano, Android quita la notificación anterior: si debe quedar (Medicamentos), se vuelve a mostrar.
+                if (!cancelar(tipoFg) && fgN != null) nm.notify(fg, fgN)
+            }
+        }
+        for ((id, t) in fuera) if (cancelar(t)) nm.cancel(id)
+        actualizar()
     }
 
     /** "Posponer" de una notificación: calla todo y quita solo esa notificación. */
@@ -144,6 +175,7 @@ class AlertaServicio : Service() {
     private fun detenerServicio(quitarNotificacion: Boolean) {
         stopForeground(if (quitarNotificacion) STOP_FOREGROUND_REMOVE else STOP_FOREGROUND_DETACH)
         idPrimerPlano = null; notifPrimerPlano = null
+        activas.clear(); llegada.clear(); notifs.clear()
         stopSelf()
     }
 
@@ -161,9 +193,9 @@ class AccionAlerta : BroadcastReceiver() {
             POSPONER -> {
                 Programador.posponer(c, intent)
                 AlertaServicio.actual?.posponer(id) ?: nm.cancel(id)
+                Programador.detener(); Programador.dejarDeVibrar(c)
             }
-            else -> AlertaServicio.detenerTodas(c)   // al detener una se detienen todas
+            else -> AlertaServicio.detenerTodas(c, id.takeIf { it >= 0 })   // al detener una se detienen las que ya estaban (O-35)
         }
-        Programador.detener(); Programador.dejarDeVibrar(c)
     }
 }

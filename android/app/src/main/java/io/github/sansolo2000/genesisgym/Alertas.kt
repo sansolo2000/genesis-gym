@@ -23,7 +23,7 @@ object Alertas {
         DESCANSO to "Descanso en entrenamiento", Recordatorios.REPORTE to "Reporte diario", MEDICAMENTO to "Medicamentos")
     /**
      * Decisión del Coordinador (14-oct): Entrenamiento > Comidas > Tareas > Reporte. El Descanso no compite: suena una vez.
-     * Medicamentos primero: propuesta de Desarrollador 3 (15-oct), PENDIENTE de la decisión de Héctor.
+     * Medicamentos primero: aprobado por Héctor (16-oct, CONTEXTO-MODULO-MEDICAMENTOS §9.1).
      */
     val PRIORIDAD = listOf(MEDICAMENTO, Recordatorios.ENTRENAMIENTO, Recordatorios.COMIDA, Recordatorios.TAREA, Recordatorios.REPORTE)
     /** Decisión de Héctor (14-oct): después de 2 minutos se calla y la notificación queda con Detener y Posponer. */
@@ -55,6 +55,23 @@ object Alertas {
      */
     fun trasResponder(sonando: String?, respondida: String, quedan: Collection<String>): String? =
         if (sonando != respondida || respondida in quedan) sonando else ganador(quedan)
+
+    // ---------- D-18 y O-35 (0.18.0): cada alerta con sus 2 minutos; "Detener" calla solo lo que ya estaba ----------
+    /** Una alerta en el servicio: su tipo y cuándo llegó (ms). */
+    data class Activa(val tipo: String, val llegadaMs: Long)
+
+    /**
+     * D-18 (QA, 16-oct): cada alerta suena sus propios 2 minutos desde que llega, aunque ya sonara otra. Suena la de mayor
+     * prioridad entre las que no llegaron a su tope; null si todas llegaron (se calla y las notificaciones quedan).
+     */
+    fun queSuena(activas: Collection<Activa>, ahoraMs: Long): String? = ganador(activas.filter { ahoraMs - it.llegadaMs < TOPE_MS }.map { it.tipo })
+
+    /** Cuándo se vuelve a decidir qué suena: el próximo tope de las que siguen sonando (null si ninguna). */
+    fun proximoTope(activas: Collection<Activa>, ahoraMs: Long): Long? = activas.map { it.llegadaMs + TOPE_MS }.filter { it > ahoraMs }.minOrNull()
+
+    /** O-35 (aprobado): "Detener" de otra alerta no calla una que llegó hace menos de esto (no se alcanzaba a ver al tocarlo). */
+    const val GRACIA_MS = 3_000L
+    fun detenerAlcanza(llegadaMs: Long, ahoraMs: Long): Boolean = ahoraMs - llegadaMs >= GRACIA_MS
 
     fun posponerHasta(ahoraMs: Long, minutos: Int): Long = ahoraMs + minutos * 60_000L
 

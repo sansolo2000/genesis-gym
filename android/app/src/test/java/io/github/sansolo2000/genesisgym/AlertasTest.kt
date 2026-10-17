@@ -117,6 +117,35 @@ class AlertasTest {
         assertNull(Alertas.porQueNoSuena(base.copy(enSilencio = true), Alertas.TIMBRE_SILENCIO, Alertas.FILTRO_TODO, null))
     }
 
+    @Test fun cadaAlertaSuenaSusPropiosDosMinutos() {   // D-18 (QA, 16-oct)
+        val med = Alertas.MEDICAMENTO; val com = Recordatorios.COMIDA; val rep = Recordatorios.REPORTE
+        val tope = Alertas.TOPE_MS
+        // Un medicamento que se repite desde 0 y otro nuevo que llega a los 119 s: el nuevo sigue sonando después del tope del primero.
+        val dos = listOf(Alertas.Activa(med, 0L), Alertas.Activa(med, 119_000L))
+        assertEquals(med, Alertas.queSuena(dos, 125_000L))
+        assertEquals(tope, Alertas.proximoTope(dos, 0L))                 // primero se revisa al tope del primero…
+        assertEquals(119_000L + tope, Alertas.proximoTope(dos, 125_000L)) // …y después al del nuevo
+        assertNull(Alertas.queSuena(dos, 119_000L + tope))                // los dos llegaron a su tope: se calla
+        assertNull(Alertas.proximoTope(dos, 119_000L + tope))
+        // El reporte llega 1 s antes del tope de una comida: la comida manda mientras dura y después suena el reporte.
+        val mezcla = listOf(Alertas.Activa(com, 0L), Alertas.Activa(rep, tope - 1_000L))
+        assertEquals(com, Alertas.queSuena(mezcla, tope - 500L))
+        assertEquals(rep, Alertas.queSuena(mezcla, tope + 60_000L))
+        assertNull(Alertas.queSuena(emptyList(), 0L))
+    }
+
+    @Test fun detenerNoCallaLaQueAcabaDeLlegar() {   // O-35 (aprobado)
+        assertTrue(Alertas.detenerAlcanza(0L, Alertas.GRACIA_MS))
+        assertTrue(Alertas.detenerAlcanza(0L, 90_000L))                   // la que ya sonaba
+        assertFalse(Alertas.detenerAlcanza(10_000L, 10_500L))              // llegó medio segundo antes de tocar Detener
+        assertFalse(Alertas.detenerAlcanza(10_000L, 10_000L))
+    }
+
+    @Test fun medicamentosTienenLaMayorPrioridad() {   // CONTEXTO-MODULO-MEDICAMENTOS §9.1.1 (Héctor, 16-oct)
+        assertEquals(listOf(Alertas.MEDICAMENTO, Recordatorios.ENTRENAMIENTO, Recordatorios.COMIDA, Recordatorios.TAREA, Recordatorios.REPORTE), Alertas.PRIORIDAD)
+        assertEquals(Alertas.MEDICAMENTO, Alertas.ganador(listOf(Recordatorios.ENTRENAMIENTO, Alertas.MEDICAMENTO)))
+    }
+
     @Test fun laTareaTieneLaClaveDeCocinar() {   // O-34: misma clave que marca la tarea en Cocinar
         val prog = Json.parseToJsonElement("""{"programa":{"id":"p","nombre":"p","desde":"2030-10-14","hasta":"2030-10-20"},"perfiles":[{"id":"x"}],
             "preparaciones":{},"dias":[{"fecha":"2030-10-16","comidas":[],"tareas":[{"hora":"10:00","texto":"Remojar"},{"hora":"18:00","texto":"Cocinar"}]}]}""").jsonObject
