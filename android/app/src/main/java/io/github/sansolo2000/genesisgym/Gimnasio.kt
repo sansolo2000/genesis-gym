@@ -148,6 +148,16 @@ object Gimnasio {
     /** O-27 (Coordinador, 14-oct): una sesión con el cronómetro iniciado y 0 series anotadas todavía no cuenta como registrada (M-05, M-08). */
     fun cuentaComoRegistrada(s: JsonObject): Boolean = !(Crono.iniciado(s) && seriesRegistradas(s) == 0)
 
+    /**
+     * O-29: Historial no muestra las sesiones de otro día que solo tienen el cronómetro y 0 series (quedaron abandonadas y no
+     * cuentan, O-27). La de hoy sí se muestra, porque puede seguir en curso.
+     */
+    fun visiblesEnHistorial(sesiones: List<JsonObject>, hoy: String): List<JsonObject> = sesiones.filter { cuentaComoRegistrada(it) || it.txt("fecha") == hoy }
+
+    /** O-32: con el teclado abierto y una pantalla baja (horizontal), la hoja del ejercicio deja solo la lista de series. */
+    const val ALTO_COMPACTO_DP = 500
+    fun hojaCompacta(teclado: Boolean, altoDp: Int): Boolean = teclado && altoDp < ALTO_COMPACTO_DP
+
     /** Claves "fecha_sesionId" de las sesiones registradas, para el aviso de entrenamiento (M-08). */
     fun clavesRegistradas(sesiones: List<JsonObject>): Set<String> = sesiones.filter { cuentaComoRegistrada(it) }
         .mapNotNull { s -> s.txt("fecha")?.let { f -> s.txt("sesion_id")?.let { "${f}_$it" } } }.toSet()

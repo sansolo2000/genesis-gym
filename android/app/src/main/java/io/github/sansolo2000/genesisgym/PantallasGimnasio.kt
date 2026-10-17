@@ -658,9 +658,12 @@ private fun Historial(g: Gym, a: AccionesGym) {
             }
         }
     }
-    Gris("${sesiones.size} ${if (sesiones.size == 1) "sesión" else "sesiones"} en la base")
-    if (sesiones.isEmpty()) Gris("Todavía no hay sesiones registradas. Aparecen aquí cuando registras la primera serie.")
-    for (s in sesiones) FilaSesion(g, s)
+    val visibles = Gimnasio.visiblesEnHistorial(sesiones, Gimnasio.hoyIso())   // O-29
+    val ocultas = sesiones.size - visibles.size
+    Gris("${visibles.size} ${if (visibles.size == 1) "sesión" else "sesiones"} en la base" +
+        (if (ocultas > 0) " · $ocultas sin series (solo con el cronómetro) no se muestran" else ""))
+    if (visibles.isEmpty()) Gris("Todavía no hay sesiones registradas. Aparecen aquí cuando registras la primera serie.")
+    for (s in visibles) FilaSesion(g, s)
 }
 
 // ---------- Importar ----------

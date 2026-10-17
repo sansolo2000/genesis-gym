@@ -143,6 +143,23 @@ class CronoTest {
         assertEquals(setOf("2030-10-16_b"), Gimnasio.clavesRegistradas(listOf(sesion)))
     }
 
+    @Test fun historialNoMuestraLasDeOtroDiaConSoloElCronometro() {   // O-29
+        val soloCrono = Crono.iniciar(sesion, t("13:00:00"))
+        val conSerie = paso(soloCrono, 1, 0, "13:15:00")
+        val otroDia = json(JsJson.stringify(soloCrono).replace("2030-10-16", "2030-10-14"))
+        // De otro día, con el cronómetro y 0 series: no se muestra. La de hoy sí (sigue en curso).
+        assertEquals(listOf(soloCrono), Gimnasio.visiblesEnHistorial(listOf(otroDia, soloCrono), "2030-10-16"))
+        assertEquals(emptyList<JsonObject>(), Gimnasio.visiblesEnHistorial(listOf(otroDia), "2030-10-16"))
+        // Con series o sin cronómetro se muestran como siempre, sea el día que sea.
+        assertEquals(listOf(conSerie, sesion), Gimnasio.visiblesEnHistorial(listOf(conSerie, sesion), "2030-10-20"))
+    }
+
+    @Test fun hojaCompactaSoloConTecladoYPantallaBaja() {   // O-32
+        assertTrue(Gimnasio.hojaCompacta(true, 380))      // horizontal con el teclado
+        assertFalse(Gimnasio.hojaCompacta(true, 780))     // vertical con el teclado: queda como D-02
+        assertFalse(Gimnasio.hojaCompacta(false, 380))    // horizontal sin teclado
+    }
+
     @Test fun elCronometroEntraAlRespaldoComoParteDeLaSesion() {
         val b = paso(Crono.iniciar(sesion, t("13:00:00")), 0, 0, "13:10:00")
         val vuelta = json(JsJson.stringify(b))

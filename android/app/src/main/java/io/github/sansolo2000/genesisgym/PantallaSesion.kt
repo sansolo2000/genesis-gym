@@ -51,6 +51,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -216,10 +217,13 @@ private fun FilaMapa(g: Gym, i: Int, ej: JsonObject) {
 // D-02 (QA #7, 12-oct): con el teclado abierto, la cabecera, las pestañas y los botones de abajo ocupaban casi toda la
 // pantalla y la fila de la serie quedaba tapada. Mientras el teclado está abierto se ocultan las pestañas, la barra de
 // avance y los botones de abajo, y el nombre se achica: la lista de series usa ese espacio y la fila con foco se ve.
+// O-32 (QA, 14-oct): en horizontal, con el teclado, ni eso alcanzaba. Si la pantalla es baja se ocultan también la fila de
+// arriba, el nombre, los datos del ejercicio y la nota: queda solo la lista de series.
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Hoja(g: Gym) {
     val teclado = WindowInsets.isImeVisible
+    val compacto = Gimnasio.hojaCompacta(teclado, LocalConfiguration.current.screenHeightDp)
     val b = g.borrador ?: return
     val ejs = b.arr("ejercicios")
     if (ejs.isEmpty()) { g.sesVista = "mapa"; return }
@@ -233,7 +237,7 @@ private fun Hoja(g: Gym) {
     val descanso = ej.num("descanso_seg")?.toInt() ?: 0
     val sesiones = g.sesiones()
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (!compacto) Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = { g.sesVista = "mapa" }) { Text("‹ Mapa", fontWeight = FontWeight.SemiBold) }
             Text(b.txt("sesion_nombre") ?: "", color = GRIS, fontSize = 14.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text("${i + 1}", fontSize = 20.sp, fontWeight = FontWeight.Bold); Text(" / ${ejs.size}", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = GRIS)
@@ -242,8 +246,8 @@ private fun Hoja(g: Gym) {
             for (j in ejs.indices) Box(Modifier.weight(1f).height(5.dp).clip(RoundedCornerShape(3.dp))
                 .background(if (j == i) AMBAR else if (Gimnasio.ejercicioListo(ejs[j])) VERDE else LINEA))
         }
-        if (teclado) Text(ej.txt("nombre") ?: "", fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 16.dp))
+        if (teclado) { if (!compacto) Text(ej.txt("nombre") ?: "", fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 16.dp)) }
         else Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Eti("${NOMBRE_BLOQUE[bloque]} · ${enBloque.indexOf(i) + 1} DE ${enBloque.size}", COLOR_BLOQUE[bloque]!!)
             Text(ej.txt("nombre") ?: "", fontSize = 28.sp, fontWeight = FontWeight.Bold, lineHeight = 30.sp)
@@ -258,16 +262,16 @@ private fun Hoja(g: Gym) {
                 }
             }
         }
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = if (compacto) 4.dp else 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (g.verFicha) FichaHoja(g, ej)
             else {
                 val ef = series.filter { it.txt("tipo") == "efectiva" }
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (!compacto) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (ef.isNotEmpty()) { Chip("${ef.size} ${if (ef.size == 1) "efectiva" else "efectivas"}"); Chip(prescrito(ef[0])) }
                     ef.firstOrNull()?.get("rpe_objetivo")?.takeIf { it !is JsonNull }?.let { Chip("RPE ${Gimnasio.kg(it)}") }
                     if (descanso > 0) Chip("Descanso ${mmss(descanso)}")
                 }
-                ej.txt("notas")?.takeIf { it.isNotEmpty() }?.let { Text(it, color = GRIS, fontSize = 14.sp) }
+                if (!compacto) ej.txt("notas")?.takeIf { it.isNotEmpty() }?.let { Text(it, color = GRIS, fontSize = 14.sp) }
                 series.forEachIndexed { k, se -> FilaSerie(g, b, i, k, ej.txt("ejercicio_id")!!, se, sesiones, k == actual) }
             }
         }
