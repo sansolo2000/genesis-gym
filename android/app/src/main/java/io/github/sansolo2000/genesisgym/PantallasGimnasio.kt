@@ -420,6 +420,8 @@ interface AccionesGym {
  */
 @Composable
 private fun SenalesHoy(g: Gym, hoy: String) {
+    // D-23 (QA, 17-oct): la respuesta se lee de la base; leer el tick hace que la tarjeta se vuelva a dibujar al tocar Sí o No.
+    @Suppress("UNUSED_VARIABLE") val t = g.tick
     val s = g.senalesHoy()
     if (s == null) {
         if (g.datosPerfil().existe) Nota("Falta la pregunta de señales de alarma de esta persona: llega con su plan Génesis (Importar → Importar plan completo).", MaterialTheme.colorScheme.errorContainer)
@@ -825,6 +827,7 @@ private fun ImportarPlan(g: Gym, a: AccionesGym) {
 /** Multiusuario: los módulos de este celular. Ocultar no borra el historial ni los datos; se puede volver a mostrar. */
 @Composable
 private fun Modulos(g: Gym) {
+    @Suppress("UNUSED_VARIABLE") val t = g.tick   // como en D-23: el interruptor se redibuja al ocultar o mostrar
     val d = g.datosPerfil()
     Gris("Este celular"); Titulo("Módulos")
     Tarjeta {

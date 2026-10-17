@@ -109,6 +109,9 @@ class MultiusuarioTest {
         val r = Plan.revisar(sobre(perfil(conSenales = false)), null, null, null, null, ahora)
         assertFalse(r.ok)
         assertTrue(r.errores.toString(), r.errores.any { it.startsWith("perfil.senales_alarma") })
+        // O-53: un plan de solo entrenamiento sin señales no pide además alimentación ni apoyo.
+        val soloEntreno = Plan.revisar(sobre(perfil(modulos = listOf(Perfil.ENTRENAMIENTO), conSenales = false), mapOf("rutina" to rutina)), null, null, null, null, ahora)
+        assertFalse(soloEntreno.ok); assertTrue(soloEntreno.errores.toString(), soloEntreno.errores.none { it.startsWith("Faltan partes") })
         val sinAccion = perfil().mas("senales_alarma" to senales.mas("accion" to jp("  ")))
         assertFalse(Plan.revisar(sobre(sinAccion), null, null, null, null, ahora).ok)
         // Un perfil con plan pero sin señales guardadas no toma la pregunta de Apoyo (que es de otra persona).

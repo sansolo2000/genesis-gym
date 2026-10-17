@@ -84,6 +84,8 @@ object Plan {
                 av.add(t); confirmar.add(t)
             }
         }
+        // O-53 (QA, 17-oct): si la sección "perfil" tiene errores, no se sabe qué módulos trae: no se piden partes de más.
+        if (sobre.obj("perfil") != null && del == null) return Revision(err, av, emptyList())
         val modulos = del?.modulos ?: Perfil.MODULOS
         val requeridas = modulos.mapNotNull { Perfil.PARTE[it] }
         val faltan = requeridas.filter { sobre.obj(it) == null }
