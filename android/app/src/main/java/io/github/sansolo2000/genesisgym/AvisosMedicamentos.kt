@@ -187,6 +187,9 @@ object AvisosMedicamentos {
         AlertaServicio.actual?.quitarUna(id) ?: c.getSystemService(NotificationManager::class.java).cancel(id)
     }
 
+    /** D-19: abrir la toma desde su notificación calla solo esa alerta; la notificación queda hasta Confirmar, Posponer u Omitir. */
+    fun callarNotificacion(tratamientoId: String, local: LocalDateTime) { AlertaServicio.actual?.callarUna(idNotificacion(tratamientoId, local)) }
+
     /** O-40: al archivar o borrar, quita las notificaciones de sus tomas programadas o en curso. */
     fun quitarNotificaciones(c: Context, tratamientoId: String) {
         for (k in prefs(c).getStringSet("programadas", emptySet()) ?: emptySet()) {
@@ -214,7 +217,7 @@ object AvisosMedicamentos {
         val canal = Programador.canal(Alertas.MEDICAMENTO)
         val titulo = datos.getStringExtra(Programador.EXTRA_TITULO) ?: "Medicamento"; val texto = datos.getStringExtra(Programador.EXTRA_TEXTO) ?: ""
         fun abrir(posponer: Boolean) = PendingIntent.getActivity(c, id * 2 + (if (posponer) 1 else 0),
-            Intent(c, MainActivity::class.java).putExtra(Programador.EXTRA_VISTA, "medicamentos").putExtra(Programador.EXTRA_DETENER, true)
+            Intent(c, MainActivity::class.java).putExtra(Programador.EXTRA_VISTA, "medicamentos").putExtra(Programador.EXTRA_DETENER, Alertas.tocarDetiene(Alertas.MEDICAMENTO))
                 .putExtra(EXTRA_TRATAMIENTO, datos.getStringExtra(EXTRA_TRATAMIENTO)).putExtra(EXTRA_LOCAL, datos.getStringExtra(EXTRA_LOCAL))
                 .putExtra(EXTRA_EVENTO, datos.getStringExtra(EXTRA_EVENTO))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),

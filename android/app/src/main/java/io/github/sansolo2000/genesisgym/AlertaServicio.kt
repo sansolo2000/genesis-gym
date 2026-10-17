@@ -136,6 +136,9 @@ class AlertaServicio : Service() {
         quitar(listOf(id)) { true }
     }
 
+    /** D-19: calla solo esta alerta y deja su notificación (las demás siguen sonando). */
+    fun callarUna(id: Int) = quitar(listOf(id)) { false }
+
     /**
      * Saca alertas del servicio; [cancelar] dice, según el tipo, si también se quita su notificación. Las que quedan siguen
      * sonando con sus propios 2 minutos (D-18); si no queda ninguna, se calla y se cierra el servicio.

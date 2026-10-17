@@ -510,8 +510,12 @@ class MainActivity : ComponentActivity() {
     private fun abrirDesde(i: Intent) {
         val v = i.getStringExtra(Programador.EXTRA_VISTA) ?: return
         abrirVista(v)
-        if (v == "medicamentos") med.abrirRespuesta(i.getStringExtra(AvisosMedicamentos.EXTRA_TRATAMIENTO), i.getStringExtra(AvisosMedicamentos.EXTRA_LOCAL),
-            i.getStringExtra(AvisosMedicamentos.EXTRA_EVENTO))
+        if (v == "medicamentos") {
+            val tid = i.getStringExtra(AvisosMedicamentos.EXTRA_TRATAMIENTO); val local = i.getStringExtra(AvisosMedicamentos.EXTRA_LOCAL)
+            // D-19: calla solo la alerta de esta toma; otra alerta que suene a la vez sigue (O-38).
+            if (tid != null && local != null) runCatching { AvisosMedicamentos.callarNotificacion(tid, java.time.LocalDateTime.parse(local)) }
+            med.abrirRespuesta(tid, local, i.getStringExtra(AvisosMedicamentos.EXTRA_EVENTO))
+        }
     }
 
     override fun onNewIntent(intent: Intent) {

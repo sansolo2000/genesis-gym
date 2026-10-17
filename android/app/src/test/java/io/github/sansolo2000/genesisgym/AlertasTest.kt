@@ -141,6 +141,11 @@ class AlertasTest {
         assertFalse(Alertas.detenerAlcanza(10_000L, 10_000L))
     }
 
+    @Test fun tocarUnMedicamentoNoDetieneLasDemas() {   // D-19 (QA, 17-oct): contradecía O-38 y R-M08
+        assertFalse(Alertas.tocarDetiene(Alertas.MEDICAMENTO))
+        assertTrue(Alertas.tocarDetiene(Recordatorios.REPORTE))      // las de M-10 siguen como O-33
+    }
+
     @Test fun medicamentosTienenLaMayorPrioridad() {   // CONTEXTO-MODULO-MEDICAMENTOS §9.1.1 (Héctor, 16-oct)
         assertEquals(listOf(Alertas.MEDICAMENTO, Recordatorios.ENTRENAMIENTO, Recordatorios.COMIDA, Recordatorios.TAREA, Recordatorios.REPORTE), Alertas.PRIORIDAD)
         assertEquals(Alertas.MEDICAMENTO, Alertas.ganador(listOf(Recordatorios.ENTRENAMIENTO, Alertas.MEDICAMENTO)))

@@ -113,7 +113,8 @@ object Alertas {
 
     // ---------- O-33 (Coordinador, 14-oct): qué calla una alerta que suena ----------
     /** Tocar la notificación de una alerta que insiste cuenta como Detener. */
-    fun tocarDetiene(tipo: String): Boolean = insiste(tipo)
+    /** D-19 (QA, 17-oct): tocar la notificación de un medicamento (o su "Posponer…") no es Detener: calla solo su alerta (O-38). */
+    fun tocarDetiene(tipo: String): Boolean = insiste(tipo) && !esperaRespuesta(tipo)
     const val COMIDA_MARCADA = "comida_marcada"; const val TAREA_HECHA = "tarea_hecha"; const val SESION_ABIERTA = "sesion_abierta"; const val REPORTE_GUARDADO = "reporte_guardado"
     /** Lo que se hace en la app y la alerta que calla: marcar la comida o la tarea, abrir la sesión, guardar el reporte. */
     fun tipoQueCalla(evento: String): String? = when (evento) {
