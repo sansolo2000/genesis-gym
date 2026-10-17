@@ -105,7 +105,8 @@ class QaMedicamentos2Test {
     }
 
     /**
-     * R-M04: editar a mitad del tratamiento y cambiar la hora no pierde ni duplica tomas del total.
+     * R-M04 (D-21): editar a mitad del tratamiento y cambiar la hora no pierde ni duplica tomas del total. Con la regla del
+     * Coordinador (17-oct) también da 10: el término sigue el 14 y la toma del día 9 ya se confirmó.
      * 1 al día × 10 días a las 09:00; el día 5, a las 12:00 (ya tomada la de las 09:00), se pasa a las 20:00.
      */
     @Test fun qa_t18f_editar_la_hora_a_mitad_no_cambia_el_total() {
@@ -139,13 +140,39 @@ class QaMedicamentos2Test {
         assertTrue(todas(editado).none { it.local > l("2030-03-05T16:00") })
     }
 
-    /** R-M05b (Héctor, 17-oct): Terminar con una toma sonando la calla en ese momento, igual que Suspender. */
+    /**
+     * R-M05b (Héctor, 17-oct): Terminar con una toma sonando la calla en ese momento, igual que Suspender.
+     * Coordinador (17-oct, provisorio): esa toma queda "no tomada: tratamiento terminado", distinta de "sin respuesta", y no alarga.
+     */
     @Test fun qa_t18q_terminar_calla_la_toma_que_suena() {
-        val t = nuevo(veces("07:00", "15:00", "23:00"), "2030-03-05", "2030-03-01T12:00")
+        val t = nuevo(veces("07:00", "15:00", "23:00"), "2030-03-05", "2030-03-05T06:00", dias(10))
         assertEquals(1, M.cadenasAbiertas(t, en("2030-03-05T15:04"), emptyMap()).size)
+        // Como la pantalla: primero el cierre de la toma que suena y después Terminar.
+        val cierre = M.cierreAlTerminar(t, en("2030-03-05T15:05"), emptyMap()).map { (ruta, doc) -> M.registroDesde(ruta, doc)!! }
+        assertEquals(listOf(l("2030-03-05T15:00")), cierre.map { it.programada })
+        assertTrue("no es sin respuesta ni omitida", cierre.none { it.estado == M.SIN_RESPUESTA || it.estado == M.OMITIDA || it.estado == M.CONFIRMADA })
         val fin = M.terminar(t, en("2030-03-05T15:05").toInstant(), SCL)
-        assertTrue(M.cadenasAbiertas(fin, en("2030-03-05T15:06"), emptyMap()).isEmpty())
-        assertTrue(AvisosMedicamentos.calcular(listOf(fin), emptyMap(), en("2030-03-05T15:06")).isEmpty())
+        assertEquals(0, M.conHistorial(fin, cierre).duracion.extra)   // no alarga
+        val regs = AvisosMedicamentos.porClave(cierre)
+        assertTrue(M.cadenasAbiertas(fin, en("2030-03-05T15:06"), regs).isEmpty())
+        assertTrue(AvisosMedicamentos.calcular(listOf(fin), regs, en("2030-03-05T15:06")).isEmpty())
+    }
+
+    /**
+     * Coordinador (17-oct, provisorio): al cambiar la frecuencia a mitad de un tratamiento por días, el término por calendario no
+     * cambia y el total es lo confirmado + lo que falta con la frecuencia nueva. QA lo lee así para el día de la edición: cuenta
+     * solo con las tomas nuevas que faltan para completar las tomas por día nuevas (las ya confirmadas hoy se descuentan).
+     * 1 al día × 10 días a las 09:00 (del 5 al 14); el día 9, a las 12:00 y ya tomada la de las 09:00, pasa a 09:00 y 21:00.
+     */
+    @Test fun qa_t18r_cambiar_la_frecuencia_a_mitad() {
+        val v1 = nuevo(veces("09:00"), "2030-03-05", "2030-03-05T08:00", dias(10))
+        val tomadas = (5..9).map { reg(v1, l("2030-03-%02dT09:00".format(it)), M.CONFIRMADA) }
+        val v2 = M.guardar(M.conHistorial(v1, tomadas).copy(frecuencia = veces("09:00", "21:00")), v1, en("2030-03-09T12:00").toInstant(), SCL)
+        val quedan = M.ocurrencias(M.conHistorial(v2, tomadas), en("2030-03-09T12:00"), en("2030-12-31T00:00"), SCL).map { it.local }
+        val esperado = listOf(l("2030-03-09T21:00")) + (10..14).flatMap { listOf(l("2030-03-%02dT09:00".format(it)), l("2030-03-%02dT21:00".format(it))) }
+        assertEquals(esperado, quedan)
+        assertEquals(16, tomadas.size + quedan.size)
+        assertEquals(LocalDate.parse("2030-03-14"), M.conHistorial(v2, tomadas).fin)
     }
 
     /** R-M06: Suspender y Reanudar: en la pausa no suena ni queda "sin respuesta"; las de la pausa se pierden y el término no cambia. */
