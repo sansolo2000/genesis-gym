@@ -159,6 +159,9 @@ class MultiusuarioTest {
         // Avisos: un módulo oculto no avisa aunque esté encendido en Avisos.
         val k = Programador.conModulos(Recordatorios.Config(comidas = true, tareas = true, entrenamiento = true, reporte = true), d)
         assertFalse(k.comidas); assertFalse(k.tareas); assertTrue(k.entrenamiento); assertFalse(k.reporte)
+        // Sin el módulo Salud, la pestaña (y el aviso de Hoy) dice "Datos".
+        assertEquals("Datos", Perfil.nombrePestanaSalud(d))
+        assertEquals("Salud", Perfil.nombrePestanaSalud(Perfil.leer(null)))
         // Volver a mostrar.
         assertTrue(Perfil.leer(Perfil.ocultar(doc, Perfil.COMIDAS, false)).visible(Perfil.COMIDAS))
         // Importar lo mismo otra vez no cambia el perfil.

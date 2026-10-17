@@ -473,7 +473,7 @@ class MainActivity : ComponentActivity() {
                             @Suppress("UNUSED_VARIABLE") val tk = gym.tick   // se vuelve a dibujar al ocultar un módulo o importar un plan
                             val pf = gym.datosPerfil()
                             val modulo = mapOf("comidas" to Perfil.COMIDAS, "reporte" to Perfil.APOYO, "medicamentos" to Perfil.MEDICAMENTOS, "rutina" to Perfil.ENTRENAMIENTO)
-                            listOf("hoy" to "Hoy", "comidas" to "Comidas", "reporte" to "Reporte", "salud" to (if (pf.visible(Perfil.SALUD)) "Salud" else "Datos"), "medicamentos" to "Medicamentos", "rutina" to "Rutina", "historial" to "Historial", "importar" to "Importar", "avisos" to "Avisos", "pruebas" to "Pruebas")
+                            listOf("hoy" to "Hoy", "comidas" to "Comidas", "reporte" to "Reporte", "salud" to Perfil.nombrePestanaSalud(pf), "medicamentos" to "Medicamentos", "rutina" to "Rutina", "historial" to "Historial", "importar" to "Importar", "avisos" to "Avisos", "pruebas" to "Pruebas")
                                 .filter { (v, _) -> modulo[v]?.let { pf.visible(it) } ?: true }.forEach { (v, t) ->
                                 val activa = gym.vista == v || (v == "hoy" && gym.vista == "sesion")
                                 val ir = { if (v == "comidas" && gym.vista != "comidas") com.cargar(); if (v == "reporte" && gym.vista != "reporte") apo.refrescar(); if (v == "salud" && gym.vista != "salud") { dd.revisar(); if (hc.disponible()) lifecycleScope.launch { hc.refrescarPermisos() } }
@@ -483,7 +483,7 @@ class MainActivity : ComponentActivity() {
                         }
                         // Datos diarios: al abrir la app, Hoy avisa cuántos días faltan por subir.
                         if (gym.vista == "hoy" && dd.porSubir > 0) Text(
-                            "${dd.porSubir} ${if (dd.porSubir == 1) "día" else "días"} por subir a Drive · toca para ir a Salud",
+                            "${dd.porSubir} ${if (dd.porSubir == 1) "día" else "días"} por subir a Drive · toca para ir a ${Perfil.nombrePestanaSalud(gym.datosPerfil())}",
                             color = AMBAR, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                             modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
                                 .background(CAJA).clickable { dd.revisar(); if (hc.disponible()) lifecycleScope.launch { hc.refrescarPermisos() }; gym.ir("salud") }.padding(12.dp))

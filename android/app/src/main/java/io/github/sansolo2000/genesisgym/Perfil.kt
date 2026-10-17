@@ -159,6 +159,9 @@ object Perfil {
 
     fun respuestaSenal(doc: JsonObject?): Boolean? = doc.b("respuesta")
 
+    /** La pestaña Salud se ve siempre (Héctor, 17-oct): sin el módulo Salud se llama "Datos" y solo trae "Subir ahora". */
+    fun nombrePestanaSalud(d: Datos): String = if (d.visible(SALUD)) "Salud" else "Datos"
+
     /** Nombre para mostrar de un id de persona guardado en un registro (Medicamentos): el del perfil si es el mismo; si no, el id. */
     fun nombreDe(personaId: String, d: Datos): String = if (personaId == d.id) d.nombre ?: personaId else personaId.replaceFirstChar { it.uppercase() }
 }
