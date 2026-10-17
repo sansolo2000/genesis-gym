@@ -430,14 +430,22 @@ class MedicamentosTest {
         assertEquals(LocalDate.parse("2030-03-20"), M.fechaFin(LocalDate.parse("2030-03-05"), M.Duracion(M.DUR_FECHA, fin = LocalDate.parse("2030-03-20"))))
     }
 
-    /** O-36: "Terminar" corta desde ahora; la toma que ya sonaba sigue su cadena (D-15). */
+    /** O-36: "Terminar" corta desde ahora. Héctor (17-oct): la toma que sonaba se calla, queda "sin respuesta" y no se repite. */
     @Test fun terminarCortaDesdeAhora() {
         val t = M.guardar(trat(veces("07:00", "15:00", "23:00"), inicio = "2030-03-05"), null, Instant.parse("2030-03-01T12:00:00Z"))
         val fin = M.terminar(t, en("2030-03-05T15:05").toInstant(), SCL)
         assertTrue(fin.vencido(LocalDate.parse("2030-03-05")))
         assertTrue(M.ocurrencias(fin, en("2030-03-05T15:05"), en("2030-03-10T00:00"), SCL).isEmpty())   // no suena la de las 23:00
         assertNull(M.proxima(fin, en("2030-03-05T15:06")))
-        assertEquals(listOf("2030-03-05T15:00"), M.cadenasAbiertas(fin, en("2030-03-05T15:10"), emptyMap()).map { it.first.local.toString() })
+        // La de las 15:00 estaba sonando: al terminar se cierra "sin respuesta" y su cadena ya no sigue.
+        val cierre = M.cierreAlTerminar(t, en("2030-03-05T15:05"), emptyMap())
+        assertEquals(1, cierre.size)
+        val reg = M.registroDesde(cierre[0].first, cierre[0].second)!!
+        assertEquals(M.SIN_RESPUESTA, reg.estado); assertEquals("2030-03-05T15:00", reg.programada.toString())
+        val porClave = AvisosMedicamentos.porClave(listOf(reg))
+        assertTrue(M.cadenasAbiertas(fin, en("2030-03-05T15:10"), porClave).isEmpty())
+        // Sin una toma sonando, terminar no registra nada.
+        assertTrue(M.cierreAlTerminar(t, en("2030-03-05T13:00"), emptyMap()).isEmpty())
         // Al editarlo no se reabre.
         assertNotNull(M.guardar(fin.copy(cantidad = 2.0, terminadoEn = null), fin, en("2030-03-05T16:00").toInstant(), SCL).terminadoEn)
         assertEquals(fin, M.tratamientoDesdeJson(Json.parseToJsonElement(JsJson.stringify(M.tratamientoAJson(fin))).jsonObject))

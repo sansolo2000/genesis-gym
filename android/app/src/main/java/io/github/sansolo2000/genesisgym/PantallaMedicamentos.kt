@@ -230,9 +230,18 @@ class Medi(private val c: Context, private val base: BaseLocal, private val alCa
         confirmar = null; cargar(); alCambiar()
     }
 
-    /** O-36 (Héctor, 16-oct): "Terminar" lo cierra para siempre desde ahora; no suenan las tomas que quedaban. */
-    fun terminar(t: Medicamentos.Tratamiento) = guardarDirecto(Medicamentos.terminar(t, Instant.now()),
-        "Tratamiento terminado: no se generan más tomas ni alertas. Si una toma estaba sonando, sigue hasta que la respondas.")
+    /**
+     * O-36 (Héctor, 16-oct): "Terminar" lo cierra para siempre desde ahora; no suenan las tomas que quedaban.
+     * Héctor (17-oct): la toma que estaba sonando se calla al tiro, queda "sin respuesta" y no se repite.
+     */
+    fun terminar(t: Medicamentos.Tratamiento) {
+        val regs = AvisosMedicamentos.porClave(AvisosMedicamentos.registros(base).filter { it.tratamientoId == t.id })
+        val cierre = Medicamentos.cierreAlTerminar(t, ahora(), regs)
+        if (cierre.isNotEmpty()) base.ponerVarios(cierre.map { (ruta, doc) -> Respaldo.Doc(ruta, doc) })
+        AvisosMedicamentos.quitarNotificaciones(c, t.id)
+        for (r in cierre) runCatching { Medicamentos.registroDesde(r.first, r.second)?.let { AvisosMedicamentos.quitarNotificacion(c, t.id, it.programada) } }
+        guardarDirecto(Medicamentos.terminar(t, Instant.now()), "Tratamiento terminado: no se generan más tomas ni alertas.")
+    }
 
     /** O-36: "Suspender" pausa las alertas; esas tomas no quedan "sin respuesta". "Reanudar" las vuelve a activar. */
     fun suspender(t: Medicamentos.Tratamiento) {

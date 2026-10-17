@@ -739,9 +739,18 @@ object Medicamentos {
             o.a("suspensiones")?.mapNotNull { e -> (e as? JsonObject)?.let { x -> x.s("desde")?.let { Suspension(Instant.parse(it), x.s("hasta")?.let { h -> Instant.parse(h) }) } } } ?: emptyList())
     }.getOrNull()
 
-    /** O-36: "Terminar" corta desde ahora (versión nueva; una toma que ya sonaba sigue su cadena, D-15). */
+    /** O-36: "Terminar" corta desde ahora (versión nueva). La toma que estaba sonando se cierra con [cierreAlTerminar]. */
     fun terminar(t: Tratamiento, ahora: Instant, zona: ZoneId = ZoneId.systemDefault()): Tratamiento =
         guardar(t.copy(terminadoEn = isoUtc(ahora)), t, ahora, zona)
+
+    /**
+     * Héctor (17-oct): "Terminar" con una toma sonando la calla en ese momento, como Suspender. Esa toma (o una pospuesta que
+     * todavía no cierra) queda "sin respuesta" y no se repite. Devuelve los registros nuevos; [registros]: los de este tratamiento.
+     */
+    fun cierreAlTerminar(t: Tratamiento, ahora: ZonedDateTime, registros: Map<String, List<Registro>>): List<Pair<String, JsonObject>> =
+        cadenasAbiertas(t, ahora, registros).map { (oc, _) -> oc }.distinctBy { it.local }.map { oc ->
+            rutaRegistro(t.id, oc.local, SIN_RESPUESTA, 0) to registro(versionDe(t, oc.cuando.toInstant()), oc, SIN_RESPUESTA, ahora.toInstant(), null, "cierre")
+        }
 
     /** Días que se guardan las versiones anteriores (los mismos que revisa el cierre "sin respuesta"). */
     const val DIAS_VERSIONES = 3L
