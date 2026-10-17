@@ -433,7 +433,12 @@ class MainActivity : ComponentActivity() {
         gym.alAbrirSesion = { runCatching { AlertaServicio.callarTipo(this, Recordatorios.ENTRENAMIENTO) } }
         gym.alDescanso = { fin, texto -> runCatching { if (fin == null) Programador.cancelarDescanso(this) else Programador.programarDescanso(this, fin, texto) } }
         gym.alSerie = { fin, texto -> runCatching { if (fin == null) Programador.cancelarSerie(this) else Programador.programarSerie(this, fin, texto) } }
-        gym.alRestaurar = { runCatching { Programador.restaurarDesde(this, base) }; runCatching { AvisosMedicamentos.reprogramar(this) }; refresco++ }
+        gym.alRestaurar = {
+            runCatching { Programador.restaurarDesde(this, base) }; runCatching { AvisosMedicamentos.reprogramar(this) }
+            // O-57 (QA, 17-oct): los módulos se vuelven a leer de la base restaurada (las señales de un perfil de antes salen de Apoyo).
+            runCatching { apo.cargar() }; runCatching { com.cargar() }; runCatching { med.cargar() }
+            refresco++
+        }
         gym.fraseHoy = { Frases.deHoy(apo.estado.programa) }
         gym.revisarPlan = { t -> Plan.revisar(t, gym.rutinaActiva(), com.estado.programa, apo.estado.programa, gym.perfil(), Gimnasio.ahoraIso(),
             runCatching { AvisosMedicamentos.huellaActiva(this, base) }.getOrNull(), gym.perfilDoc()) }

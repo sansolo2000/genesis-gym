@@ -80,7 +80,7 @@ class MultiusuarioTest {
 
     @Test fun elRespaldoLeeElPerfilNuevoYLasSenalesSinColeccionesNuevas() {
         val p = Perfil.aplicar(json("""{"nombre":"Prueba","creado":"2030-10-01T10:00:00.000Z"}"""), Perfil.revisarSeccion(json(sobre(perfil()))).first!!, emptySet(), ahora)
-        val docs = listOf(Respaldo.Doc(Perfil.RUTA, p), Respaldo.Doc(Perfil.rutaSenal("2030-10-16"), Perfil.registroSenal("2030-10-16", false, "prueba", ahora)))
+        val docs = listOf(Respaldo.Doc(Perfil.RUTA, p), Respaldo.Doc(Perfil.rutaSenal("2030-10-16", "prueba"),Perfil.registroSenal("2030-10-16", false, "prueba", ahora)))
         val r = Respaldo.leer(Respaldo.crear(docs, "Prueba", "qa", ahora))
         assertTrue(r.toString(), r is Respaldo.Resultado.Ok)
         assertEquals(Respaldo.huella(docs), Respaldo.huella((r as Respaldo.Resultado.Ok).leido.docs))
@@ -196,7 +196,9 @@ class MultiusuarioTest {
         assertEquals("¿Tuviste hoy alguna de estas señales?", s.pregunta); assertEquals(2, s.senales.size)
         val reg = Perfil.registroSenal("2030-10-16", true, "prueba", ahora)
         assertEquals(true, Perfil.respuestaSenal(reg)); assertNull(Perfil.respuestaSenal(null))
-        assertEquals("config/senales_2030-10-16", Perfil.rutaSenal("2030-10-16"))
+        // O-56: por fecha y por persona: si el celular cambia de persona el mismo día, la nueva no hereda la respuesta.
+        assertEquals("config/senales_2030-10-16_prueba", Perfil.rutaSenal("2030-10-16", "prueba"))
+        assertFalse(Perfil.rutaSenal("2030-10-16", "persona-1") == Perfil.rutaSenal("2030-10-16", "persona-2"))
     }
 
     // ---------- Parte 3: "no está disponible" ----------

@@ -139,7 +139,8 @@ object Perfil {
     }
 
     // ---------- señales de alarma (componente común) ----------
-    fun rutaSenal(fecha: String) = "config/senales_$fecha"
+    /** O-56 (QA, 17-oct): por fecha y por persona, para que si el celular cambia de persona el mismo día no herede la respuesta. */
+    fun rutaSenal(fecha: String, perfilId: String) = "config/senales_${fecha}_$perfilId"
 
     /** La pregunta, las señales y la acción del día. Del perfil (plan nuevo) o, en un perfil de antes, de la pregunta de Apoyo. */
     fun senalesVigentes(d: Datos, apoyo: EstadoApoyo?): Senales? {

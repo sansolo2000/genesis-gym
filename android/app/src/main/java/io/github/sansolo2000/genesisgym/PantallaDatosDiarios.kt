@@ -116,7 +116,7 @@ class Dd(private val c: Context, private val base: BaseLocal, private val hc: Hc
                 val mv = maxOf(est.version, enDrive["manifest"] ?: 0) + 1
                 val m = DatosDiarios.manifest(perfil, d, mv, ZonedDateTime.now(DatosDiarios.ZONA), BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE,
                     DatosDiarios.motivo(p), est.tipos, faltantesDia, lectura, base.get("reportes_apoyo/$d"),
-                    Gimnasio.noDisponiblesDelDia(ses, d.toString()), Perfil.respuestaSenal(base.get(Perfil.rutaSenal(d.toString()))))
+                    Gimnasio.noDisponiblesDelDia(ses, d.toString()), Perfil.respuestaSenal(base.get(Perfil.rutaSenal(d.toString(), perfil))))
                 DriveApi.subirArchivo(token, sub, DatosDiarios.nombreManifest(perfil, d, mv), "application/json", m.toByteArray(Charsets.UTF_8))
                 guardar(d, est.copy(version = mv, manifestPendiente = false))
                 subidos.add(d)

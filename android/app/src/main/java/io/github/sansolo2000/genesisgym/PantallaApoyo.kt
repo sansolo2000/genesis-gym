@@ -123,7 +123,7 @@ class Apo(val base: BaseLocal, private val comidas: () -> EstadoComidas?, privat
         val r = estado.reportes[f]
         resp.putAll(estado.respuestasDe(r))
         // Multiusuario: la señal de alarma es común; si ya se respondió ese día (en Hoy), el reporte parte con esa respuesta.
-        campoAlarma()?.let { c -> if (resp[c] == null) runCatching { Perfil.respuestaSenal(base.get(Perfil.rutaSenal(f))) }.getOrNull()?.let { resp[c] = it } }
+        campoAlarma()?.let { c -> if (resp[c] == null) runCatching { Perfil.respuestaSenal(base.get(Perfil.rutaSenal(f, Perfil.leer(base.get(Perfil.RUTA)).id))) }.getOrNull()?.let { resp[c] = it } }
         for ((k, v) in resp) if (v is String || v is Double) textos[k] = if (v is Double) JsJson.numero(v.toString()).replace('.', ',') else v as String
         val det = r.o("comidas").o("detalle")
         for (t in Comidas.TIPOS) comidasManual[t] = det.s(t)
@@ -141,7 +141,8 @@ class Apo(val base: BaseLocal, private val comidas: () -> EstadoComidas?, privat
     /** Responder la señal de alarma en el reporte también la deja como la respuesta común del día (la que se ve en Hoy). */
     fun responderSenal(id: String, si: Boolean) {
         if (id != campoAlarma()) return
-        runCatching { base.put(Perfil.rutaSenal(dia), Perfil.registroSenal(dia, si, Perfil.leer(base.get(Perfil.RUTA)).id, Gimnasio.ahoraIso())) }
+        val id = Perfil.leer(base.get(Perfil.RUTA)).id
+        runCatching { base.put(Perfil.rutaSenal(dia, id), Perfil.registroSenal(dia, si, id, Gimnasio.ahoraIso())) }
     }
 
     fun moverDia(n: Long) { val f = Apoyo.dia(dia, n); if (f <= hoy()) abrirDia(f) }

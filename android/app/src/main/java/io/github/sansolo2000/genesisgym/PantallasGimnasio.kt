@@ -118,9 +118,9 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
 
     /** Señales de alarma de esta persona (del perfil o, en un perfil de antes, de Apoyo); las conecta la actividad. */
     var senalesHoy: () -> Perfil.Senales? = { null }
-    fun respuestaSenal(fecha: String): Boolean? = Perfil.respuestaSenal(base.get(Perfil.rutaSenal(fecha)))
+    fun respuestaSenal(fecha: String): Boolean? = Perfil.respuestaSenal(base.get(Perfil.rutaSenal(fecha, perfilId())))
     fun responderSenal(fecha: String, si: Boolean) {
-        runCatching { base.put(Perfil.rutaSenal(fecha), Perfil.registroSenal(fecha, si, perfilId(), Gimnasio.ahoraIso())) }; refrescar()
+        runCatching { base.put(Perfil.rutaSenal(fecha, perfilId()), Perfil.registroSenal(fecha, si, perfilId(), Gimnasio.ahoraIso())) }; refrescar()
     }
 
     /** Ocultar o volver a mostrar un módulo en este celular (no borra su historial). La actividad reprograma los avisos. */
@@ -781,7 +781,7 @@ private fun ImportarPlan(g: Gym, a: AccionesGym) {
         Gris("En el selector puedes ir a Drive → Genesis Gym → planes.")
     }
     if (g.planMensaje.isNotEmpty()) Text(g.planMensaje)
-    val r = g.plan ?: return
+    val r = g.plan ?: run { Modulos(g); return }   // D-24: Módulos se ve también sin un plan elegido
     Tarjeta {
         when {
             r.errores.isNotEmpty() -> {
@@ -798,14 +798,16 @@ private fun ImportarPlan(g: Gym, a: AccionesGym) {
             Text("Persona: ${p.nombre} · módulos: ${p.modulos.joinToString(", ") { Perfil.NOMBRE[it] ?: it }}", fontWeight = FontWeight.SemiBold)
             Gris("Generado por ${p.meta.generadoPor} · ${p.meta.estado}" + (p.meta.generadoEn?.let { " · $it" } ?: "") + (if (r.perfilCambia) " · cambia el perfil de este celular" else ""))
             // Ocultar un módulo no lo reactiva un plan nuevo sin preguntar (diseño, Parte 1).
-            for (m in r.ocultosQueTrae) Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            // O-55: tocar el texto también marca la casilla.
+            for (m in r.ocultosQueTrae) Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                modifier = Modifier.clickable { if (m in g.mostrarDeNuevo) g.mostrarDeNuevo.remove(m) else g.mostrarDeNuevo.add(m) }) {
                 androidx.compose.material3.Checkbox(checked = m in g.mostrarDeNuevo, onCheckedChange = { if (it) g.mostrarDeNuevo.add(m) else g.mostrarDeNuevo.remove(m) })
                 Text("Ocultaste ${Perfil.NOMBRE[m] ?: m}. Volver a mostrarlo")
             }
         }
         if (r.ok && r.hayQueAplicar && r.confirmar.isNotEmpty()) {
             Nota(r.confirmar.joinToString("\n"), MaterialTheme.colorScheme.errorContainer)
-            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, modifier = Modifier.clickable { g.planConfirmado = !g.planConfirmado }) {
                 androidx.compose.material3.Checkbox(checked = g.planConfirmado, onCheckedChange = { g.planConfirmado = it })
                 Text("Sí, quiero importarlo igual")
             }
