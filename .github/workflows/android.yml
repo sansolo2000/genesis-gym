@@ -28,17 +28,24 @@ concurrency:
   group: android-${{ github.ref }}
   cancel-in-progress: true
 
+# O-30 (0.18.0): el job que compila solo puede leer el repositorio y el checkout no deja el token guardado.
+# El permiso de escritura existe solo en el job "publicar", que corre únicamente en main con "publicar android-v<versión>".
 jobs:
   compilar:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: write   # solo se usa para crear el Release cuando el commit pide publicar
+      contents: read
+    outputs:
+      hay: ${{ steps.llave.outputs.hay }}
+      version: ${{ steps.firmado.outputs.version }}
     defaults:
       run:
         working-directory: android
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-java@v4
         with:
@@ -71,6 +78,7 @@ jobs:
           ./gradlew --no-daemon assembleDebug 2>&1 | tee -a gradle.log
 
       - name: Compilar APK firmado
+        id: firmado
         if: github.ref == 'refs/heads/main' && steps.llave.outputs.hay == 'si'
         env:
           B64: ${{ secrets.GG_KEYSTORE_BASE64 }}
@@ -90,6 +98,7 @@ jobs:
           APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner"
           "$APKSIGNER" verify --print-certs "salida/genesis-gym-n-$V.apk" | grep -i 'SHA-256' | head -1
           echo "VERSION=$V" >> "$GITHUB_ENV"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
 
       # Si algo falla, los errores de Gradle se publican como anotaciones del check (Desarrollador 3 no puede leer
       # los registros completos desde su sesión). gradle.log no contiene secretos: las llaves van por variables de entorno.
@@ -120,17 +129,32 @@ jobs:
           path: android/salida/*.apk
           retention-days: 30
 
+  # Publica el APK que dejó "compilar" (el mismo archivo firmado, sin volver a compilar). Sin checkout: no lee el código.
+  publicar:
+    needs: compilar
+    if: github.ref == 'refs/heads/main' && needs.compilar.outputs.hay == 'si' && github.event_name == 'push' && startsWith(github.event.head_commit.message, 'publicar android-v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write   # solo para crear el Release y la etiqueta
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: genesis-gym-n-${{ needs.compilar.outputs.version }}
+          path: salida
+
       - name: Publicar Release (solo si el commit dice "publicar android-v<versión>")
-        if: github.ref == 'refs/heads/main' && steps.llave.outputs.hay == 'si' && github.event_name == 'push' && startsWith(github.event.head_commit.message, 'publicar android-v')
         env:
           GH_TOKEN: ${{ github.token }}
           MENSAJE: ${{ github.event.head_commit.message }}
+          VERSION: ${{ needs.compilar.outputs.version }}
         run: |
           ETIQUETA=$(printf '%s' "$MENSAJE" | head -1 | awk '{print $2}')
           if [ "$ETIQUETA" != "android-v$VERSION" ]; then
             echo "::error::El commit pide $ETIQUETA, pero android/version.properties dice versionName=$VERSION"; exit 1
           fi
-          gh release create "$ETIQUETA" salida/*.apk --target "$GITHUB_SHA" \
+          ls -l salida
+          gh release create "$ETIQUETA" salida/*.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "Génesis Gym N $VERSION" \
             --notes "App nativa de prueba (Desarrollador 3). No reemplaza a la 1.0 ni a la 2.0. Instalar solo en los celulares de Héctor y Majo, con su aprobación." \
             --prerelease
