@@ -897,7 +897,7 @@ object Medicamentos {
     }
 
     /** Solo para revisar una sección que trae una de las dos configuraciones: la otra la pone la app. */
-    private val PLACEHOLDER = Config(1, "09:00", emptyList(), emptyList(), 1, mapOf("sin_dato" to 0.25), emptyList(), emptyMap())
+    internal val PLACEHOLDER = Config(1, "09:00", emptyList(), emptyList(), 1, mapOf("sin_dato" to 0.25), emptyList(), emptyMap())
 
     /** Documento config/medicamentos que deja el plan (va al respaldo; el catálogo no: queda en un archivo aparte del celular). */
     fun documentoActivo(s: Seccion, ahoraIso: String): JsonObject = Apoyo.objeto(

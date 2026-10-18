@@ -110,6 +110,30 @@ class Medi(private val c: Context, private val base: BaseLocal, private val alCa
     /** Después de importar un plan con catálogo nuevo. */
     fun olvidarCatalogo() { catalogo = null }
 
+    // ---------- 0.19.0: el vademécum aparte (CONTEXTO-MODULO-MEDICAMENTOS §10.4, §10.9 y §10.12) ----------
+    fun vademecum(): Vademecum.Estado = AvisosMedicamentos.estadoVademecum(c, base)
+    var leyendoVademecum by mutableStateOf(false)
+    /** La actividad abre el selector de archivos. */
+    var elegirVademecum: () -> Unit = {}
+
+    /**
+     * [leer] devuelve el archivo elegido (puede tardar hasta ~30 s con Drive frío o sin conexión). Si no se puede leer
+     * (por ejemplo SecurityException o FileNotFoundException, QA §32.2), lo dice y el vademécum que estaba sigue igual.
+     */
+    suspend fun importarVademecum(leer: () -> ByteArray) {
+        if (leyendoVademecum) return
+        leyendoVademecum = true; mensaje = null; tick++
+        val r = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try { AvisosMedicamentos.guardarVademecum(c, base, leer(), Gimnasio.ahoraIso()) }
+            catch (e: Exception) { null to listOf("No se pudo leer el archivo (${e.javaClass.simpleName}). Vuelve a elegir el vademécum en ${Vademecum.DONDE}.") }
+        }
+        val (rev, err) = r
+        mensaje = if (rev == null) "err" to err.joinToString("\n")
+            else "ok" to (listOf("Vademécum ${rev.version} · ${rev.registros} medicamentos · listo.") + rev.avisos).joinToString(" ")
+        if (rev != null) { catalogo = null; cargarCatalogo() }
+        leyendoVademecum = false; cargar()
+    }
+
     /** El catálogo pesa varios MB: se lee fuera del hilo de la pantalla. */
     suspend fun cargarCatalogo() {
         if (catalogo != null) return
@@ -333,7 +357,13 @@ private fun Lista(m: Medi) {
     Text("Medicamentos", style = MaterialTheme.typography.headlineSmall)
     Gris("Registra lo que indica la receta o tu médico. La app no recomienda dosis, horarios ni cambios de medicación.")
     m.mensaje?.let { (tipo, texto) -> Nota(texto, tipo == "err") }
-    if (m.catalogo == null && !m.hayCatalogo()) Nota("El catálogo de medicamentos llega con el plan Génesis. Impórtalo en Importar → Importar plan completo.", true)
+    // 0.19.0: estado del vademécum y "Actualizar vademécum" (se elige una vez por versión; los tratamientos no lo necesitan).
+    @Suppress("UNUSED_VARIABLE") val tk = m.tick   // el estado se lee de la base: como en D-23, se redibuja con el tick
+    val vad = m.vademecum()
+    if (Vademecum.situacion(vad) == Vademecum.OK) Gris(Vademecum.texto(vad)) else Nota(Vademecum.texto(vad), true)
+    OutlinedButton(onClick = { m.elegirVademecum() }, enabled = !m.leyendoVademecum) {
+        Text(if (m.leyendoVademecum) "Leyendo el vademécum… (puede tardar)" else "Actualizar vademécum")
+    }
 
     m.porResponder?.let { (tid, local, evento) ->
         val tr = m.tratamientos.firstOrNull { it.id == tid }
@@ -448,7 +478,7 @@ private fun Formulario(m: Medi) {
         Gris("ids ${med.ids.joinToString(", ")}" + (med.tag?.let { " · $it" } ?: ""))
     }
     val cat = m.catalogo
-    if (cat == null) Gris(if (m.hayCatalogo()) "Cargando el catálogo…" else "Falta el catálogo: impórtalo con el plan Génesis.")
+    if (cat == null) Gris(if (m.hayCatalogo()) "Cargando el catálogo…" else "Falta el vademécum: vuelve a Medicamentos y toca \"Actualizar vademécum\".")
     else {
         OutlinedTextField(value = m.fBusca, onValueChange = { m.fBusca = it }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             label = { Text(if (m.fMed == null) "Buscar medicamento" else "Cambiar medicamento") })

@@ -165,6 +165,28 @@ object Gimnasio {
     }
 
     /**
+     * 0.19.0 (Héctor, 18-oct): la serie [iSe] parte con lo anotado en la serie anterior del mismo ejercicio. Devuelve esa serie
+     * anterior, o null si no aplica: la primera serie, una ya anotada, la anterior sin anotar, o un cambio de tipo o de modo
+     * (de calentamiento a efectiva queda lo indicado, para no pasar el peso liviano a la serie de trabajo; a confirmar con Héctor).
+     */
+    fun precarga(b: JsonObject, iEj: Int, iSe: Int): JsonObject? {
+        if (iSe <= 0) return null
+        val series = b.arr("ejercicios").getOrNull(iEj)?.arr("series") ?: return null
+        val se = series.getOrNull(iSe) ?: return null; val ant = series[iSe - 1]
+        if (registrada(se) || !registrada(ant)) return null
+        if (se.txt("tipo") != ant.txt("tipo") || se.txt("modo") != ant.txt("modo")) return null
+        return ant
+    }
+
+    /** El ✓ de una serie precargada anota lo mismo que la anterior: carga y repeticiones (o segundos). */
+    fun copiarAnterior(b: JsonObject, iEj: Int, iSe: Int): JsonObject {
+        val ant = precarga(b, iEj, iSe) ?: return b
+        var r = conValorSerie(b, iEj, iSe, "carga_real_kg", ant.num("carga_real_kg"))
+        r = if (ant.txt("modo") == "tiempo") conValorSerie(r, iEj, iSe, "seg_reales", ant.num("seg_reales")) else conValorSerie(r, iEj, iSe, "reps_reales", ant.num("reps_reales"))
+        return r
+    }
+
+    /**
      * M-09 (Coordinador, 14-oct): bloque de cada ejercicio de la sesión POR POSICIÓN (CONTEXTO-DATOS-DIARIOS v3.4 §1.3.1),
      * la misma regla para el mapa y para el cronómetro: los ejercicios por tiempo antes del primero por repeticiones son
      * calentamiento ("cal"); los por tiempo después del último por repeticiones, elongación ("elong"); el resto, fuerza.

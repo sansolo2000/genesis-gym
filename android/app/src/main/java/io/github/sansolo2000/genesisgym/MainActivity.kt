@@ -145,16 +145,34 @@ class MainActivity : ComponentActivity() {
         r.nuevas.firstOrNull { it.clave == "medicamentos" }?.contenido?.let { AvisosMedicamentos.guardarCatalogo(this, it) }
         // Multiusuario: el perfil (id, módulos, señales y metadatos del plan) va en la misma transacción que las partes.
         val perfil = r.perfil?.let { listOf(Respaldo.Doc(Perfil.RUTA, Perfil.aplicar(gym.perfilDoc(), it, mostrar, Gimnasio.ahoraIso()))) } ?: emptyList()
-        base.ponerVarios(r.nuevas.flatMap { it.docs } + perfil)
+        // 0.19.0: lo que el plan dice del vademécum (config/vademecum) y su configuración opcional, en la misma transacción.
+        val vadem = mutableListOf<Respaldo.Doc>()
+        var docV = base.get(Vademecum.RUTA); var cambiaV = false
+        r.nuevas.firstOrNull { it.clave == "medicamentos" }?.docs?.firstOrNull()?.data?.let { m ->   // plan de antes, con el catálogo dentro
+            docV = Vademecum.docGuardado(docV, (m["version_catalogo"] as? kotlinx.serialization.json.JsonPrimitive)?.content,
+                (m["registros"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() ?: 0,
+                (m["huella_sha256"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: "", "plan", Gimnasio.ahoraIso()); cambiaV = true
+        }
+        r.vademecum?.let { ref ->
+            docV = Vademecum.conEsperado(docV, ref); cambiaV = true
+            ref.config?.let { cfg ->
+                val actual = r.nuevas.firstOrNull { it.clave == "medicamentos" }?.docs?.firstOrNull()?.data ?: base.get("config/medicamentos")
+                vadem.add(Respaldo.Doc("config/medicamentos", kotlinx.serialization.json.JsonObject(LinkedHashMap(actual ?: kotlinx.serialization.json.JsonObject(emptyMap())).also { m ->
+                    for (k in listOf("config_horarios", "config_dosis")) cfg[k]?.let { m[k] = it } })))
+            }
+        }
+        if (cambiaV) docV?.let { vadem.add(Respaldo.Doc(Vademecum.RUTA, it)) }
+        base.ponerVarios(r.nuevas.flatMap { it.docs } + perfil + vadem)
         val claves = r.nuevas.map { it.clave }.toSet()
         if ("alimentacion" in claves) com.trasImportarPlan(idAlimAntes)
         if ("apoyo" in claves) apo.trasImportarPlan(horaApoyoAntes)
-        if ("medicamentos" in claves) { med.olvidarCatalogo(); med.cargar() }
+        if ("medicamentos" in claves || r.vademecum != null) { med.olvidarCatalogo(); med.cargar() }
         runCatching { Programador.reprogramar(this) }
         runCatching { AvisosMedicamentos.reprogramar(this) }
         val omitidas = r.partes.filter { it.estado == "igual" }
-        (if (r.nuevas.isEmpty()) "Perfil actualizado." else "Plan importado: " + r.nuevas.joinToString(", ") { it.nombre.lowercase() } + ".") +
+        (if (r.nuevas.isEmpty()) (if (r.perfilCambia) "Perfil actualizado." else "Plan aplicado.") else "Plan importado: " + r.nuevas.joinToString(", ") { it.nombre.lowercase() } + ".") +
             (r.perfil?.let { " Este celular es de ${it.nombre}." } ?: "") +
+            (r.vademecum?.let { " " + Vademecum.texto(AvisosMedicamentos.estadoVademecum(this, base)) } ?: "") +
             (if (omitidas.isNotEmpty()) " Ya estaban activas: " + omitidas.joinToString(", ") { it.nombre.lowercase() } + "." else "")
     } catch (e: Exception) { "No se pudo guardar el plan; no cambió nada. (${e.javaClass.simpleName})" }
 
@@ -189,7 +207,11 @@ class MainActivity : ComponentActivity() {
     }
 
     // Módulo Medicamentos: tratamientos de Héctor y Majo, alertas e historial.
-    private val med: Medi by lazy { Medi(this, base) {} }
+    private val med: Medi by lazy { Medi(this, base) {}.also { m -> m.elegirVademecum = { elegirVademecumArchivo.launch(arrayOf("application/gzip", "application/x-gzip", "application/json", "application/octet-stream", "*/*")) } } }
+    /** 0.19.0: el vademécum se elige con el selector (CONTEXTO-MODULO-MEDICAMENTOS §10.12); se lee fuera del hilo de la pantalla. */
+    private val elegirVademecumArchivo = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) lifecycleScope.launch { med.importarVademecum { contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: throw java.io.FileNotFoundException(uri.toString()) } }
+    }
 
     // E6: Health Connect para el Evaluador (pestaña Salud).
     private val hc by lazy { Hc(this) }
@@ -441,7 +463,8 @@ class MainActivity : ComponentActivity() {
         }
         gym.fraseHoy = { Frases.deHoy(apo.estado.programa) }
         gym.revisarPlan = { t -> Plan.revisar(t, gym.rutinaActiva(), com.estado.programa, apo.estado.programa, gym.perfil(), Gimnasio.ahoraIso(),
-            runCatching { AvisosMedicamentos.huellaActiva(this, base) }.getOrNull(), gym.perfilDoc()) }
+            runCatching { AvisosMedicamentos.huellaActiva(this, base) }.getOrNull(), gym.perfilDoc(),
+            runCatching { AvisosMedicamentos.estadoVademecum(this, base) }.getOrNull()) }
         gym.aplicarPlan = { r, mostrar -> aplicarPlan(r, mostrar) }
         // Multiusuario: señales de alarma de esta persona y módulos visibles.
         gym.senalesHoy = { Perfil.senalesVigentes(gym.datosPerfil(), apo.estado) }

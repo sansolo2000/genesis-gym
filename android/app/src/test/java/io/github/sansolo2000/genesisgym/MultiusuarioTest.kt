@@ -1,6 +1,7 @@
 package io.github.sansolo2000.genesisgym
 
 import io.github.sansolo2000.genesisgym.Gimnasio.arr
+import io.github.sansolo2000.genesisgym.Gimnasio.num
 import io.github.sansolo2000.genesisgym.Gimnasio.obj
 import io.github.sansolo2000.genesisgym.Gimnasio.txt
 import kotlinx.serialization.json.Json
@@ -288,6 +289,45 @@ class MultiusuarioTest {
         // Lo que vuelve al Evaluador (manifest de los datos diarios).
         val nd = Gimnasio.noDisponiblesDelDia(listOf(r, s.mas("fecha" to jp("2030-10-13"))), "2030-10-14")
         assertEquals(1, nd.size); assertEquals("ejemplo-b", nd[0].txt("reemplazo")); assertNull(nd[0]["original"])
+    }
+
+    /** 0.19.0 (CONTEXTO-MULTIUSUARIO-APP §9): primera instalación. */
+    @Test fun primeraInstalacionEligeLosModulos() {
+        assertTrue(Perfil.preguntarModulos(null))
+        assertFalse(Perfil.preguntarModulos(json("""{"nombre":"Persona Uno"}""")))   // quien actualiza o restaura no ve la pregunta
+        val doc = Perfil.primeraInstalacion("Persona Uno", setOf(Perfil.ENTRENAMIENTO, Perfil.SALUD), ahora)
+        val d = Perfil.leer(doc)
+        assertEquals("persona-uno", d.id); assertFalse(d.conPlan)
+        assertEquals(listOf(Perfil.ENTRENAMIENTO, Perfil.SALUD), d.visibles)
+        assertFalse(Perfil.preguntarModulos(doc))
+        // Después se puede volver a mostrar un módulo (Importar → Módulos).
+        assertTrue(Perfil.leer(Perfil.ocultar(doc, Perfil.COMIDAS, false)).visible(Perfil.COMIDAS))
+        // Un plan que trae un módulo apagado al instalar pregunta antes de mostrarlo (§3).
+        val del = Perfil.revisarSeccion(json(sobre(perfil(modulos = listOf(Perfil.ENTRENAMIENTO, Perfil.COMIDAS))))).first!!
+        assertEquals(listOf(Perfil.COMIDAS), Perfil.ocultosQueTrae(d, del))
+        assertFalse(Perfil.leer(Perfil.aplicar(doc, del, emptySet(), ahora)).visible(Perfil.COMIDAS))
+    }
+
+    /** 0.19.0 (Héctor, 18-oct): la serie siguiente del mismo ejercicio parte con lo anotado en la anterior. */
+    @Test fun precargaDeLaSerieSiguiente() {
+        val miercoles = rutina.arr("sesiones").first { it.txt("dia_semana") == "miercoles" }   // ejemplo-b: 2 efectivas
+        val b = Gimnasio.nuevoBorrador("2030-10-16", miercoles, rutina, ahora)
+        assertNull(Gimnasio.precarga(b, 0, 1))   // la anterior todavía no está anotada
+        assertNull(Gimnasio.precarga(b, 0, 0))   // la primera serie no tiene anterior
+        var a = Gimnasio.conValorSerie(b, 0, 0, "carga_real_kg", 17.5)
+        a = Gimnasio.conValorSerie(a, 0, 0, "reps_reales", 9.0)
+        assertNotNull(Gimnasio.precarga(a, 0, 1))
+        assertFalse(Gimnasio.registrada(a.arr("ejercicios")[0].arr("series")[1]))   // precargada no es anotada
+        val c = Gimnasio.copiarAnterior(a, 0, 1).arr("ejercicios")[0].arr("series")[1]
+        assertEquals(17.5, c.num("carga_real_kg")!!, 0.0); assertEquals(9.0, c.num("reps_reales")!!, 0.0)
+        // Ya anotada, no se precarga más.
+        assertNull(Gimnasio.precarga(Gimnasio.copiarAnterior(a, 0, 1), 0, 1))
+        // De calentamiento a efectiva no se precarga (queda lo indicado).
+        val lunes = rutina.arr("sesiones").first { it.txt("dia_semana") == "lunes" }   // ejemplo-a: calentamiento + efectiva
+        val l = Gimnasio.conValorSerie(Gimnasio.nuevoBorrador("2030-10-14", lunes, rutina, ahora), 0, 0, "reps_reales", 12.0)
+        assertNull(Gimnasio.precarga(l, 0, 1))
+        // No pasa al ejercicio siguiente.
+        assertNull(Gimnasio.precarga(l, 1, 0))
     }
 
     @Test fun elManifestLlevaLoNuevoSoloSiHay() {

@@ -27,7 +27,7 @@ object Perfil {
     const val ENTRENAMIENTO = "entrenamiento"; const val COMIDAS = "comidas"; const val MEDICAMENTOS = "medicamentos"
     const val APOYO = "apoyo"; const val SALUD = "salud"
     val MODULOS = listOf(ENTRENAMIENTO, COMIDAS, MEDICAMENTOS, APOYO, SALUD)
-    val NOMBRE = mapOf(ENTRENAMIENTO to "Entrenamiento", COMIDAS to "Comidas", MEDICAMENTOS to "Medicamentos", APOYO to "Apoyo (reporte diario)",
+    val NOMBRE = mapOf(ENTRENAMIENTO to "Entrenamiento", COMIDAS to "Comidas (Alimentación)", MEDICAMENTOS to "Medicamentos", APOYO to "Apoyo (reporte diario)",
         SALUD to "Salud (Health Connect y cintura)")
     /** La parte del plan que necesita cada módulo (los demás no traen parte). */
     val PARTE = mapOf(ENTRENAMIENTO to "rutina", COMIDAS to "alimentacion", APOYO to "apoyo")
@@ -69,6 +69,18 @@ object Perfil {
     fun conNombre(doc: JsonObject?, nombre: String, ahoraIso: String): JsonObject = JsonObject(LinkedHashMap(doc ?: JsonObject(emptyMap())).also {
         it["nombre"] = JsonPrimitive(nombre); if (doc?.get("creado") == null) it["creado"] = JsonPrimitive(ahoraIso)
     })
+
+    /**
+     * 0.19.0 (CONTEXTO-MULTIUSUARIO-APP §9): primera instalación, sin `config/perfil`. La persona elige qué módulos usar; los que
+     * apaga quedan en "ocultos" (se pueden mostrar después en Importar → Módulos). Quien actualiza o restaura ya tiene perfil y no se le pregunta.
+     */
+    fun primeraInstalacion(nombre: String, encendidos: Set<String>, ahoraIso: String): JsonObject = Apoyo.objeto(
+        "nombre" to JsonPrimitive(nombre), "creado" to JsonPrimitive(ahoraIso),
+        "ocultos" to JsonArray(MODULOS.filter { it !in encendidos }.map { JsonPrimitive(it) }),
+        "modulos_elegidos" to JsonPrimitive(true))
+
+    /** ¿Se pregunta por los módulos? Solo si el celular todavía no tiene perfil. */
+    fun preguntarModulos(doc: JsonObject?): Boolean = doc == null
 
     /** Ocultar o volver a mostrar un módulo. No borra nada: solo cambia la lista "ocultos". */
     fun ocultar(doc: JsonObject?, modulo: String, ocultar: Boolean): JsonObject {

@@ -111,9 +111,17 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
     /** Texto de seguridad en la sesión: las señales de alarma de esta persona; el texto de siempre solo en un perfil de antes. */
     fun textoAlarma(): String = datosPerfil().let { d -> d.senales?.let { s -> "Señales de alarma: ${s.senales.joinToString(", ")}. ${s.accion}" } ?: if (d.conPlan) "" else ALARMA }
 
+    /** 0.19.0: en la primera instalación, los módulos que la persona deja encendidos (todos, al empezar). */
+    val modulosElegidos = androidx.compose.runtime.mutableStateListOf<String>().also { it.addAll(Perfil.MODULOS) }
+
     fun guardarPerfil(nombre: String) {
         val n = nombre.trim(); if (n.isEmpty()) return
-        base.put(Perfil.RUTA, Perfil.conNombre(perfilDoc(), n, Gimnasio.ahoraIso())); editarPerfil = false; refrescar()
+        val doc = perfilDoc()
+        base.put(Perfil.RUTA, if (Perfil.preguntarModulos(doc)) Perfil.primeraInstalacion(n, modulosElegidos.toSet(), Gimnasio.ahoraIso())
+            else Perfil.conNombre(doc, n, Gimnasio.ahoraIso()))
+        editarPerfil = false
+        if (Perfil.preguntarModulos(doc)) alCambiarModulos()
+        refrescar()
     }
 
     /** Señales de alarma de esta persona (del perfil o, en un perfil de antes, de Apoyo); las conecta la actividad. */
@@ -185,7 +193,8 @@ class Gym(val base: BaseLocal, val imagenes: Imagenes?, private val alCambiar: (
         val b = borrador ?: return
         val se = b.arr("ejercicios")[i].arr("series")[k]
         if (!Gimnasio.registrada(se)) {
-            val copia = Gimnasio.copiarIndicado(b, i, k)
+            // 0.19.0: si la serie anterior del mismo ejercicio ya está anotada, ✓ copia lo de esa serie; si no, lo indicado.
+            val copia = if (Gimnasio.precarga(b, i, k) != null) Gimnasio.copiarAnterior(b, i, k) else Gimnasio.copiarIndicado(b, i, k)
             if (!Gimnasio.registrada(copia.arr("ejercicios")[i].arr("series")[k])) {
                 aviso = "Escribe las repeticiones (y la carga) de la serie ${k + 1} antes de marcarla."; return
             }
@@ -471,6 +480,15 @@ private fun Hoy(g: Gym) {
         Sub("¿De quién es este celular?")
         Gris("Cada celular guarda los datos de una sola persona. El nombre aparece en los respaldos.")
         OutlinedTextField(value = nombre, onValueChange = { nombre = it.take(40) }, label = { Text("Nombre") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        // 0.19.0 (CONTEXTO-MULTIUSUARIO-APP §9): solo la primera vez, sin perfil. Se cambia después en Importar → Módulos.
+        if (perfil == null && Perfil.preguntarModulos(g.perfilDoc())) {
+            Sub("¿Qué vas a usar?")
+            Gris("Puedes cambiarlo después en Importar → Módulos. Ocultar un módulo no borra nada. Si vas a importar tu plan Génesis, el plan trae tus módulos.")
+            for (m in Perfil.MODULOS) Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text(Perfil.NOMBRE[m] ?: m, modifier = Modifier.weight(1f))
+                androidx.compose.material3.Switch(checked = m in g.modulosElegidos, onCheckedChange = { if (it) g.modulosElegidos.add(m) else g.modulosElegidos.remove(m) })
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { g.guardarPerfil(nombre) }) { Text("Guardar") }
             if (perfil != null) OutlinedButton(onClick = { g.editarPerfil = false }) { Text("Cancelar") }
@@ -820,7 +838,7 @@ private fun ImportarPlan(g: Gym, a: AccionesGym) {
             if (p.avisos.isNotEmpty()) p.avisos.forEach { Gris("Aviso: $it") }
         }
         if (r.ok && r.hayQueAplicar) Button(onClick = { g.activarPlan() }, enabled = r.confirmar.isEmpty() || g.planConfirmado) {
-            Text(if (r.nuevas.isEmpty()) "Actualizar el perfil" else "Importar ${r.nuevas.size} ${if (r.nuevas.size == 1) "parte" else "partes"}")
+            Text(if (r.nuevas.isEmpty()) (if (r.perfilCambia) "Actualizar el perfil" else "Aplicar el plan") else "Importar ${r.nuevas.size} ${if (r.nuevas.size == 1) "parte" else "partes"}")
         }
     }
     Modulos(g)

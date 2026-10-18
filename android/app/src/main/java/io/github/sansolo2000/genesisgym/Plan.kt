@@ -40,10 +40,11 @@ object Plan {
      */
     data class Revision(val errores: List<String>, val avisos: List<String>, val partes: List<Parte>,
                         val perfil: Perfil.DelPlan? = null, val confirmar: List<String> = emptyList(), val perfilCambia: Boolean = false,
-                        val ocultosQueTrae: List<String> = emptyList()) {
+                        val ocultosQueTrae: List<String> = emptyList(),
+                        val vademecum: Vademecum.Ref? = null, val vademecumCambia: Boolean = false) {
         val ok: Boolean get() = errores.isEmpty() && partes.none { it.estado == "error" }
         val nuevas: List<Parte> get() = partes.filter { it.estado == "nueva" }
-        val hayQueAplicar: Boolean get() = nuevas.isNotEmpty() || perfilCambia
+        val hayQueAplicar: Boolean get() = nuevas.isNotEmpty() || perfilCambia || vademecumCambia
     }
 
     private fun slug(s: String?): String = java.text.Normalizer.normalize(s ?: "", java.text.Normalizer.Form.NFD)
@@ -60,7 +61,8 @@ object Plan {
      */
     fun revisar(
         texto: String, rutinaActiva: JsonObject?, alimentacionActiva: JsonObject?, apoyoActivo: JsonObject?,
-        perfilCelular: String?, ahoraIso: String, huellaMedicamentos: String? = null, perfilActual: JsonObject? = null
+        perfilCelular: String?, ahoraIso: String, huellaMedicamentos: String? = null, perfilActual: JsonObject? = null,
+        vademecum: Vademecum.Estado? = null
     ): Revision {
         if (texto.isBlank()) return Revision(listOf("El archivo llegó vacío al celular."), emptyList(), emptyList())
         val sobre = try { Json.parseToJsonElement(texto.removePrefix("﻿")) as? JsonObject } catch (e: Exception) { null }
@@ -95,7 +97,14 @@ object Plan {
         if (sobre["medicamentos"] != null && sobre.obj("medicamentos") == null) err.add("medicamentos: debe ser un objeto.")
         val conMed = Perfil.MEDICAMENTOS in modulos
         if (!conMed && sobre.obj("medicamentos") != null) av.add("El plan trae el catálogo de medicamentos, pero esta persona no usa Medicamentos: no se importa.")
-        if (del != null && conMed && sobre.obj("medicamentos") == null && huellaMedicamentos == null)
+        // 0.19.0 (CONTEXTO-MODULO-MEDICAMENTOS §10): el plan trae solo la referencia del vademécum; el archivo se elige aparte.
+        // Nunca bloquea la importación por faltar el vademécum: solo avisa.
+        var ref: Vademecum.Ref? = null
+        if (conMed) sobre[Vademecum.CLAVE_PLAN]?.let { e ->
+            val (r, es) = Vademecum.revisarRef(e); err.addAll(es); ref = r
+            r?.let { av.add(Vademecum.avisoPlan(vademecum ?: Vademecum.Estado(null, null, null, null, null), it)) }
+        }
+        if (del != null && conMed && sobre.obj("medicamentos") == null && huellaMedicamentos == null && sobre[Vademecum.CLAVE_PLAN] == null)
             av.add("El plan no trae el catálogo de medicamentos y este celular no lo tiene: no vas a poder buscar medicamentos hasta importar un plan que lo traiga.")
         if (err.isEmpty() && del != null) err.addAll(personaDeLosProgramas(sobre, del.id, requeridas))
         if (err.isNotEmpty()) return Revision(err, av, emptyList())
@@ -106,8 +115,10 @@ object Plan {
             if ("apoyo" in requeridas) parteApoyo(sobre.obj("apoyo")!!, apoyoActivo, ahoraIso) else null,
             sobre.obj("medicamentos")?.takeIf { conMed }?.let { parteMedicamentos(it, huellaMedicamentos, ahoraIso) }
         )
+        val r0 = ref
         return Revision(emptyList(), av, partes, del, confirmar, del?.let { Perfil.cambia(perfilActual, it) } ?: false,
-            del?.let { Perfil.ocultosQueTrae(actual, it) } ?: emptyList())
+            del?.let { Perfil.ocultosQueTrae(actual, it) } ?: emptyList(),
+            r0, r0 != null && (vademecum?.esperado?.let { it.huella != r0.huella || it.version != r0.version } ?: true))
     }
 
     /** Anti-meta del diseño: un programa de otra persona no entra. Los programas de Alimentación y Apoyo traen su perfil. */

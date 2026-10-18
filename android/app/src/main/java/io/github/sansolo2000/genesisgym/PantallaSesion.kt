@@ -347,6 +347,7 @@ private fun CuentaSerie(g: Gym) {
 private fun FilaSerie(g: Gym, b: JsonObject, i: Int, k: Int, ejId: String, se: JsonObject, sesiones: List<JsonObject>, actual: Boolean) {
     val modo = se.txt("modo")
     val hecha = Gimnasio.registrada(se)
+    val pre = Gimnasio.precarga(b, i, k)   // 0.19.0: la serie anterior anotada, si esta parte con sus valores
     val repKey = if (modo == "tiempo") "seg_reales" else "reps_reales"
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (actual) Color(0xFF22262A) else CAJA)
         .border(1.dp, if (actual) AMBAR else CAJA2, RoundedCornerShape(12.dp)).padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -378,10 +379,11 @@ private fun FilaSerie(g: Gym, b: JsonObject, i: Int, k: Int, ejId: String, se: J
                 LaunchedEffect(cargaGuardada) { if (valorDe(carga, false) != cargaGuardada) carga = Gimnasio.kg(se["carga_real_kg"]) }
                 LaunchedEffect(repsGuardadas) { if (valorDe(reps, true) != repsGuardadas) reps = se[repKey]?.takeIf { it !is JsonNull }?.toString() ?: "" }
                 OutlinedTextField(value = carga, onValueChange = { v -> carga = v; anotar(g, i, k, "carga_real_kg", v, false) },
-                    label = { Text("kg") }, placeholder = { Text(if (se.esNulo("carga_prescrita_kg")) "—" else Gimnasio.kg(se["carga_prescrita_kg"])) },
+                    label = { Text("kg") }, placeholder = { Text(pre?.let { p -> if (p.esNulo("carga_real_kg")) "—" else Gimnasio.kg(p["carga_real_kg"]) }
+                        ?: if (se.esNulo("carga_prescrita_kg")) "—" else Gimnasio.kg(se["carga_prescrita_kg"])) },
                     singleLine = true, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                 OutlinedTextField(value = reps, onValueChange = { v -> reps = v; anotar(g, i, k, repKey, v, true) },
-                    label = { Text("reps") }, placeholder = { Text(se.txt("prescrito_reps") ?: "") },
+                    label = { Text("reps") }, placeholder = { Text(pre?.let { p -> if (p.esNulo("reps_reales")) null else Gimnasio.kg(p["reps_reales"]) } ?: se.txt("prescrito_reps") ?: "") },
                     singleLine = true, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
             }
             Box(Modifier.size(48.dp).clip(CircleShape).background(if (hecha) VERDE else Color.Transparent)
@@ -394,6 +396,12 @@ private fun FilaSerie(g: Gym, b: JsonObject, i: Int, k: Int, ejId: String, se: J
         val indic = listOfNotNull(se.txt("carga_indicacion")?.takeIf { it.isNotEmpty() && se.esNulo("carga_prescrita_kg") },
             se["rpe_objetivo"]?.takeIf { it !is JsonNull }?.let { "RPE obj. ${Gimnasio.kg(it)}" })
         if (indic.isNotEmpty()) Text(indic.joinToString(" · "), color = GRIS, fontSize = 12.sp)
+        // 0.19.0 (Héctor, 18-oct): la serie siguiente parte con lo de la anterior; ✓ lo anota y se puede escribir otra cosa antes.
+        pre?.let { p ->
+            val c = if (p.esNulo("carga_real_kg")) "" else Gimnasio.kg(p["carga_real_kg"]) + " kg × "
+            val r = if (modo == "tiempo") "${p["seg_reales"]} s" else "${Gimnasio.kg(p["reps_reales"])}"
+            Text("✓ anota $c$r, como la serie $k", color = AMBAR, fontSize = 12.sp)
+        }
         val prev = Gimnasio.anterior(sesiones, ejId, se.num("n") ?: 0.0, b.txt("fecha")!!)
         Text(prev?.let { (s, p) ->
             val c = if (p.esNulo("carga_real_kg")) "—" else Gimnasio.kg(p["carga_real_kg"]) + " kg"

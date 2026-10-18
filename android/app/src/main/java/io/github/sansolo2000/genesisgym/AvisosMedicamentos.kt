@@ -80,12 +80,30 @@ object AvisosMedicamentos {
     }
 
     /** Guarda el catálogo de la sección del plan (primero en un archivo temporal, para no dejarlo a medias). */
-    fun guardarCatalogo(c: Context, seccion: JsonObject) {
+    fun guardarCatalogo(c: Context, seccion: JsonObject) = escribirCatalogo(c, seccion.o("catalogo") ?: throw IllegalStateException("sin catálogo"))
+
+    private fun escribirCatalogo(c: Context, catalogo: JsonObject) {
         val f = archivo(c); f.parentFile?.mkdirs()
         val tmp = File(f.parentFile, "catalogo.tmp")
-        tmp.writeText(JsJson.stringify(seccion.o("catalogo") ?: throw IllegalStateException("sin catálogo")), Charsets.UTF_8)
+        tmp.writeText(JsJson.stringify(catalogo), Charsets.UTF_8)
         if (!tmp.renameTo(f)) { f.delete(); if (!tmp.renameTo(f)) throw IllegalStateException("no se pudo guardar el catálogo") }
         cache = null
+    }
+
+    // ---------- 0.19.0: el vademécum aparte del plan (CONTEXTO-MODULO-MEDICAMENTOS §10) ----------
+    fun estadoVademecum(c: Context, base: BaseLocal): Vademecum.Estado =
+        Vademecum.estado(base.get(Vademecum.RUTA), base.get("config/medicamentos"), hayCatalogo(c))
+
+    /**
+     * Revisa y guarda el vademécum elegido con el selector ([crudo]: el archivo tal cual, .json o .json.gz). Todo o nada: si no
+     * sirve, el que estaba sigue igual. Se llama fuera del hilo de la pantalla (leer de Drive puede tardar ~30 s, QA §32.2).
+     */
+    fun guardarVademecum(c: Context, base: BaseLocal, crudo: ByteArray, ahoraIso: String): Pair<Vademecum.Revisado?, List<String>> {
+        val (r, err) = Vademecum.revisarArchivo(crudo, estadoVademecum(c, base).esperado)
+        if (r == null) return null to err
+        escribirCatalogo(c, r.catalogo)
+        base.put(Vademecum.RUTA, Vademecum.docGuardado(base.get(Vademecum.RUTA), r, "archivo", ahoraIso))
+        return r to emptyList()
     }
 
     /** Huella de la sección activa, solo si el catálogo está en el celular (si falta, el plan vuelve a importarla). */
