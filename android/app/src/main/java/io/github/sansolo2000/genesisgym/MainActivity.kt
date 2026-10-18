@@ -241,6 +241,13 @@ class MainActivity : ComponentActivity() {
                 lifecycleScope.launch { dd.subir(token, gym.perfilId()) }
             }, { m -> dd.enviando = ""; dd.mensaje = "err" to "No se pudo enviar a Drive: $m" })
         }
+        /** Entrega 2: el ajuste de batería de Android (no pide ningún permiso nuevo). */
+        override fun bateria() {
+            runCatching { startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
+                .onFailure { runCatching { startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:$packageName"))) } }
+        }
+        /** Entrega 2: lectura de Health Connect en segundo plano (aprobada por Héctor, CONTEXTO-DATOS-DIARIOS R2). */
+        override fun segundoPlano() = pedirSaludE6.launch(setOf(Hc.PERMISO_SEGUNDO_PLANO))
     }
     private val accionesHc = object : AccionesHc {
         override fun pedirPermisos() = pedirSaludE6.launch(hc.permisos)
@@ -472,6 +479,7 @@ class MainActivity : ComponentActivity() {
         apo.alActivar = { nueva, anterior -> runCatching { Programador.horaReporteDesdeApoyo(this, nueva, anterior) }; refresco++ }
         runCatching { Programador.reprogramar(this) }
         runCatching { AvisosMedicamentos.reprogramar(this) }
+        runCatching { SubidaDiaria.programar(this) }   // entrega 2: subida automática de datos diarios (WorkManager, cada 6 h)
         intent?.let { abrirDesde(it) }
         if (intent?.getBooleanExtra(Programador.EXTRA_DETENER, false) == true) runCatching { AlertaServicio.detenerTodas(this) }   // O-33
 
@@ -510,6 +518,12 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         // Datos diarios: al abrir la app, Hoy avisa cuántos días faltan por subir.
+                        // Entrega 2: si la tarea automática no pudo pedir el permiso de Google sin pantalla, se avisa (no falla en silencio).
+                        if (gym.vista == "hoy" && dd.auto.faltaPermisoGoogle) Text(
+                            "La subida automática necesita que vuelvas a dar permiso de Google: toca aquí y después \"Subir ahora\"",
+                            color = androidx.compose.ui.graphics.Color(0xFFE57373), fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                                .background(CAJA).clickable { dd.revisar(); gym.ir("salud") }.padding(12.dp))
                         if (gym.vista == "hoy" && dd.porSubir > 0) Text(
                             "${dd.porSubir} ${if (dd.porSubir == 1) "día" else "días"} por subir a Drive · toca para ir a ${Perfil.nombrePestanaSalud(gym.datosPerfil())}",
                             color = AMBAR, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,

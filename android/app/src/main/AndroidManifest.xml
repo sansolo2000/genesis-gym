@@ -25,6 +25,8 @@
     <uses-permission android:name="android.permission.health.READ_DISTANCE" />
     <uses-permission android:name="android.permission.health.READ_ELEVATION_GAINED" />
     <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+    <!-- 0.19.0, entrega 2 de datos diarios (aprobado por Héctor, CONTEXTO-DATOS-DIARIOS R2): leer Health Connect en segundo plano. -->
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
 
     <queries>
         <package android:name="com.google.android.apps.healthdata" />

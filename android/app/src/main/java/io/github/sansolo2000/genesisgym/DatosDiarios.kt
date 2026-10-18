@@ -38,6 +38,27 @@ object DatosDiarios {
         return (VENTANA_DIAS downTo 1).map { hoy.minusDays(it) }.filter { cerrado(it, ahora) }
     }
 
+    /** Entrega 2 (CONTEXTO-DATOS-DIARIOS §11.1.3): un día que nunca se subió se busca hasta 21 días atrás. */
+    const val VENTANA_PRIMERA_DIAS = 21L
+    /** Entrega 2 (§11.1.1): la tarea automática sube un día recién 15 min después de su cierre (no antes de las 12:15 de D+1). */
+    const val MARGEN_AUTOMATICA_MIN = 15L
+
+    /**
+     * Días que se revisan ("Subir ahora", la tarea automática y "N días por subir"), del más antiguo al más nuevo:
+     * los cambios de los 7 días anteriores (§1.5.7) y, hasta 21 días atrás, los que nunca se subieron, pero no antes de
+     * [inicioDatos], el primer día con datos en la app (null = no hay datos más viejos que buscar). [margenMin]: para la automática.
+     */
+    fun diasARevisar(ahora: ZonedDateTime, previo: (LocalDate) -> EstadoDia?, inicioDatos: LocalDate?, margenMin: Long = 0): List<LocalDate> {
+        val hoy = ahora.withZoneSameInstant(ZONA).toLocalDate()
+        val corte = ahora.minusMinutes(margenMin)
+        return (VENTANA_PRIMERA_DIAS downTo 1).map { hoy.minusDays(it) }.filter { d ->
+            cerrado(d, corte) && (d >= hoy.minusDays(VENTANA_DIAS) || (inicioDatos != null && d >= inicioDatos && (previo(d)?.version ?: 0) == 0))
+        }
+    }
+
+    /** El primer día con datos en la app (sesión, cintura, comida marcada o reporte), o null. */
+    fun inicioDatos(fechas: List<String>): LocalDate? = fechas.mapNotNull { runCatching { LocalDate.parse(it.take(10)) }.getOrNull() }.minOrNull()
+
     /** Antes de las 12:00, ayer todavía no cierra (§1.6). */
     fun ayerAbierto(ahora: ZonedDateTime): Boolean = !cerrado(ahora.withZoneSameInstant(ZONA).toLocalDate().minusDays(1), ahora)
 
@@ -227,7 +248,7 @@ object DatosDiarios {
     }
 
     /** "manual" en la primera subida del día; lo que cambia después es "tardio" (§1.6). La entrega 2 agrega "automatico". */
-    fun motivo(previo: EstadoDia?): String = if (previo == null || previo.version == 0) "manual" else "tardio"
+    fun motivo(previo: EstadoDia?, automatico: Boolean = false): String = if (automatico) "automatico" else if (previo == null || previo.version == 0) "manual" else "tardio"
 
     // ---------- Health Connect: qué falta ----------
     /** Nombres de permisos del manifest, en el orden de §1.4. */

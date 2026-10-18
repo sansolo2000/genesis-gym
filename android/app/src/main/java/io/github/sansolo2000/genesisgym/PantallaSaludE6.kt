@@ -73,6 +73,10 @@ class Hc(private val c: Context) {
 
     suspend fun refrescarPermisos() { concedidos = runCatching { cliente().permissionController.getGrantedPermissions() }.getOrDefault(emptySet()); tick++ }
 
+    /** Entrega 2 (CONTEXTO-DATOS-DIARIOS §11.1.2, aprobado por Héctor, R2): lectura de Health Connect en segundo plano. */
+    companion object { const val PERMISO_SEGUNDO_PLANO = "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" }
+    fun segundoPlano(): Boolean = PERMISO_SEGUNDO_PLANO in concedidos
+
     fun mover(n: Long) {
         val nuevo = desde.plusDays(7 * n)
         if (nuevo.isAfter(SaludCsv.sabadoDe(LocalDate.now(Gimnasio.ZONA)))) return

@@ -77,5 +77,6 @@ dependencies {
     implementation("com.google.android.gms:play-services-auth:21.2.0")   // E3: permiso de Drive (AuthorizationClient)
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")   // E4: leer rutinas y respaldos (JSON)
     implementation("com.caverock:androidsvg-aar:1.4")   // E4: dibujar las imágenes SVG (Everkinetic y propias)
+    implementation("androidx.work:work-runtime-ktx:2.9.1")   // 0.19.0: subida automática de datos diarios (entrega 2)
     testImplementation("junit:junit:4.13.2")
 }

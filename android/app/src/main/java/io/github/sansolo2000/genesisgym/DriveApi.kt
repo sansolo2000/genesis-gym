@@ -62,6 +62,17 @@ object DriveApi {
         leer(c).getString("id") to true
     }
 
+    /**
+     * Entrega 2 (CONTEXTO-DATOS-DIARIOS §11.1.4): ¿la carpeta [nombre] de la app sigue en la raíz de Drive? Si Héctor ya la movió
+     * a Genesis Gym, no. Ante un error responde false (no se avisa de más).
+     */
+    suspend fun enRaiz(token: String, nombre: String): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            val q = URLEncoder.encode(DriveTexto.consultaCarpeta(nombre) + " and 'root' in parents", "UTF-8")
+            leer(abrir("$API?q=$q&fields=files(id)&spaces=drive", token)).getJSONArray("files").length() > 0
+        }.getOrDefault(false)
+    }
+
     /** Datos diarios: los nombres de los archivos que hay en una carpeta (para seguir la numeración -vN desde Drive). */
     suspend fun nombres(token: String, carpeta: String): List<String> = withContext(Dispatchers.IO) {
         val q = URLEncoder.encode("'${carpeta.replace("\\", "\\\\").replace("'", "\\'")}' in parents and trashed=false", "UTF-8")
