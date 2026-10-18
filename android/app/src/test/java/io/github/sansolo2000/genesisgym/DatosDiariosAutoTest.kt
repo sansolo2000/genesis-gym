@@ -39,6 +39,17 @@ class DatosDiariosAutoTest {
         assertFalse(d("2030-10-24") in DatosDiarios.diasARevisar(en("2030-10-25T11:59"), { null }, null))
     }
 
+    /** 0.19.0 (Héctor): "Exportar CSV" va a la carpeta propia "exportacion", con la misma estrategia de carpeta que datos-diarios. */
+    @Test fun exportarCsvADrive() {
+        assertEquals("exportacion", Gimnasio.CARPETA_EXPORTACION)
+        assertEquals("20301025_130000_genesis-fuerza.csv", Gimnasio.nombreCsv("20301025_130000"))
+        assertTrue(Gimnasio.textoExportado("x.csv", true).contains("muévela una vez a Genesis Gym"))
+        assertFalse(Gimnasio.textoExportado("x.csv", false).contains("raíz"))
+        // Las dos carpetas de la app con nombres distintos (la búsqueda es por nombre, dondequiera que estén).
+        assertFalse(DatosDiarios.CARPETA == Gimnasio.CARPETA_EXPORTACION)
+        assertTrue(DriveTexto.consultaCarpeta(Gimnasio.CARPETA_EXPORTACION).contains("name='exportacion'"))
+    }
+
     @Test fun motivoYPrimerDiaConDatos() {
         assertEquals("automatico", DatosDiarios.motivo(null, automatico = true))
         assertEquals("automatico", DatosDiarios.motivo(subido, automatico = true))

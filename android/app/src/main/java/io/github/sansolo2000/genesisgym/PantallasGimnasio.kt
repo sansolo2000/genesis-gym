@@ -418,7 +418,10 @@ fun PantallaGimnasio(g: Gym, acciones: AccionesGym) {
 interface AccionesGym {
     fun elegirPlan()
     fun elegirRutina()
+    /** 0.19.0: sube el CSV a la carpeta "exportacion" de la app en Drive, sin diálogo. */
     fun guardarCsv()
+    /** El diálogo de guardar de Android, como antes ("Guardar en otro lugar…"). */
+    fun guardarCsvEn()
     fun guardarRespaldo()
     fun elegirRespaldo()
 }
@@ -715,8 +718,11 @@ private fun Historial(g: Gym, a: AccionesGym) {
     Gris("Registro"); Titulo("Historial")
     Tarjeta {
         Sub("Exportar para el Evaluador")
-        Gris("Archivo CSV con una fila por serie (separador ; y decimales con coma), igual que la 2.0.")
-        Button(onClick = { a.guardarCsv() }, enabled = sesiones.isNotEmpty()) { Text("Exportar CSV") }
+        Gris("Archivo CSV con una fila por serie (separador ; y decimales con coma), igual que la 2.0. Se guarda solo en tu Drive, en la carpeta \"${Gimnasio.CARPETA_EXPORTACION}\" de la app (muévela una vez a Genesis Gym).")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { a.guardarCsv() }, enabled = sesiones.isNotEmpty()) { Text("Exportar CSV") }
+            OutlinedButton(onClick = { a.guardarCsvEn() }, enabled = sesiones.isNotEmpty()) { Text("Guardar en otro lugar…") }
+        }
         if (g.csvMensaje.isNotEmpty()) Text(g.csvMensaje)
     }
     Tarjeta {

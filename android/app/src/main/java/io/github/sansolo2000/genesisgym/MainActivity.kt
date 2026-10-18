@@ -179,7 +179,23 @@ class MainActivity : ComponentActivity() {
     private val accionesGym = object : AccionesGym {
         override fun elegirPlan() = elegirPlanArchivo.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*"))
         override fun elegirRutina() = elegirRutinaArchivo.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*"))
-        override fun guardarCsv() { csvPendiente = gym.textoCsv(); guardarCsvArchivo.launch("${Gimnasio.sello()}_genesis-fuerza.csv") }
+        /** 0.19.0 (Héctor): sin diálogo, a la carpeta "exportacion" de la app en Drive (nunca sobrescribe). */
+        override fun guardarCsv() {
+            gym.csvMensaje = "Conectando con Google…"
+            pedirToken({ token ->
+                if (token == null) { gym.csvMensaje = "Google no entregó un permiso de acceso. Usa \"Guardar en otro lugar…\"."; return@pedirToken }
+                gym.csvMensaje = "Subiendo el CSV…"
+                lifecycleScope.launch {
+                    gym.csvMensaje = try {
+                        val carpeta = DriveApi.carpeta(token, Gimnasio.CARPETA_EXPORTACION).first
+                        val nombre = Gimnasio.nombreCsv(Gimnasio.sello())
+                        DriveApi.subirArchivo(token, carpeta, nombre, "text/csv", gym.textoCsv().toByteArray(Charsets.UTF_8))
+                        Gimnasio.textoExportado(nombre, DriveApi.enRaiz(token, Gimnasio.CARPETA_EXPORTACION))
+                    } catch (e: Exception) { "No se pudo subir a Drive: ${describir(e)}. Usa \"Guardar en otro lugar…\"." }
+                }
+            }, { m -> gym.csvMensaje = "No se pudo conectar con Google: $m" })
+        }
+        override fun guardarCsvEn() { csvPendiente = gym.textoCsv(); guardarCsvArchivo.launch(Gimnasio.nombreCsv(Gimnasio.sello())) }
         override fun guardarRespaldo() { runCatching { Programador.respaldarEn(this@MainActivity, base) }; val p = gym.textoRespaldo(); respaldoPendiente = p; guardarRespaldoArchivo.launch(p.first) }
         override fun elegirRespaldo() = elegirRespaldoArchivo.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*"))
     }

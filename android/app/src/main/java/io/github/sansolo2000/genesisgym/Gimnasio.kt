@@ -167,7 +167,7 @@ object Gimnasio {
     /**
      * 0.19.0 (Héctor, 18-oct): la serie [iSe] parte con lo anotado en la serie anterior del mismo ejercicio. Devuelve esa serie
      * anterior, o null si no aplica: la primera serie, una ya anotada, la anterior sin anotar, o un cambio de tipo o de modo
-     * (de calentamiento a efectiva queda lo indicado, para no pasar el peso liviano a la serie de trabajo; a confirmar con Héctor).
+     * (de calentamiento a efectiva queda lo indicado, para no pasar el peso liviano a la serie de trabajo; confirmado por Héctor el 18-oct).
      */
     fun precarga(b: JsonObject, iEj: Int, iSe: Int): JsonObject? {
         if (iSe <= 0) return null
@@ -273,6 +273,18 @@ object Gimnasio {
         if (!n.isFinite() || n < 0 || (entero && n != Math.floor(n))) return Num.Error
         return Num.Valor(n)
     }
+
+    // ---------- 0.19.0: "Exportar CSV" a Drive sin diálogo ----------
+    /**
+     * La carpeta propia de la app para el CSV de gimnasio. Misma estrategia que datos-diarios (CONTEXTO-DATOS-DIARIOS §11.1.4):
+     * con drive.file la app no ve la Genesis Gym que creó Héctor; crea su carpeta en la raíz la primera vez, Héctor la mueve una
+     * vez a Genesis Gym y la app la sigue encontrando donde esté.
+     */
+    const val CARPETA_EXPORTACION = "exportacion"
+    fun nombreCsv(sello: String) = "${sello}_genesis-fuerza.csv"
+    fun textoExportado(nombre: String, enRaiz: Boolean): String =
+        "Exportado: $nombre en la carpeta \"$CARPETA_EXPORTACION\" de tu Drive." +
+            (if (enRaiz) " Esa carpeta está en la raíz: muévela una vez a Genesis Gym y la app seguirá guardando ahí." else "")
 
     // ---------- CSV para el Evaluador (mismas 20 columnas y formato que la 2.0) ----------
     val COLUMNAS = listOf("fecha", "dia_semana", "sesion_id", "sesion_nombre", "rutina_id", "rutina_version", "estado_sesion", "ejercicio_id",
